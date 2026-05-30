@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>個人資料填寫</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f4f8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 28px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    h1 { font-size: 1.4rem; color: #1a1a2e; margin-bottom: 24px; text-align: center; }
+    label { display: block; font-size: 0.85rem; color: #555; margin-bottom: 4px; margin-top: 16px; }
+    input, select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #d1d9e0;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #1a1a2e;
+      background: #fafbfc;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #4a90d9;
+      background: #fff;
+    }
+    button {
+      width: 100%;
+      margin-top: 28px;
+      padding: 12px;
+      background: #06c755;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #05b34b; }
+    .success {
+      text-align: center;
+      padding: 16px 0;
+    }
+    .success .icon { font-size: 3rem; margin-bottom: 16px; }
+    .success p { color: #555; line-height: 1.6; }
+    .error { color: #e53e3e; font-size: 0.85rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if success %}
+    <div class="success">
+      <div class="icon">✅</div>
+      <h1>感謝填寫！</h1>
+      <p>您的個人資料已成功儲存。<br>您可以關閉此頁面。</p>
+    </div>
+    {% else %}
+    <h1>個人資料設定</h1>
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="/form/sign?line_user_id={{ line_user_id }}">
+      <label for="club">社名 <span style="color:#e53e3e">*</span></label>
+      <input id="club" name="club" type="text" placeholder="松青" required value="{{ values.club }}" />
+
+      <label for="full_name">中文名 <span style="color:#e53e3e">*</span></label>
+      <input id="full_name" name="full_name" type="text" placeholder="王小明" required value="{{ values.full_name }}" />
+
+      <label for="nickname">Nickname <span style="color:#e53e3e">*</span></label>
+      <input id="nickname" name="nickname" type="text" placeholder="PP Kevin" required value="{{ values.nickname }}" />
+
+      <label for="diet_type">葷食/素食 <span style="color:#e53e3e">*</span></label>
+      <select id="diet_type" name="diet_type" required>
+        <option value="" disabled {% if not values.diet_type %}selected{% endif %}>請選擇</option>
+        <option value="葷食" {% if values.diet_type == '葷食' %}selected{% endif %}>葷食</option>
+        <option value="素食" {% if values.diet_type == '素食' %}selected{% endif %}>素食</option>
+      </select>
+
+      <button type="submit">送出</button>
+    </form>
+    {% endif %}
+  </div>
+</body>
+</html>
