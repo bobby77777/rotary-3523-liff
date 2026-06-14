@@ -42,6 +42,40 @@ def send_loading(user_id: str, seconds: int = 30) -> None:
     )
 
 
+def get_menu_id_by_alias(alias_id: str) -> str:
+    resp = requests.get(f"{_BASE}/richmenu/alias/{alias_id}", headers=_HEADERS, timeout=10)
+    return resp.json().get("richMenuId", "")
+
+
+def link_rich_menu(user_id: str, rich_menu_id: str) -> None:
+    import logging
+    resp = requests.post(
+        f"{_BASE}/user/{user_id}/richmenu/{rich_menu_id}",
+        headers=_HEADERS,
+        timeout=10,
+    )
+    logging.getLogger(__name__).info(
+        "link_rich_menu: status=%d body=%s", resp.status_code, resp.text[:200]
+    )
+
+
+def reply_flex(reply_token: str, alt_text: str, contents: dict) -> None:
+    import logging
+    resp = requests.post(
+        f"{_BASE}/message/reply",
+        headers=_HEADERS,
+        json={
+            "replyToken": reply_token,
+            "messages": [{"type": "flex", "altText": alt_text, "contents": contents}],
+        },
+        timeout=10,
+    )
+    if not resp.ok:
+        logging.getLogger(__name__).error(
+            "reply_flex failed: status=%d body=%s", resp.status_code, resp.text[:500]
+        )
+
+
 def reply_registration_button(reply_token: str, form_url: str) -> None:
     requests.post(
         f"{_BASE}/message/reply",
