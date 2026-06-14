@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國際扶輪 3523 地區 - LINE Rich Menu 互動模擬器</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght=300;400;500;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Hide scrollbars for beauty */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Simulator Specific Styles */
+        .phone-frame {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+            border: 12px solid #1f2937;
+            border-radius: 40px;
+            overflow: hidden;
+            background-color: #7494c0; /* Classic LINE Chatroom BG Color */
+        }
+        /* Rich Menu Key Animations */
+        .active-tab-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background-color: #ffd700; /* Rotary Gold */
+        }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4 flex flex-col items-center justify-start lg:justify-center">
+    
+    <!-- Header -->
+    <div class="text-center mb-6 max-w-4xl">
+        <h1 class="text-3xl font-extrabold text-blue-900 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-circle-nodes text-yellow-500"></i>
+            國際扶輪 3523 地區
+        </h1>
+        <p class="text-gray-600 mt-2 font-medium">全年度活動 LINE Rich Menu 整合管理與報到模擬系統</p>
+        <p class="text-xs text-gray-500 mt-1">本系統模擬 LINE 官方帳號之多頁籤切換、權限控管、依分區與創社順序排序之統計表，及行事曆連動大螢幕機制。</p>
+    </div>
+
+    <!-- Main Container -->
+    <div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        <!-- LEFT: Control Panel & Settings -->
+        <div class="lg:col-span-5 bg-white rounded-3xl p-6 shadow-md border border-gray-100 space-y-6">
+            <div>
+                <h2 class="text-lg font-bold text-gray-800 border-b pb-2 mb-4">
+                    <i class="fa-solid fa-sliders text-blue-600 mr-2"></i>系統控制台
+                </h2>
+                
+                <!-- Role Selector -->
+                <label class="block text-sm font-semibold text-gray-700 mb-2">1. 模擬切換您的 LINE 身分：</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="setRole('member')" id="btn-role-member" class="py-3 px-4 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-900 font-bold flex flex-col items-center justify-center transition-all">
+                        <i class="fa-solid fa-user text-xl mb-1 text-blue-600"></i>
+                        <span>一般社友</span>
+                        <span class="text-xxs font-normal text-blue-500">無主委權限</span>
+                    </button>
+                    <button onclick="setRole('chairperson')" id="btn-role-chair" class="py-3 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 font-bold flex flex-col items-center justify-center transition-all opacity-70 hover:opacity-100">
+                        <i class="fa-solid fa-user-shield text-xl mb-1 text-yellow-600"></i>
+                        <span class="text-yellow-900">地區主委</span>
+                        <span class="text-xxs font-normal text-yellow-600">可開啟「主委專區」</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Current Active Event Detail Info (Dynamic Left Monitor) -->
+            <div>
+                <h2 class="text-lg font-bold text-gray-800 border-b pb-2 mb-3">
+                    <i class="fa-regular fa-calendar-check text-green-600 mr-2"></i>當前首頁大螢幕活動（變數控制）
+                </h2>
+                <div class="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span id="active-tag" class="px-2 py-0.5 bg-yellow-500 text-blue-950 text-xs font-bold rounded">載入中...</span>
+                        <span id="active-date-badge" class="text-xs text-gray-500 font-semibold">--</span>
+                    </div>
+                    <h3 class="font-extrabold text-blue-900 text-base" id="active-event-name">載入中...</h3>
+                    <div class="text-xs text-gray-600 space-y-1 pt-1 border-t border-gray-200/60">
+                        <p><i class="fa-solid fa-location-dot w-4 text-rose-500"></i> 地點：<span id="active-location">--</span></p>
+                        <p><i class="fa-solid fa-user-tie w-4 text-blue-500"></i> 主委：<span id="active-chair">--</span></p>
+                        <p><i class="fa-solid fa-clock w-4 text-amber-500"></i> 備註/時間：<span id="active-notes">--</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulation Tools -->
+            <div>
+                <h2 class="text-lg font-bold text-gray-800 border-b pb-2 mb-3">
+                    <i class="fa-solid fa-square-poll-vertical text-purple-600 mr-2"></i>模擬操作輔助
+                </h2>
+                <div class="space-y-3">
+                    <button onclick="simulateNewRegistration()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-plus"></i> 模擬隨機社友線上報名 (+1)
+                    </button>
+                    <button onclick="simulatePaymentApproval()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-dollar-sign"></i> 模擬秘書處確認繳費 (+1 筆)
+                    </button>
+                    <div class="p-3 bg-yellow-50 rounded-xl border border-yellow-100 text-xs text-yellow-800 leading-relaxed">
+                        <i class="fa-solid fa-circle-info mr-1"></i>
+                        <strong>高爾夫球專屬操作指引：</strong><br>
+                        點擊行事曆中的 <b>「總監盃高爾夫球比賽」</b> 並帶入大螢幕。接著點切選單 <b>【個人中心】</b> 體驗專屬的「我要計分」版面與簽到完畢後的動態大 Banner 變化！
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MIDDLE/RIGHT: High Fidelity LINE App Simulator -->
+        <div class="lg:col-span-7 flex justify-center">
+            
+            <!-- Phone Body -->
+            <div class="phone-frame w-full max-w-[400px] h-[780px] flex flex-col relative bg-[#7494c0]">
+                
+                <!-- Phone Status Bar -->
+                <div class="bg-gray-900 text-white px-6 py-2.5 flex justify-between items-center text-xs z-20">
+                    <span class="font-semibold">09:41</span>
+                    <div class="flex items-center gap-1.5">
+                        <i class="fa-solid fa-signal"></i>
+                        <i class="fa-solid fa-wifi"></i>
+                        <i class="fa-solid fa-battery-three-quarters"></i>
+                    </div>
+                </div>
+
+                <!-- LINE Chat Header -->
+                <div class="bg-[#243447] text-white px-4 py-3 flex items-center justify-between shadow-sm z-20">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-chevron-left text-lg cursor-pointer"></i>
+                        <div class="relative">
+                            <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center border border-white/20">
+                                <img src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=100&auto=format&fit=crop&q=60" alt="Rotary Logo" class="w-10 h-10 rounded-full object-cover">
+                            </div>
+                            <span class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-[#243447] rounded-full"></span>
+                        </div>
+                        <div>
+                            <div class="font-bold text-sm flex items-center gap-1">
+                                國際扶輪3523地區 
+                                <i class="fa-solid fa-circle-check text-blue-400 text-xs"></i>
+                            </div>
+                            <span class="text-xxs text-gray-400">官方帳號 · 全年度活動系統</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 text-lg">
+                        <i class="fa-solid fa-magnifying-glass cursor-pointer hover:text-gray-300"></i>
+                        <i class="fa-solid fa-bars cursor-pointer hover:text-gray-300"></i>
+                    </div>
+                </div>
+
+                <!-- Chat Messages Area (Scrollable) -->
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-24">
+                    
+                    <!-- Welcome Msg -->
+                    <div class="flex items-start gap-2.5">
+                        <div class="w-8 h-8 rounded-full bg-blue-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                            3523
+                        </div>
+                        <div class="max-w-[75%]">
+                            <div class="bg-white text-gray-800 rounded-2xl rounded-tl-none p-3 text-sm shadow-sm">
+                                <p class="font-bold text-blue-900 mb-1">親愛的 3523 地區社友您好：</p>
+                                <p class="leading-relaxed">歡迎加入 3523 地區年度活動整合服務系統！您可以透過下方選單進行活動報名、上傳憑證、查詢報到 QR Code。若您為地區主委職務，請直接切換至【主委專區】查閱即時統計與進行現場報到掃描。</p>
+                            </div>
+                            <span class="text-xxs text-white/70 ml-1 mt-1 block">上午 09:41</span>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Chat Logs will appear here -->
+
+                </div>
+
+                <!-- Persistent Bottom Navigation Bar (Rich Menu) Container -->
+                <div class="absolute bottom-0 left-0 right-0 bg-white shadow-2xl z-30 flex flex-col border-t border-gray-200">
+                    
+                    <!-- Tab Headers (Top row of Rich Menu) -->
+                    <div class="grid grid-cols-3 bg-gray-100 text-center text-xs font-bold border-b border-gray-200">
+                        <button onclick="switchTab('home')" id="tab-home" class="py-3 text-blue-900 relative transition-all bg-white">
+                            <i class="fa-solid fa-house-chimney mr-1"></i>首頁活動
+                            <div id="tab-home-indicator" class="active-tab-indicator"></div>
+                        </button>
+                        <button onclick="switchTab('profile')" id="tab-profile" class="py-3 text-gray-600 relative transition-all hover:bg-gray-50">
+                            <i class="fa-solid fa-id-card mr-1"></i>個人中心
+                            <div id="tab-profile-indicator" class="active-tab-indicator hidden"></div>
+                        </button>
+                        <button onclick="switchTab('admin')" id="tab-admin" class="py-3 text-gray-600 relative transition-all hover:bg-gray-50 flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-star text-yellow-500"></i>主委專區
+                            <div id="tab-admin-indicator" class="active-tab-indicator hidden"></div>
+                        </button>
+                    </div>
+
+                    <!-- Rich Menu Grid Content (Height constrained) -->
+                    <div class="bg-gray-50 h-52 relative">
+                        
+                        <!-- TAB 1: HOME/EVENTS -->
+                        <div id="menu-content-home" class="grid grid-cols-3 grid-rows-2 h-full">
+                            <!-- Main Feature Event Banner (Dynamic left screen based on selection/closest event) -->
+                            <div onclick="triggerMainBannerClick()" class="col-span-2 row-span-2 bg-gradient-to-tr from-blue-950 via-blue-900 to-indigo-800 p-4 text-white flex flex-col justify-between border-r border-gray-200 cursor-pointer hover:brightness-105 active:brightness-95 transition-all relative overflow-hidden">
+                                <div class="absolute top-0 right-0 w-24 h-24 bg-yellow-500/10 rounded-full blur-xl -mr-6 -mt-6"></div>
+                                <div class="z-10">
+                                    <div class="flex items-center justify-between">
+                                        <span id="banner-tag" class="text-[9px] bg-yellow-500 text-blue-950 font-extrabold px-1.5 py-0.5 rounded tracking-wider uppercase">即將舉辦</span>
+                                        <span id="banner-date" class="text-[10px] text-yellow-300 font-semibold">2026-06-15</span>
+                                    </div>
+                                    <h4 id="banner-title" class="font-black text-xs sm:text-sm mt-2 tracking-wide leading-snug drop-shadow-sm truncate-2-lines h-10 overflow-hidden">
+                                        地區青少年交換(RYE)講習會
+                                    </h4>
+                                    <p id="banner-loc-text" class="text-[10px] text-gray-300 mt-1 truncate"><i class="fa-solid fa-location-dot text-rose-400 mr-1"></i>台北福華大飯店</p>
+                                </div>
+                                <div class="flex items-center justify-between text-xxs font-bold text-yellow-400 z-10 pt-1 border-t border-white/10">
+                                    <span>點擊大螢幕一鍵報名 <i class="fa-solid fa-circle-arrow-right"></i></span>
+                                    <i class="fa-solid fa-ribbon text-sm"></i>
+                                </div>
+                            </div>
+                            <!-- Small Button 1: Calendar (Launches list in chat) -->
+                            <div onclick="clickMenuItem('年度活動行事曆', 'home-calendar')" class="bg-white p-2 border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                                <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm">
+                                    <i class="fa-solid fa-calendar-days animate-bounce"></i>
+                                </div>
+                                <span class="text-xxs font-bold text-gray-700">年度行事曆</span>
+                            </div>
+                            <!-- Small Button 2: Website -->
+                            <div onclick="clickMenuItem('地區官網首頁', 'home-website')" class="bg-white p-2 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                                <div class="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm">
+                                    <i class="fa-solid fa-globe"></i>
+                                </div>
+                                <span class="text-xxs font-bold text-gray-700">地區官網</span>
+                            </div>
+                        </div>
+
+                        <!-- TAB 2: PROFILE/MEMBERSHIP (Dynamically populated based on event type) -->
+                        <div id="menu-content-profile" class="hidden h-full">
+                            <!-- Populated dynamically via JS renderProfileMenu() -->
+                        </div>
+
+                        <!-- TAB 3: ADMIN/CHAIRPERSON (Gatekeeper Pattern) -->
+                        <div id="menu-content-admin" class="hidden h-full">
+                            <!-- Gatekeeper State Container -->
+                            <div id="admin-gate-unauthorized" class="h-full bg-gray-900/95 flex flex-col items-center justify-center p-4 text-center text-white">
+                                <i class="fa-solid fa-lock text-3xl text-red-500 mb-2"></i>
+                                <h4 class="text-xs font-bold">【權限不符】</h4>
+                                <p class="text-xxs text-gray-400 mt-1 max-w-[80%]">本專區僅限地區秘書處、總監團隊及活動主委進入查閱。</p>
+                                <span class="text-[10px] mt-2 text-yellow-400 font-semibold underline cursor-pointer" onclick="bypassToAdminRole()">我是主委，一鍵模擬身分 &gt;</span>
+                            </div>
+
+                            <div id="admin-gate-authorized" class="hidden grid grid-cols-3 h-full">
+                                <!-- Big Feature: Live Statistics Board -->
+                                <div onclick="openStatisticsModal()" class="col-span-2 bg-gradient-to-br from-slate-900 to-blue-950 p-4 text-white flex flex-col justify-between border-r border-gray-200 cursor-pointer hover:brightness-105 active:brightness-95 transition-all">
+                                    <div>
+                                        <span class="text-[10px] bg-amber-500 text-slate-950 font-extrabold px-1.5 py-0.5 rounded tracking-wider">主委專用</span>
+                                        <h4 class="font-bold text-sm mt-1.5">分區活動報名/繳費<br>即時動態統計報表</h4>
+                                        <p class="text-xxs text-gray-400 mt-1">依分區及各社成立順序自動排序。</p>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs font-bold text-yellow-400">
+                                        <span>查看即時看板 <i class="fa-solid fa-chart-line ml-1"></i></span>
+                                        <i class="fa-solid fa-table-list text-xl opacity-80"></i>
+                                    </div>
+                                </div>
+                                <!-- Right Stack for Admin Controls -->
+                                <div class="grid grid-rows-2">
+                                    <div onclick="openAdminScanner()" class="bg-white p-2 border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-emerald-50 active:bg-emerald-100 transition-colors">
+                                        <i class="fa-solid fa-camera text-lg text-emerald-600 animate-pulse"></i>
+                                        <span class="text-xxs font-bold text-emerald-800">現場報到相機</span>
+                                    </div>
+                                    <div onclick="clickMenuItem('地區秘書處聯絡', 'admin-contact')" class="bg-white p-2 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                                        <i class="fa-solid fa-headset text-lg text-gray-500"></i>
+                                        <span class="text-xxs font-bold text-gray-700">秘書處後台支援</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Toggle Rich Menu Open/Close Button -->
+                    <div class="bg-white text-gray-500 py-1.5 text-center text-xs font-semibold cursor-pointer border-t border-gray-100 flex items-center justify-center gap-1 hover:bg-gray-50 active:bg-gray-100">
+                        <i class="fa-solid fa-keyboard text-gray-400"></i>
+                        <span>選單開啟 / 關閉</span>
+                        <i class="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MODERN MODAL 1: QR Code Passport for 社友 (Self Profile) -->
+    <div id="modal-qrcode" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl transform scale-95 transition-all">
+            <div class="bg-gradient-to-r from-teal-800 to-emerald-700 px-6 py-4 text-white flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-id-card text-lg text-yellow-400"></i>
+                    <h3 class="font-bold text-base">LIFF 身份大會報到 QR Code</h3>
+                </div>
+                <button onclick="closeModal('modal-qrcode')" class="text-white hover:text-gray-200 transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-6 text-center space-y-4">
+                <p class="text-xs text-gray-500">此條碼由 LIFF 系統自動關聯 LINE User ID 產出。請向現場接待主委出示：</p>
+                
+                <!-- Ticket Badge View -->
+                <div class="border-2 border-dashed border-gray-200 p-4 rounded-2xl bg-gray-50 inline-block w-full">
+                    <p class="text-xxs font-bold text-gray-400 tracking-wider">3523 ROTARY PASSPORT (LIFF CONNECTED)</p>
+                    <h4 class="text-base font-bold text-blue-900 mt-1" id="passport-club">台北松青扶輪社</h4>
+                    <p class="text-sm font-semibold text-gray-700" id="passport-name">王大同 社友 (Rotarian Daniel)</p>
+                    <p class="text-[9px] text-gray-400 mt-0.5" id="passport-uid">LINE UID: U8f74a00...80fa9e</p>
+                    
+                    <!-- Simulating QR Code -->
+                    <div class="my-4 flex justify-center">
+                        <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner relative">
+                            <!-- Pure SVG QR Code representation to ensure no external broke -->
+                            <svg width="140" height="140" viewBox="0 0 29 29" shape-rendering="crispEdges" class="text-teal-900 fill-current">
+                                <path d="M0 0h7v7H0zm1 1v5h5V1zm1 1h3v3H2zm6-2h1v1H8zm1 1h1v1H9zm-1 1h1v1H8zm2 0h2v1h-2zm-2 1h1v1H8zm3 0h1v1h-1zm-3 1h1v1H8zm1 1h1v1H9zm2-4h1v1h-1zm1 2h1v1h-1zm1-2h1v1h-1zm1 1h1v1h-1zm-2 2h2v1h-2zm2 1h1v1h-1zm-4 1h1v1h-1zm1 1h1v1h-1zm2 0h1v1h-1zm-7 2h7v7H0zm1 1v5h5V10zm1 1h3v3H2zm8-2h1v1h-1zm2 0h1v1h-1zm1 0h1v1h-1zm1 1h1v1h-1zm-3 1h2v1h-2zm3 0h1v1h-1zm-4 1h1v1h-1zm2 0h1v1h-1zm1 1h1v1h-1zm-3 1h2v1h-2zm3 0h1v1h-1zm-4 1h1v1h-1zm1 1h1v1h-1zm1 1h1v1h-1zm1-7h1v1h-1zm1 2h1v1h-1zm1-2h1v1h-1zm1 1h1v1h-1zm-2 2h2v1h-2zm2 1h1v1h-1z"/>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <div class="bg-white p-1 rounded-md shadow border border-gray-100">
+                                    <i class="fa-solid fa-ribbon text-blue-800 text-lg"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scan status inside modal -->
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">
+                        <i class="fa-solid fa-spinner animate-spin"></i>
+                        <span>等待現場主委掃描報到...</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="closeModal('modal-qrcode')" class="w-1/2 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-700 text-sm hover:bg-gray-50 transition-colors">
+                        關閉視窗
+                    </button>
+                    <button onclick="simulateBeingScanned()" class="w-1/2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-1 shadow-md shadow-emerald-200">
+                        <i class="fa-solid fa-check"></i> 模擬被掃描
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODERN MODAL 2: Admin Camera QR Scanner for 主委 (Admin Scan UI) -->
+    <div id="modal-scanner" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-gray-900 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl text-white transform scale-95 transition-all">
+            <div class="px-6 py-4 bg-slate-800/80 flex justify-between items-center border-b border-gray-800">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-camera text-emerald-400"></i>
+                    <h3 class="font-bold text-base">地區主委專屬 - 報到掃描相機</h3>
+                </div>
+                <button onclick="closeModal('modal-scanner')" class="text-gray-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 flex flex-col items-center justify-center text-center space-y-6">
+                <p class="text-xs text-gray-400">對準社友出示的報到 QR Code。請在下方選擇一位社友進行模擬掃描：</p>
+                
+                <!-- Simulated Camera Viewfinder with animated scanner line -->
+                <div class="w-56 h-56 border-2 border-emerald-400 rounded-3xl relative overflow-hidden flex items-center justify-center bg-black shadow-inner">
+                    <div class="absolute inset-4 border border-dashed border-emerald-500/30 rounded-2xl"></div>
+                    <!-- Red active scan laser line -->
+                    <div class="absolute left-0 right-0 h-0.5 bg-red-500 top-1/2 -translate-y-1/2 animate-[bounce_2s_infinite]"></div>
+                    
+                    <i class="fa-solid fa-qrcode text-6xl text-emerald-500/20"></i>
+                </div>
+
+                <!-- Dropdown selector to choose who to scan in simulation -->
+                <div class="w-full text-left space-y-2">
+                    <label class="block text-xs text-gray-400 font-semibold">選擇要掃描報到的社友：</label>
+                    <select id="scan-target-select" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        <!-- Will load dynamically -->
+                    </select>
+                </div>
+
+                <div class="flex gap-2 w-full">
+                    <button onclick="closeModal('modal-scanner')" class="w-1/2 py-2.5 rounded-xl border border-gray-700 font-bold text-gray-400 text-sm hover:bg-slate-800 transition-colors">
+                        關閉相機
+                    </button>
+                    <button onclick="executeAdminScan()" class="w-1/2 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-1 shadow-lg shadow-emerald-500/20">
+                        <i class="fa-solid fa-expand"></i> 執行掃描簽到
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODERN MODAL 3: Detailed Live Statistics (主委專用看板) -->
+    <div id="modal-statistics" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transform scale-95 transition-all">
+            
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-6 py-5 text-white flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 bg-yellow-500 text-blue-950 rounded-full flex items-center justify-center text-sm font-black">3523</div>
+                    <div>
+                        <h3 class="font-extrabold text-base">地區活動 報名與繳費即時統計看板</h3>
+                        <p class="text-[10px] text-gray-300">排序規則：優先依「分區編號」，分區內依「創社年份(授證先後)」</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-statistics')" class="text-white hover:text-gray-200 transition-colors">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content (Scrollable) -->
+            <div class="overflow-y-auto p-6 space-y-6 flex-1 bg-gray-50">
+                
+                <!-- Summary KPI Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+                        <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-users"></i></div>
+                        <div>
+                            <span class="text-xxs text-gray-400 block">總報名人數</span>
+                            <span class="text-xl font-black text-gray-800" id="kpi-total-reg">0 人</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+                        <div class="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-circle-check"></i></div>
+                        <div>
+                            <span class="text-xxs text-gray-400 block">已報到人數</span>
+                            <span class="text-xl font-black text-emerald-600" id="kpi-total-check">0 人</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+                        <div class="w-10 h-10 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-wallet"></i></div>
+                        <div>
+                            <span class="text-xxs text-gray-400 block">完成繳費數</span>
+                            <span class="text-xl font-black text-teal-600" id="kpi-total-pay">0 筆</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+                        <div class="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-hourglass-half"></i></div>
+                        <div>
+                            <span class="text-xxs text-gray-400 block">待繳費數</span>
+                            <span class="text-xl font-black text-rose-600" id="kpi-total-unpay">0 筆</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Data Table -->
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div class="px-5 py-3.5 bg-gray-100/50 border-b border-gray-100 flex justify-between items-center">
+                        <span class="text-xs font-bold text-gray-700">依分區及創社先後排序明細</span>
+                        <span class="text-xxs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-semibold">即時同步中</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200 text-xxs font-bold text-gray-400 uppercase tracking-wider">
+                                    <th class="py-3.5 px-4">分區</th>
+                                    <th class="py-3.5 px-4">扶輪社名稱</th>
+                                    <th class="py-3.5 px-4 text-center">創社授證年份</th>
+                                    <th class="py-3.5 px-4 text-center">報名人數</th>
+                                    <th class="py-3.5 px-4 text-center">已完成繳費</th>
+                                    <th class="py-3.5 px-4 text-center">尚未完成</th>
+                                    <th class="py-3.5 px-4 text-center">已到場報到</th>
+                                    <th class="py-3.5 px-4 text-right">報到率</th>
+                                </tr>
+                            </thead>
+                            <tbody id="statistics-table-body" class="text-xs text-gray-700 divide-y divide-gray-100">
+                                <!-- Will be generated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Rotarian sorting rule explanation note -->
+                <div class="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 text-xs text-blue-900 leading-relaxed space-y-1">
+                    <h5 class="font-bold"><i class="fa-solid fa-circle-question mr-1"></i>為何本統計表的排序如此重要？</h5>
+                    <p>扶輪活動之桌次編排、致詞順序及統計發布，均嚴格遵循各社創立授證時間（Charter Date）。本系統資料庫會自動依分區（第一分區至第六分區），再依各社授證先後順序進行排序，省去地區秘書處活動前人工核對與二次排版程序。</p>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="bg-gray-100 px-6 py-4 flex justify-between items-center shrink-0">
+                <p class="text-xxs text-gray-400">國際扶輪 3523 地區 · 資訊委員會系統維護</p>
+                <button onclick="closeModal('modal-statistics')" class="bg-blue-900 hover:bg-blue-950 text-white font-bold py-2 px-5 rounded-xl text-xs transition-colors">
+                    關閉統計表
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODERN MODAL 4: GOLF SCORECARD (高爾夫電子計分卡 LIFF) -->
+    <div id="modal-golf-scorecard" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh] transform scale-95 transition-all">
+            <!-- Header -->
+            <div class="bg-emerald-800 px-6 py-4 text-white flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-golf-ball-tee text-yellow-300 text-xl"></i>
+                    <div>
+                        <h3 class="font-bold text-sm sm:text-base">總監盃高爾夫球賽 - 電子計分卡</h3>
+                        <p class="text-[10px] text-emerald-200">同組球友：王大同 / 李志明 / 陳建國 / 林永生</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-golf-scorecard')" class="text-emerald-100 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Content Area -->
+            <div class="overflow-y-auto p-4 space-y-4 bg-slate-50 flex-1 no-scrollbar">
+                <div class="bg-emerald-50 rounded-2xl p-3 border border-emerald-100 text-xxs text-emerald-900 flex justify-between items-center">
+                    <span>⛳️ <b>球場：</b>老淡水高爾夫球場</span>
+                    <span class="font-bold bg-emerald-600 text-white px-2 py-0.5 rounded">OUT 區</span>
+                </div>
+
+                <!-- Table -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <table class="w-full text-center text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 border-b border-gray-200 text-xxs font-bold text-gray-500">
+                                <th class="py-2.5 text-left pl-3">球員 / 洞號</th>
+                                <th class="py-2.5">H1<br><span class="text-gray-400 font-normal">Par 4</span></th>
+                                <th class="py-2.5">H2<br><span class="text-gray-400 font-normal">Par 3</span></th>
+                                <th class="py-2.5">H3<br><span class="text-gray-400 font-normal">Par 5</span></th>
+                                <th class="py-2.5">H4<br><span class="text-gray-400 font-normal">Par 4</span></th>
+                                <th class="py-2.5 bg-emerald-50 font-bold text-emerald-800">總桿</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <!-- Player 1: Me -->
+                            <tr>
+                                <td class="py-3 text-left pl-3 font-bold text-slate-900">我 (王大同)</td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p1', 'h1', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p1-h1">4</span><button onclick="adjustGolfScore('p1', 'h1', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p1', 'h2', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p1-h2">3</span><button onclick="adjustGolfScore('p1', 'h2', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p1', 'h3', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p1-h3">5</span><button onclick="adjustGolfScore('p1', 'h3', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p1', 'h4', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p1-h4">4</span><button onclick="adjustGolfScore('p1', 'h4', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3 font-black text-emerald-700 bg-emerald-50/50" id="p1-total">16</td>
+                            </tr>
+                            <!-- Player 2: 李志明 -->
+                            <tr>
+                                <td class="py-3 text-left pl-3 text-gray-700">李志明 社友</td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p2', 'h1', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p2-h1">5</span><button onclick="adjustGolfScore('p2', 'h1', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p2', 'h2', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p2-h2">3</span><button onclick="adjustGolfScore('p2', 'h2', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p2', 'h3', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p2-h3">6</span><button onclick="adjustGolfScore('p2', 'h3', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p2', 'h4', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p2-h4">5</span><button onclick="adjustGolfScore('p2', 'h4', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3 font-bold text-gray-700 bg-emerald-50/50" id="p2-total">19</td>
+                            </tr>
+                            <!-- Player 3: 陳建國 -->
+                            <tr>
+                                <td class="py-3 text-left pl-3 text-gray-700">陳建國 社友</td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p3', 'h1', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p3-h1">4</span><button onclick="adjustGolfScore('p3', 'h1', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p3', 'h2', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p3-h2">4</span><button onclick="adjustGolfScore('p3', 'h2', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p3', 'h3', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p3-h3">5</span><button onclick="adjustGolfScore('p3', 'h3', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p3', 'h4', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p3-h4">4</span><button onclick="adjustGolfScore('p3', 'h4', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3 font-bold text-gray-700 bg-emerald-50/50" id="p3-total">17</td>
+                            </tr>
+                            <!-- Player 4: 林永生 -->
+                            <tr>
+                                <td class="py-3 text-left pl-3 text-gray-700">林永生 社友</td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p4', 'h1', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p4-h1">6</span><button onclick="adjustGolfScore('p4', 'h1', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p4', 'h2', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p4-h2">2</span><button onclick="adjustGolfScore('p4', 'h2', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p4', 'h3', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p4-h3">7</span><button onclick="adjustGolfScore('p4', 'h3', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3"><div class="flex items-center justify-center gap-1"><button onclick="adjustGolfScore('p4', 'h4', -1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">-</button><span id="p4-h4">5</span><button onclick="adjustGolfScore('p4', 'h4', 1)" class="w-4 h-4 bg-gray-100 rounded text-[10px]">+</button></div></td>
+                                <td class="py-3 font-bold text-gray-700 bg-emerald-50/50" id="p4-total">20</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="bg-gray-100 px-6 py-4 flex justify-between items-center shrink-0">
+                <span class="text-xxs text-gray-400">老淡水球場即時電子計分系統 · 總監盃大會</span>
+                <button onclick="submitGolfScores()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1.5 px-4 rounded-xl text-xs transition-colors">
+                    提交成績至雲端
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Dialog -->
+    <div id="modal-alert" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-xs w-full p-6 text-center space-y-4 shadow-2xl">
+            <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center text-xl mx-auto">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div class="space-y-1">
+                <h4 class="font-bold text-gray-800" id="alert-title">系統提示</h4>
+                <p class="text-xs text-gray-500" id="alert-message">訊息內容</p>
+            </div>
+            <button onclick="closeModal('modal-alert')" class="w-full bg-blue-900 text-white font-bold py-2 rounded-xl text-xs">確定</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. ROTARY CLUB STATISTICS DATA ---
+        const clubsData = [
+            // First Area
+            { id: 1, area: "第一分區", name: "台北南港扶輪社", charterYear: 1982, registered: 18, paid: 15, attended: 4 },
+            { id: 2, area: "第一分區", name: "台北逸仙扶輪社", charterYear: 1998, registered: 12, paid: 12, attended: 6 },
+            { id: 3, area: "第一分區", name: "台北華新扶輪社", charterYear: 2005, registered: 15, paid: 10, attended: 2 },
+            { id: 4, area: "第一分區", name: "台北向陽扶輪社", charterYear: 2012, registered: 9, paid: 8, attended: 3 },
+            // Second Area
+            { id: 5, area: "第二分區", name: "台北松山扶輪社", charterYear: 1978, registered: 24, paid: 22, attended: 10 },
+            { id: 6, area: "第二分區", name: "台北松青扶輪社", charterYear: 1993, registered: 16, paid: 16, attended: 8 },
+            { id: 7, area: "第二分區", name: "台北信義扶輪社", charterYear: 2002, registered: 14, paid: 11, attended: 4 },
+            { id: 8, area: "第二分區", name: "台北亞太扶輪社", charterYear: 2009, registered: 10, paid: 7, attended: 1 },
+            // Third Area
+            { id: 9, area: "第三分區", name: "台北瑞光扶輪社", charterYear: 1985, registered: 20, paid: 20, attended: 11 },
+            { id: 10, area: "第三分區", name: "台北忠孝扶輪社", charterYear: 1996, registered: 13, paid: 11, attended: 5 },
+            { id: 11, area: "第三分區", name: "台北內湖扶輪社", charterYear: 2004, registered: 11, paid: 10, attended: 3 },
+            // Fourth Area
+            { id: 12, area: "第四分區", name: "台北華麗扶輪社", charterYear: 2008, registered: 17, paid: 13, attended: 4 },
+            { id: 13, area: "第四分區", name: "台北麗華扶輪社", charterYear: 2014, registered: 8, paid: 8, attended: 2 }
+        ];
+
+        // --- 2. EXCEL DATABASE (2025-26 訓練會議時間表) ---
+        const eventSchedule = [
+            { id: 101, date: "2024-11-22", weekday: "星期五", title: "RF GMS 扶輪獎助金管理研討會", location: "政大公企中心 2F", chair: "蔡輝彬 P.P. Stanley", club: "華新社", time: "13:30-17:30", type: "地區會議" },
+            { id: 102, date: "2025-02-25", weekday: "星期二", title: "DTTS 地區團隊訓練研討會", location: "漢來飯店", chair: "王維宏 P.P. JoeWang", club: "南欣社", time: "13:00-17:00", type: "訓練研討" },
+            { id: 103, date: "2025-03-22", weekday: "星期六", title: "PETS 社長當選人訓練研討會", location: "美福飯店", chair: "許顥譪 P.P. Anthony", club: "南英社", time: "10:00-16:30", type: "訓練研討" },
+            { id: 104, date: "2025-05-24", weekday: "星期六", title: "DTA 地區訓練講習會 (合併 CTTS)", location: "大直典華", chair: "蔡圻 P.P. Chigo", club: "南海社", time: "10:00-16:30", type: "訓練研討" },
+            { id: 105, date: "2025-07-01", weekday: "星期二", title: "總監暨社長聯合就職典禮", location: "漢來飯店", chair: "蔡圻 P.P. Chigo", club: "南海社", time: "11:00-14:00", type: "年度慶典" },
+            { id: 106, date: "2025-07-14", weekday: "星期一", title: "總監盃高爾夫球比賽", location: "老淡水高爾夫球場", chair: "林星煌 P.P. Star", club: "忠孝社", time: "整天", type: "地區運動" },
+            { id: 107, date: "2026-06-15", weekday: "星期一", title: "地區青少年交換(RYE)講習會", location: "台北福華大飯店", chair: "陳俊宇 P.P. RYE", club: "逸仙社", time: "10:00-15:00", type: "講習培訓" },
+            { id: 108, date: "2026-10-24", weekday: "星期六", title: "第九屆地區年會暨職業服務論壇", location: "台北萬豪酒店 5樓萬豪廳", chair: "張秘書長", club: "地區委員會", time: "09:00-17:30", type: "地區年會" }
+        ];
+
+        // Mock current simulator date: 2026-06-01 (Allows future-only filtering)
+        const SIMULATED_TODAY = new Date("2026-06-01");
+
+        // --- 3. GLOBAL STATE ---
+        let userRole = 'member'; // 'member' | 'chairperson'
+        let activeTab = 'home'; // 'home' | 'profile' | 'admin'
+        let currentActiveEvent = null; // Dynamically calculated on startup
+        let isGolfCheckedIn = false; // Flag to track if Golf QR is scanned
+
+        // --- 4. STARTUP ENGINE ---
+        window.onload = function() {
+            // Find the closest upcoming event (Date >= SIMULATED_TODAY)
+            currentActiveEvent = findClosestUpcomingEvent();
+            updateUIMonitors();
+            renderProfileMenu(); // Initial draw of Tab 2
+
+            // Welcome Message
+            addChatMessage("bot", "💡 <b>地區秘書處系統啟動：</b><br>已為您載入全新 <b>2025-26/2026-27年度行事曆資料庫</b>！<br><br><b>🏌️‍♂️ 高爾夫球特色測試步驟：</b><br>1. 點擊選單右方的<b>【年度行事曆】</b>。<br>2. 選擇 <b>「總監盃高爾夫球比賽」</b> 點擊載入。<br>3. 切換至 <b>【個人中心】</b> 體驗全新的鎖定計分板與大會報到流程！");
+            
+            renderStatisticsTable();
+            populateScanTargetDropdown();
+        };
+
+        // --- 5. CORE HELPER: FIND CLOSEST UPCOMING EVENT ---
+        function findClosestUpcomingEvent() {
+            const upcomingEvents = eventSchedule.filter(ev => {
+                const evDate = new Date(ev.date);
+                return evDate >= SIMULATED_TODAY;
+            });
+
+            if (upcomingEvents.length > 0) {
+                upcomingEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+                return upcomingEvents[0]; // Nearest upcoming
+            }
+
+            return eventSchedule[eventSchedule.length - 1];
+        }
+
+        // --- 6. UPDATE DYNAMIC BANNER & MONITORS ---
+        function updateUIMonitors() {
+            if (!currentActiveEvent) return;
+
+            // Update simulator Control Panel Details (Left Frame)
+            document.getElementById('active-tag').innerText = currentActiveEvent.type;
+            document.getElementById('active-date-badge').innerText = `${currentActiveEvent.date} (${currentActiveEvent.weekday})`;
+            document.getElementById('active-event-name').innerText = currentActiveEvent.title;
+            document.getElementById('active-location').innerText = currentActiveEvent.location;
+            document.getElementById('active-chair').innerText = `${currentActiveEvent.chair} (${currentActiveEvent.club})`;
+            document.getElementById('active-notes').innerText = `${currentActiveEvent.time} ${currentActiveEvent.weekday}`;
+
+            // Update Phone Rich Menu Banner Block (Variables Integration)
+            document.getElementById('banner-title').innerText = currentActiveEvent.title;
+            document.getElementById('banner-date').innerText = currentActiveEvent.date;
+            document.getElementById('banner-tag').innerText = currentActiveEvent.type;
+            document.getElementById('banner-loc-text').innerHTML = `<i class="fa-solid fa-location-dot text-rose-400 mr-1"></i>${currentActiveEvent.location}`;
+            
+            // Re-render Profile Menu to align layout changes
+            renderProfileMenu();
+        }
+
+        // --- 7. EVENT SELECTION ACTION ---
+        function selectEvent(eventId) {
+            const ev = eventSchedule.find(x => x.id === eventId);
+            if (ev) {
+                currentActiveEvent = ev;
+                
+                // If switching away from golf, reset check-in state
+                if (ev.id !== 106) {
+                    isGolfCheckedIn = false;
+                }
+                
+                updateUIMonitors();
+                
+                addChatMessage("system", `🔄 已選定行事曆活動：<b>${ev.title}</b>`);
+                switchTab('home');
+
+                addChatMessage("bot", `✨ <b>首頁動態大螢幕已重載！</b><br>當前首頁活動已替換為：<br>👉 <b>${ev.title}</b><br><br>您可以至 <b>【個人中心】</b> 瀏覽此活動對應的登出與報到狀態。`);
+            }
+        }
+
+        // --- 8. ROTATING RENDER FOR TAB 2 (PROFILE MENU) ---
+        function renderProfileMenu() {
+            const container = document.getElementById('menu-content-profile');
+            const isGolf = (currentActiveEvent && currentActiveEvent.id === 106);
+
+            if (!isGolf) {
+                // NORMAL NON-GOLF LAYOUT
+                container.className = "hidden grid grid-cols-3 h-full";
+                container.innerHTML = `
+                    <!-- Left block: normal passport -->
+                    <div onclick="openMyQrCode()" class="col-span-2 bg-gradient-to-br from-teal-800 to-emerald-700 p-4 text-white flex flex-col justify-between border-r border-gray-200 cursor-pointer hover:brightness-105 active:brightness-95 transition-all">
+                        <div>
+                            <span class="text-[10px] bg-emerald-400 text-teal-950 font-extrabold px-1.5 py-0.5 rounded tracking-wider">LIFF 身份識別已綁定</span>
+                            <h4 class="font-bold text-sm mt-1.5">我的「活動報到 QR」</h4>
+                            <p class="text-xxs text-emerald-200 mt-1">出示給現場接待主委掃描，一秒完成報到程序。</p>
+                        </div>
+                        <div class="flex items-center justify-between text-xs font-bold text-yellow-300">
+                            <span>讀取大會報到QR <i class="fa-solid fa-qrcode ml-1"></i></span>
+                            <i class="fa-solid fa-id-badge text-xl opacity-80"></i>
+                        </div>
+                    </div>
+                    <!-- Right stack -->
+                    <div class="grid grid-rows-2">
+                        <div onclick="clickMenuItem('查詢已報名活動', 'profile-history')" class="bg-white p-2 border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                            <i class="fa-solid fa-clock-rotate-left text-lg text-indigo-600"></i>
+                            <span class="text-xxs font-bold text-gray-700">報名與繳費紀錄</span>
+                        </div>
+                        <div onclick="clickMenuItem('上傳繳費憑證', 'profile-upload')" class="bg-white p-2 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                            <i class="fa-solid fa-cloud-arrow-up text-lg text-amber-500"></i>
+                            <span class="text-xxs font-bold text-gray-700">上傳繳費憑證</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // GOLF EVENT ACTIVE
+                if (!isGolfCheckedIn) {
+                    // BEFORE CHECK-IN (Split Left vertically: QR code above, Scoring locked below)
+                    container.className = "hidden grid grid-cols-3 h-full";
+                    container.innerHTML = `
+                        <!-- Left Block: Split Vertically -->
+                        <div class="col-span-2 flex flex-col h-full border-r border-gray-200 bg-white">
+                            <!-- Top Half: QR Passport raised position (UPDATED: Title renamed to 讀取大會報到QR) -->
+                            <div onclick="openMyQrCode()" class="h-[52%] bg-gradient-to-br from-teal-800 to-emerald-700 p-2.5 text-white flex flex-col justify-between cursor-pointer hover:brightness-105 active:brightness-95 transition-all border-b border-emerald-900/20">
+                                <div>
+                                    <span class="text-[8px] bg-emerald-400 text-teal-950 font-black px-1.5 py-0.2 rounded uppercase">大會登入確認</span>
+                                    <h4 class="font-extrabold text-xs mt-0.5">我的「球賽報到 QR」</h4>
+                                </div>
+                                <div class="flex items-center justify-between text-[10px] font-bold text-yellow-300">
+                                    <span>讀取大會報到QR <i class="fa-solid fa-qrcode ml-0.5"></i></span>
+                                    <i class="fa-solid fa-id-badge text-sm opacity-80"></i>
+                                </div>
+                            </div>
+                            <!-- Bottom Half: Scoring Block (Locked state) -->
+                            <div onclick="promptScorecardLock()" class="h-[48%] bg-gradient-to-br from-slate-100 to-slate-200 p-2.5 flex flex-col justify-between cursor-pointer hover:bg-slate-300/40 transition-all text-slate-400">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[9px] font-bold text-slate-400">電子計分板</span>
+                                    <i class="fa-solid fa-lock text-slate-400 text-[10px]"></i>
+                                </div>
+                                <h4 class="font-bold text-xs">我要計分</h4>
+                                <p class="text-[8px] text-slate-400 truncate">🔒 完成報到後自動啟用</p>
+                            </div>
+                        </div>
+                        <!-- Right stack -->
+                        <div class="grid grid-rows-2">
+                            <div onclick="clickMenuItem('查詢已報名活動', 'profile-history')" class="bg-white p-2 border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                                <i class="fa-solid fa-clock-rotate-left text-lg text-indigo-600"></i>
+                                <span class="text-xxs font-bold text-gray-700">報名與繳費紀錄</span>
+                            </div>
+                            <div onclick="clickMenuItem('上傳繳費憑證', 'profile-upload')" class="bg-white p-2 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                                <i class="fa-solid fa-cloud-arrow-up text-lg text-amber-500"></i>
+                                <span class="text-xxs font-bold text-gray-700">上傳繳費憑證</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // AFTER CHECK-IN (Welcome/Locker/Golfers on left, I Want to Score on right)
+                    container.className = "hidden grid grid-cols-3 h-full";
+                    container.innerHTML = `
+                        <!-- Left Block (col-span-2): Welcome, Locker #88 and 3 Buddies -->
+                        <div class="col-span-2 bg-gradient-to-br from-emerald-950 via-emerald-800 to-green-950 p-2.5 text-white flex flex-col justify-between border-r border-emerald-900/30 relative overflow-hidden">
+                            <div class="absolute -top-3 -right-3 w-12 h-12 bg-yellow-500/10 rounded-full blur-md"></div>
+                            <div class="space-y-0.5 text-xxs">
+                                <div class="flex justify-between items-center border-b border-white/10 pb-0.5">
+                                    <span class="text-[8px] bg-yellow-500 text-slate-950 font-black px-1 rounded">報到成功</span>
+                                    <span class="text-yellow-400 font-bold">置物櫃: 88 號</span>
+                                </div>
+                                <h4 class="font-extrabold text-[11px] text-yellow-100">歡迎 王大同 社友 蒞臨球賽！</h4>
+                                <div class="text-[9px] text-emerald-200 space-y-0.5 pt-0.5">
+                                    <p class="font-bold text-white"><i class="fa-solid fa-users text-yellow-400"></i> 同組球友：</p>
+                                    <div class="grid grid-cols-3 gap-1 pl-1 text-[8px] text-white/90">
+                                        <span>· 李志明</span>
+                                        <span>· 陳建國</span>
+                                        <span>· 林永生</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-[8px] text-emerald-300/80"><i class="fa-solid fa-circle-check"></i> 大會計分功能已同步開通</span>
+                        </div>
+                        <!-- Right Block: Merged "我要計分" Button -->
+                        <div onclick="openGolfScorecard()" class="bg-gradient-to-tr from-yellow-500 via-amber-400 to-yellow-300 p-2 text-slate-900 flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:brightness-105 active:brightness-95 transition-all text-center">
+                            <div class="w-9 h-9 rounded-full bg-white text-emerald-700 flex items-center justify-center shadow-md animate-pulse">
+                                <i class="fa-solid fa-golf-ball-tee text-base"></i>
+                            </div>
+                            <span class="text-xs font-black tracking-wider text-emerald-950">我要計分</span>
+                            <span class="text-[7px] text-emerald-900 font-bold">即時填寫桿數</span>
+                        </div>
+                    `;
+                }
+            }
+
+            // Sync hidden state with activeTab
+            if (activeTab === 'profile') {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        // Prompt lock message
+        function promptScorecardLock() {
+            showAlert('未開放', '請先點選上方的【讀取大會報到QR】出示條碼，並由現場工作人員（或點擊模擬被掃描）完成簽到，即可開通同組球友名單與電子計分卡！');
+        }
+
+        // --- 9. ROLE CONTROLLER & PERMISSION GATEKEEPER ---
+        function setRole(role) {
+            userRole = role;
+            
+            const btnMember = document.getElementById('btn-role-member');
+            const btnChair = document.getElementById('btn-role-chair');
+            
+            if (role === 'member') {
+                btnMember.className = "py-3 px-4 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-900 font-bold flex flex-col items-center justify-center transition-all";
+                btnChair.className = "py-3 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 font-bold flex flex-col items-center justify-center transition-all opacity-70 hover:opacity-100";
+                
+                document.getElementById('admin-gate-unauthorized').classList.remove('hidden');
+                document.getElementById('admin-gate-authorized').classList.add('hidden');
+                
+                addChatMessage("system", "🔏 系統已將您的身分設定為：<b>一般社友 (無主委權限)</b>");
+            } else {
+                btnMember.className = "py-3 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 font-bold flex flex-col items-center justify-center transition-all opacity-70 hover:opacity-100";
+                btnChair.className = "py-3 px-4 rounded-xl border-2 border-yellow-600 bg-yellow-50 text-yellow-950 font-bold flex flex-col items-center justify-center transition-all";
+                
+                document.getElementById('admin-gate-unauthorized').classList.add('hidden');
+                document.getElementById('admin-gate-authorized').classList.remove('hidden');
+                
+                addChatMessage("system", "🔑 系統已將您的身分設定為：<b>地區活動主委 (已授予所有權限)</b>");
+            }
+        }
+
+        function bypassToAdminRole() {
+            setRole('chairperson');
+            switchTab('admin');
+        }
+
+        // --- 10. RICH MENU TAB SWITCHER (FIXED: Restored tab content activation) ---
+        function switchTab(tabId) {
+            activeTab = tabId;
+            
+            const tabs = ['home', 'profile', 'admin'];
+            tabs.forEach(t => {
+                const tabBtn = document.getElementById(`tab-${t}`);
+                const indicator = document.getElementById(`tab-${t}-indicator`);
+                const content = document.getElementById(`menu-content-${t}`);
+                
+                tabBtn.classList.remove('text-blue-900', 'bg-white');
+                tabBtn.classList.add('text-gray-600');
+                indicator.classList.add('hidden');
+                content.classList.add('hidden');
+            });
+
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            const activeIndicator = document.getElementById(`tab-${tabId}-indicator`);
+            const activeContent = document.getElementById(`menu-content-${tabId}`);
+            
+            activeBtn.classList.remove('text-gray-600');
+            activeBtn.classList.add('text-blue-900', 'bg-white');
+            activeIndicator.classList.remove('hidden');
+            
+            if (activeContent) {
+                activeContent.classList.remove('hidden');
+            }
+
+            renderProfileMenu(); // Dynamic Redraw of Tab 2
+
+            addChatMessage("system", `📱 點擊頁籤切換選單至：<b>【${getTabNameInChinese(tabId)}】</b>`);
+        }
+
+        function getTabNameInChinese(tabId) {
+            switch(tabId) {
+                case 'home': return '首頁活動';
+                case 'profile': return '個人中心';
+                case 'admin': return '主委專區';
+                default: return '';
+            }
+        }
+
+        // --- 11. LINE SIMULATION CLICK HANDLING ---
+        function clickMenuItem(itemName, eventKey) {
+            addChatMessage("user", itemName);
+            
+            setTimeout(() => {
+                switch(eventKey) {
+                    case 'home-calendar':
+                        let listHtml = `<div class="space-y-3 mt-1">
+                            <p class="font-bold text-blue-900 text-xs border-b pb-1">📅 3523地區 訓練與會議行事曆</p>`;
+                        
+                        eventSchedule.forEach(ev => {
+                            const isUpcoming = new Date(ev.date) >= SIMULATED_TODAY;
+                            const badgeColor = isUpcoming ? "bg-emerald-500 text-white" : "bg-gray-400 text-white";
+                            
+                            listHtml += `
+                                <div class="bg-gray-50 p-2.5 rounded-xl border border-gray-200 text-xxs space-y-1">
+                                    <div class="flex justify-between items-center">
+                                        <span class="px-1.5 py-0.5 text-[9px] font-bold rounded ${badgeColor}">${isUpcoming ? '即將到來' : '已結束'}</span>
+                                        <span class="text-gray-400 font-semibold">${ev.date}</span>
+                                    </div>
+                                    <h5 class="font-bold text-gray-800 text-xs">${ev.title}</h5>
+                                    <p class="text-gray-500"><i class="fa-solid fa-location-dot text-rose-400"></i> 地點：${ev.location}</p>
+                                    <p class="text-gray-500"><i class="fa-solid fa-user-tie text-blue-400"></i> 主委：${ev.chair}</p>
+                                    <button onclick="selectEvent(${ev.id})" class="mt-1.5 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded-lg text-[10px] transition-all flex items-center justify-center gap-1">
+                                        <i class="fa-solid fa-hand-pointer text-[9px]"></i> 帶入首頁大螢幕查看與報名
+                                    </button>
+                                </div>
+                            `;
+                        });
+                        listHtml += `</div>`;
+                        
+                        addChatMessage("bot", listHtml);
+                        break;
+                    case 'home-website':
+                        addChatMessage("bot", "🔗 正在引導您前往 <b>國際扶輪 3523 地區官方網站</b>...<br><a href='http://www.rotary3523.org.tw' target='_blank' class='text-blue-600 underline font-bold text-xs'>點擊此處手動開啟官網</a>");
+                        break;
+                    case 'profile-history':
+                        addChatMessage("bot", `🔎 <b>王大同 社友 的最新報名履歷：</b><br>1. <b>【${currentActiveEvent.title}】</b><br>· 狀態：<span class='text-green-600 font-bold'>報名成功</span><br>· 繳費：<span class='text-emerald-600 font-bold'>已繳費完成</span> (隨時可報到)<br>2. <b>【DTA 地區訓練講習會】</b><br>· 狀態：<span class='text-yellow-600 font-semibold'>待確認</span><br>· 繳費：<span class='text-rose-500 font-bold'>未上傳繳費憑證</span>`);
+                        break;
+                    case 'profile-upload':
+                        addChatMessage("bot", "📸 <b>請上傳您的匯款收據憑證或截圖：</b><br>請直接發送收據照片至本官方帳號，地區秘書處會計將於核對後為您啟用報到 QR Code。");
+                        break;
+                    case 'admin-contact':
+                        addChatMessage("bot", "☎️ <b>3523 地區總監辦事處 秘書團隊聯絡資訊：</b><br>· 專線：(02) 2715-XXXX<br>· 信箱：office@rotary3523.org.tw<br><br><i>若報到現場發生任何技術疑難，請立即致電系統秘書支援小組專線。</i>");
+                        break;
+                    default:
+                        addChatMessage("bot", `這是模擬指令 <b>${itemName}</b> 的回應。`);
+                }
+            }, 600);
+        }
+
+        // Click Banner Action
+        function triggerMainBannerClick() {
+            addChatMessage("user", `報名 ${currentActiveEvent.title}`);
+            setTimeout(() => {
+                addChatMessage("bot", `📝 <b>您已啟動【${currentActiveEvent.title}】報名流程！</b><br>系統已自動帶入您的社籍身份：<br>· 社友：王大同 社友 (台北松青扶輪社)<br>· 地點：${currentActiveEvent.location}<br><br>👉 <b>確定送出？</b><br><button onclick='confirmRegistration()' class='mt-2 bg-yellow-500 hover:bg-yellow-600 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs transition-all shadow-sm'>點此確認無誤，立即送出報名</button>`);
+            }, 500);
+        }
+
+        // Confirm Form Submission
+        function confirmRegistration() {
+            const targetClub = clubsData.find(c => c.name === "台北松青扶輪社");
+            if (targetClub) {
+                targetClub.registered += 1;
+                renderStatisticsTable();
+            }
+            addChatMessage("bot", `🎉 <b>報名成功！</b><br>系統已為您登記 <b>${currentActiveEvent.title}</b> 的報名席次。<br>待繳費核對完成後，您的「專屬活動報到 QR」將會立即生效！`);
+        }
+
+        // --- 11. TICKET & QR CODE FLOW (社友報到) ---
+        function openMyQrCode() {
+            document.getElementById('passport-club').innerText = "台北松青扶輪社";
+            document.getElementById('passport-name').innerText = "王大同 社友 (Rotarian Daniel)";
+            document.getElementById('modal-qrcode').classList.remove('hidden');
+        }
+
+        // --- 12. GOLF SCORECARD OPERATIONS ---
+        function openGolfScorecard() {
+            document.getElementById('modal-golf-scorecard').classList.remove('hidden');
+        }
+
+        function adjustGolfScore(playerKey, holeKey, change) {
+            const el = document.getElementById(`${playerKey}-${holeKey}`);
+            let score = parseInt(el.innerText);
+            score += change;
+            if (score < 1) score = 1;
+            el.innerText = score;
+
+            // Recalculate Total
+            const h1 = parseInt(document.getElementById(`${playerKey}-h1`).innerText);
+            const h2 = parseInt(document.getElementById(`${playerKey}-h2`).innerText);
+            const h3 = parseInt(document.getElementById(`${playerKey}-h3`).innerText);
+            const h4 = parseInt(document.getElementById(`${playerKey}-h4`).innerText);
+            
+            document.getElementById(`${playerKey}-total`).innerText = h1 + h2 + h3 + h4;
+        }
+
+        function submitGolfScores() {
+            closeModal('modal-golf-scorecard');
+            showAlert('提交成功', '電子計分成績已成功傳送至 3523 地區大會計分中心！現場看板分數將於 1 分鐘內同步。');
+            addChatMessage("bot", "📊 <b>【大會計分系統回報】</b><br>收到您剛剛提交 of OUT 區 H1-H4 電子計分。球隊排名將即時更新於宴會大廳顯示屏中。");
+        }
+
+        // --- 13. SCANNER FOR ADMINS (主委掃描器) ---
+        function openAdminScanner() {
+            populateScanTargetDropdown();
+            document.getElementById('modal-scanner').classList.remove('hidden');
+        }
+
+        function populateScanTargetDropdown() {
+            const select = document.getElementById('scan-target-select');
+            select.innerHTML = '';
+            
+            clubsData.forEach(club => {
+                const outstanding = club.registered - club.attended;
+                if (outstanding > 0) {
+                    const option = document.createElement('option');
+                    option.value = club.id;
+                    option.text = `【${club.area}】${club.name} - 隨機社友 (${club.attended}/${club.registered}已報到)`;
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        function executeAdminScan() {
+            const select = document.getElementById('scan-target-select');
+            const clubId = parseInt(select.value);
+            
+            if(!clubId) {
+                showAlert('錯誤', '目前沒有待到場報到的社友資料！');
+                return;
+            }
+
+            const club = clubsData.find(c => c.id === clubId);
+            if(club) {
+                club.attended += 1;
+                renderStatisticsTable();
+                closeModal('modal-scanner');
+                
+                showAlert('現場報到成功', `已成功為【${club.name}】社友完成簽到。該社到場率更新為：${club.attended}/${club.registered}`);
+                addChatMessage("bot", `📢 <b>【主委工作回報】</b><br>您剛剛成功透過現場相機為 <b>${club.name}</b> 社友完成 <b>${currentActiveEvent.title}</b> 的報到。`);
+            }
+        }
+
+        // --- 14. LIVE STATISTICS BOARD (主委動態報表) ---
+        function openStatisticsModal() {
+            renderStatisticsTable();
+            document.getElementById('modal-statistics').classList.remove('hidden');
+        }
+
+        function renderStatisticsTable() {
+            const tbody = document.getElementById('statistics-table-body');
+            tbody.innerHTML = '';
+
+            let totalReg = 0;
+            let totalPay = 0;
+            let totalUnpay = 0;
+            let totalAttend = 0;
+
+            clubsData.forEach(club => {
+                const unpay = club.registered - club.paid;
+                const attendanceRate = club.registered > 0 ? Math.round((club.attended / club.registered) * 100) : 0;
+                
+                totalReg += club.registered;
+                totalPay += club.paid;
+                totalUnpay += unpay;
+                totalAttend += club.attended;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-semibold text-gray-600">${club.area}</td>
+                    <td class="py-3 px-4 font-bold text-gray-900">${club.name}</td>
+                    <td class="py-3 px-4 text-center text-gray-500">${club.charterYear}年</td>
+                    <td class="py-3 px-4 text-center font-bold text-slate-800">${club.registered}</td>
+                    <td class="py-3 px-4 text-center text-emerald-600 font-semibold">${club.paid}</td>
+                    <td class="py-3 px-4 text-center text-rose-500 font-semibold">${unpay}</td>
+                    <td class="py-3 px-4 text-center font-bold text-blue-600 bg-blue-50/50">${club.attended}</td>
+                    <td class="py-3 px-4 text-right">
+                        <span class="inline-block px-2 py-0.5 rounded-full font-bold text-xxs ${attendanceRate >= 50 ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}">
+                            ${attendanceRate}%
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('kpi-total-reg').innerText = `${totalReg} 人`;
+            document.getElementById('kpi-total-pay').innerText = `${totalPay} 筆`;
+            document.getElementById('kpi-total-unpay').innerText = `${totalUnpay} 筆`;
+            document.getElementById('kpi-total-check').innerText = `${totalAttend} 人`;
+        }
+
+        // --- 15. EXTERNAL SIMULATION CONTROLS ---
+        function simulateNewRegistration() {
+            const randomIndex = Math.floor(Math.random() * clubsData.length);
+            const club = clubsData[randomIndex];
+            club.registered += 1;
+            
+            if(Math.random() > 0.6) {
+                club.paid += 1;
+            }
+
+            renderStatisticsTable();
+            addChatMessage("system", `⚡️ 模擬：【${club.area}】<b>${club.name}</b> 新增 1 筆活動報名登記。`);
+        }
+
+        // --- 16. MESSAGING UX ENGINE ---
+        function addChatMessage(sender, text) {
+            const chatArea = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            
+            if (sender === "user") {
+                msgDiv.className = "flex items-start gap-2.5 justify-end";
+                msgDiv.innerHTML = `
+                    <div class="max-w-[75%]">
+                        <div class="bg-[#8bf26c] text-slate-900 rounded-2xl rounded-tr-none p-3 text-sm shadow-sm font-medium">
+                            <p>${text}</p>
+                        </div>
+                        <span class="text-[9px] text-white/70 text-right block mt-1">下午 09:42</span>
+                    </div>
+                `;
+            } else if (sender === "bot") {
+                msgDiv.className = "flex items-start gap-2.5";
+                msgDiv.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-blue-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                        3523
+                    </div>
+                    <div class="max-w-[80%] text-left">
+                        <div class="bg-white text-gray-800 rounded-2xl rounded-tl-none p-3 text-sm shadow-sm leading-relaxed">
+                            <p>${text}</p>
+                        </div>
+                        <span class="text-[9px] text-white/70 ml-1 mt-1 block">下午 09:42</span>
+                    </div>
+                `;
+            } else {
+                msgDiv.className = "flex justify-center my-1";
+                msgDiv.innerHTML = `
+                    <div class="bg-black/25 text-white/90 text-[10px] font-semibold py-1 px-3 rounded-full text-center">
+                        ${text}
+                    </div>
+                `;
+            }
+
+            chatArea.appendChild(msgDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function simulateBeingScanned() {
+            closeModal('modal-qrcode');
+            
+            const club = clubsData.find(c => c.name === "台北松青扶輪社");
+            if(club) {
+                club.attended += 1;
+                renderStatisticsTable();
+            }
+
+            // If active event is Golf, trigger the check-in variable update
+            if (currentActiveEvent && currentActiveEvent.id === 106) {
+                isGolfCheckedIn = true;
+                renderProfileMenu(); // Repopulate the tab dynamically
+
+                addChatMessage("bot", `✅ <b>【高爾夫球大會簽到成功】</b><br>親愛的 <b>王大同 社友</b>：<br>您已成功簽到 <b>總監盃高爾夫球比賽</b>！<br>· <b>專屬置物櫃：88 號</b><br>· <b>今日同組名單：</b><br> 1. 李志明 社友<br> 2. 陳建國 社友<br> 3. 林永生 社友<br><br>👉 下方選單右側 <b>「我要計分」電子計分卡</b> 功能已同步解鎖！祝您今日擊出好成績，抓鳥擒鷹！`);
+            } else {
+                addChatMessage("bot", `✅ <b>【活動現場到場確認】</b><br>親愛的 <b>台北松青社 王大同 社友</b>：<br>您已成功完成 <b>${currentActiveEvent.title}</b> 的簽到！<br>· 報到時間：剛剛<br>· 現場座次桌號：第 08 桌<br><br><i>感謝您的蒞臨與熱情參與！</i>`);
+            }
+        }
+
+        // --- 17. UTILITY DIALOG WINDOW CONTROLLER ---
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        function showAlert(title, message) {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-message').innerText = message;
+            document.getElementById('modal-alert').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
