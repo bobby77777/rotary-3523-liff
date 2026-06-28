@@ -434,7 +434,7 @@
 // ============================================================
 //  ★ CONFIGURATION — 部署前請修改這裡 ★
 // ============================================================
-const LIFF_ID = 'YOUR_LIFF_ID_HERE';          // 從 LINE Developers Console 取得
+const LIFF_ID = '2010535285-kh8rJmpS';
 const API_BASE = 'https://your-api.example.com'; // 後端 API 伺服器網址
 const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
 // ============================================================
@@ -560,6 +560,7 @@ function initApp() {
     renderAdminMenu();
     renderGolfScorecard();
     addChatMessage("bot", `歡迎回來！<b>${lineProfile ? lineProfile.displayName : '社友'}</b> 🎉<br>最近活動：<b>${currentActiveEvent?.title || '--'}</b><br>請使用下方選單操作。`);
+    handleDeepLink();
 }
 
 // ============================================================
@@ -1219,6 +1220,19 @@ function showAlert(title, msg) {
     document.getElementById('alert-title').textContent = title;
     document.getElementById('alert-message').textContent = msg;
     openModal('modal-alert');
+}
+
+// ============================================================
+//  DEEP LINK  (?tab=home|profile|ebooks|admin  &action=payment|scanner|stats)
+// ============================================================
+function handleDeepLink() {
+    const p = new URLSearchParams(location.search);
+    const tab = p.get('tab');
+    const action = p.get('action');
+    if (tab && ['home','profile','ebooks','admin'].includes(tab)) switchTab(tab);
+    if (action === 'payment') setTimeout(() => openModal('modal-payment-info'), 300);
+    if (action === 'scanner') setTimeout(() => launchScannerModal(), 300);
+    if (action === 'stats')   setTimeout(() => openStatisticsModal(), 300);
 }
 
 // ============================================================
