@@ -1185,8 +1185,7 @@ function clickMenuItem(itemName, key) {
 
 function clickEbook(name) {
     addChatMessage("user", name);
-    // TODO: open LIFF page or external URL for the ebook
-    setTimeout(() => addChatMessage("bot", `📖 正在開啟《${name}》...`), 400);
+    setTimeout(() => addChatMessage("bot", `📖 《${name}》電子書建置中，上線後即可於此線上翻閱。`), 400);
 }
 
 // ============================================================
@@ -1529,6 +1528,24 @@ function handleDeepLink() {
     if (action === 'leaderboard') {
         golfScoreEventId = parseInt(p.get('event')) || null;
         setTimeout(() => openGolfLeaderboard(), 300);
+    }
+    if (action === 'vip') {
+        setTimeout(() => showAlert('貴賓介紹', '本場貴賓名單將於活動前由大會公布，屆時可於此查閱。'), 300);
+    }
+    if (action === 'dues') {
+        setTimeout(() => showAlert('社友社費', '社費查詢與繳納功能建置中，敬請期待。'), 300);
+    }
+    if (action === 'website') {
+        setTimeout(() => showAlert('本社官網', '尚未設定本社官網連結，請洽社務行政協助設定。'), 300);
+    }
+
+    const doc = p.get('doc');
+    if (doc) {
+        const DOC_NAMES = {
+            handbook: '活動手冊', yearbook: '年度成果冊', donation: '捐贈報告',
+            bulletin: '社刊 / 週報', album: '活動花絮相簿', minutes: '理監事會議紀錄',
+        };
+        setTimeout(() => showAlert(DOC_NAMES[doc] || '刊物', '電子書建置中，上線後即可於此線上翻閱。'), 300);
     }
 }
 
