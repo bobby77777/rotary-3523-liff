@@ -1492,6 +1492,15 @@ function showAlert(title, msg) {
 // ============================================================
 //  DEEP LINK  (?tab=home|profile|ebooks|admin  &action=payment|scanner|stats)
 // ============================================================
+// Re-render scope-dependent menus after a deep link changes systemScope.
+function applyScopeTheme() {
+    currentActiveEvent = findClosestUpcomingEvent();
+    updateBanner();
+    renderEbooksMenu();
+    renderProfileMenu();
+    renderAdminMenu();
+}
+
 function handleDeepLink() {
     const p = new URLSearchParams(location.search);
     const tab = p.get('tab');
@@ -1500,11 +1509,12 @@ function handleDeepLink() {
 
     if (scope === 'club' || scope === 'district') {
         systemScope = scope;
-        if (typeof applyScopeTheme === 'function') applyScopeTheme();
+        applyScopeTheme();
     }
     if (tab && ['home','profile','ebooks','admin'].includes(tab)) switchTab(tab);
 
     if (action === 'payment') setTimeout(() => openModal('modal-payment-info'), 300);
+    if (action === 'calendar') setTimeout(() => clickMenuItem('年度活動行事曆', 'home-calendar'), 300);
     if (action === 'qrcode')  setTimeout(() => openMyQrModal(), 300);
     if (action === 'scanner') {
         checkinEventId = parseInt(p.get('event')) || null;
