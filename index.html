@@ -836,56 +836,65 @@ function renderProfileMenu() {
     else c.classList.add('hidden');
 }
 
+function adminStub(name) { showAlert(name, '此功能建置中，敬請期待。'); }
+
+function _adminTile(onclick, icon, iconCls, label) {
+    return `<div onclick="${onclick}" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
+        <div class="w-8 h-8 rounded-full ${iconCls} flex items-center justify-center"><i class="fa-solid ${icon} text-sm"></i></div>
+        <span class="text-[10px] font-bold text-slate-700">${label}</span></div>`;
+}
+
 function renderAdminMenu() {
     const c = document.getElementById('admin-gate-authorized');
-    const isGolf = currentActiveEvent?.id === 106;
-    const theme = systemScope === 'district' ? 'from-slate-900 to-blue-950' : 'from-emerald-950 to-teal-900';
+    const ev = currentActiveEvent;
+    const isGolf   = ev?.id === 106 || ev?.type === '地區運動';
+    const isRye    = ev?.id === 107 || (ev?.title || '').includes('RYE');
+    const isAnnual = ev?.type === '地區年會';
+    const isClub   = systemScope === 'club';
+    const theme = isClub ? 'from-emerald-950 to-teal-900' : 'from-slate-900 to-blue-950';
 
-    if (!isGolf) {
-        c.innerHTML = `
-            <div class="col-span-2 bg-gradient-to-br ${theme} p-3 text-white flex flex-col justify-between rounded-2xl btn-3d btn-3d-dark mb-1">
-                <div>
-                    <span class="text-[10px] bg-amber-500 text-slate-950 font-extrabold px-1.5 py-0.5 rounded">主委專用</span>
-                    <h4 class="font-bold text-sm mt-1.5">動態統計看板</h4>
-                </div>
-                <button onclick="openStatisticsModal(event)" class="w-full bg-yellow-500 text-slate-900 py-2 rounded-xl flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-warning">進入看板 <i class="fa-solid fa-chart-line"></i></button>
-            </div>
-            <div class="grid grid-rows-2 gap-2">
-                <div onclick="openAdminScanner()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-camera text-sm"></i></div>
-                    <span class="text-[10px] font-bold text-slate-700">現場相機</span>
-                </div>
-                <div onclick="clickMenuItem('秘書處支援','admin-contact')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i class="fa-solid fa-headset text-sm"></i></div>
-                    <span class="text-[10px] font-bold text-slate-700">後台支援</span>
-                </div>
-            </div>`;
-    } else {
-        c.innerHTML = `
-            <div class="col-span-2 bg-gradient-to-br from-slate-900 to-emerald-950 p-2.5 text-white flex flex-col justify-between rounded-2xl btn-3d btn-3d-dark mb-1">
-                <div>
-                    <span class="text-[10px] bg-amber-500 text-slate-950 font-extrabold px-1.5 py-0.5 rounded">高爾夫主委</span>
-                    <h4 class="font-bold text-[12px] mt-1">賽事即時總看板</h4>
-                </div>
-                <div class="flex flex-col gap-1.5 mt-1">
-                    <div class="grid grid-cols-2 gap-1.5">
-                        <button onclick="openModal('modal-swap-group')" class="bg-white/10 text-white py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-dark"><i class="fa-solid fa-people-arrows"></i>即時調組</button>
-                        <button onclick="openGolfLeaderboard()" class="bg-emerald-600/80 text-white py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-success"><i class="fa-solid fa-flag"></i>賽事成績</button>
-                    </div>
-                    <button onclick="openStatisticsModal(event)" class="bg-yellow-500 text-slate-900 py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-warning"><i class="fa-solid fa-chart-line"></i>報名與繳費看板</button>
-                </div>
-            </div>
-            <div class="grid grid-rows-2 gap-2">
-                <div onclick="openAdminScanner()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-camera text-sm"></i></div>
-                    <span class="text-[10px] font-bold text-slate-700">報到相機</span>
-                </div>
-                <div onclick="clickMenuItem('後台支援','admin-contact')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"><i class="fa-solid fa-headset text-sm"></i></div>
-                    <span class="text-[10px] font-bold text-slate-700">後台支援</span>
-                </div>
-            </div>`;
+    const scanner = (label) => _adminTile('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', label);
+    const vip     = _adminTile("adminStub('貴賓介紹')", 'fa-microphone-lines', 'bg-purple-100 text-purple-600', '貴賓介紹');
+    const support = _adminTile("clickMenuItem('後台支援','admin-contact')", 'fa-headset', 'bg-gray-100 text-gray-500', '後台支援');
+    const statsBtn = `<button onclick="openStatisticsModal(event)" class="bg-yellow-500 text-slate-900 py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-warning"><i class="fa-solid fa-chart-line"></i>報名與繳費看板</button>`;
+    const box = (badge, title, inner) => `<div class="col-span-2 bg-gradient-to-br ${theme} p-2.5 text-white flex flex-col justify-between rounded-2xl btn-3d btn-3d-dark mb-1">
+        <div><span class="text-[10px] bg-amber-500 text-slate-950 font-extrabold px-1.5 py-0.5 rounded">${badge}</span><h4 class="font-bold text-[13px] mt-1.5">${title}</h4></div>
+        <div class="flex flex-col gap-1.5 mt-1">${inner}</div></div>`;
+    const miniRow = (a, b) => `<div class="grid grid-cols-2 gap-1.5">${a}${b}</div>`;
+    const mini = (onclick, icon, label) => `<button onclick="${onclick}" class="bg-white/10 text-white py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-dark"><i class="fa-solid ${icon}"></i>${label}</button>`;
+
+    if (isClub) {
+        c.innerHTML = `<div class="col-span-3 grid grid-cols-2 grid-rows-2 gap-2 h-full">
+            ${_adminTile("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率')}
+            ${_adminTile("adminStub('社務對帳')", 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')}
+            ${_adminTile("adminStub('理監事專區')", 'fa-users-gear', 'bg-amber-100 text-amber-600', '理監事專區')}
+            ${_adminTile("adminStub('社友社費')", 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費')}
+        </div>`;
+        return;
     }
+
+    let left, rightTop;
+    if (isGolf) {
+        left = box('高爾夫主委', '賽事即時總看板',
+            miniRow(mini("openModal('modal-swap-group')", 'fa-people-arrows', '即時調組'),
+                    mini('openGolfLeaderboard()', 'fa-flag', '賽事成績')) + statsBtn);
+        rightTop = scanner('報到相機');
+    } else if (isRye) {
+        left = box('RYE 主委', 'RYE 報名與審核看板',
+            miniRow(mini("adminStub('面試安排')", 'fa-users-viewfinder', '面試安排'),
+                    mini("adminStub('同意書審核')", 'fa-file-signature', '同意書審核')) + statsBtn);
+        rightTop = vip;
+    } else if (isAnnual) {
+        left = box('年會主委', '地區年會 管理總看板',
+            miniRow(mini("adminStub('桌次安排')", 'fa-chair', '桌次安排'),
+                    mini("adminStub('摸彩系統')", 'fa-ticket', '摸彩系統')) + statsBtn);
+        rightTop = vip;
+    } else {
+        left = box('主委專用', '報名/繳費 動態統計看板',
+            `<button onclick="openStatisticsModal(event)" class="w-full bg-yellow-500 text-slate-900 py-2 rounded-xl flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-warning">進入看板 <i class="fa-solid fa-chart-line"></i></button>`);
+        rightTop = scanner('現場相機');
+    }
+    c.innerHTML = left + `<div class="grid grid-rows-2 gap-2">${rightTop}${support}</div>`;
 }
 
 // ============================================================
