@@ -658,6 +658,7 @@ async function initLiff() {
             console.warn('role fetch failed:', e.message);
         }
 
+        await loadEvents(systemScope);   // fetch events for the active scope
         hideLiffLoadingScreen();
         initApp();
     } catch (err) {
@@ -721,9 +722,10 @@ function initApp() {
 // ============================================================
 //  SCOPE TOGGLE
 // ============================================================
-function toggleSystemScope() {
+async function toggleSystemScope() {
     systemScope = (systemScope === 'district') ? 'club' : 'district';
     const clubLabel = myClubName || '本社';
+    await loadEvents(systemScope);
 
     if (systemScope === 'district') {
         document.getElementById('ui-current-scope').textContent = '🌐 3523 地區總部';
@@ -751,11 +753,26 @@ function toggleSystemScope() {
 // ============================================================
 //  DATA HELPERS
 // ============================================================
+// Backend is the single source of truth for events; cache per scope.
+let eventsCache = { district: null, club: null };
+
+async function loadEvents(scope) {
+    try {
+        const data = await apiFetch('/events?scope=' + scope);
+        if (data.status === 'ok' && Array.isArray(data.events)) {
+            eventsCache[scope] = data.events.map(e => ({ ...e, displayDate: e.displayDate || e.date }));
+        }
+    } catch (e) {
+        console.warn('loadEvents fallback:', e.message);
+    }
+}
+
 function getActiveEventsData() {
+    const cached = eventsCache[systemScope];
+    if (cached && cached.length) return cached;
+    // Fallback (backend unreachable / desktop preview)
     if (systemScope === 'district') return districtEvents;
     const cn = myClubName || '本社';
-    // Must mirror the backend _club_events (id + title) so the event card and
-    // 查名單 / 報名 all resolve to the same event.
     const base = new Date();
     const iso = (days) => {
         const x = new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
@@ -1881,7 +1898,8 @@ function showAlert(title, msg) {
 //  DEEP LINK  (?tab=home|profile|ebooks|admin  &action=payment|scanner|stats)
 // ============================================================
 // Re-render scope-dependent menus after a deep link changes systemScope.
-function applyScopeTheme() {
+async function applyScopeTheme() {
+    await loadEvents(systemScope);
     currentActiveEvent = findClosestUpcomingEvent();
     updateBanner();
     renderEbooksMenu();
