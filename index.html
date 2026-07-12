@@ -724,7 +724,7 @@ function initApp() {
 // ============================================================
 function toggleSystemScope() {
     systemScope = (systemScope === 'district') ? 'club' : 'district';
-    const myClub = clubsData.find(c => c.id === currentUserClubId);
+    const clubLabel = myClubName || '本社';
 
     if (systemScope === 'district') {
         document.getElementById('ui-current-scope').textContent = '🌐 3523 地區總部';
@@ -734,11 +734,11 @@ function toggleSystemScope() {
         document.getElementById('header-title').innerHTML = '國際扶輪3523地區 <i class="fa-solid fa-circle-check text-blue-400 text-xs"></i>';
         document.getElementById('header-subtitle').textContent = '官方帳號 · 全年度活動系統';
     } else {
-        document.getElementById('ui-current-scope').textContent = `🏠 ${myClub?.name || '本社'}專區`;
+        document.getElementById('ui-current-scope').textContent = `🏠 ${clubLabel}專區`;
         document.getElementById('ui-current-scope').className = 'text-xs font-bold tracking-wide text-emerald-300';
         document.getElementById('scope-icon').className = 'fa-solid fa-house-flag text-emerald-900 text-xs';
         document.getElementById('scope-icon-bg').className = 'w-6 h-6 rounded-full bg-emerald-400 border border-white/20 flex items-center justify-center shadow-inner';
-        document.getElementById('header-title').innerHTML = `${myClub?.name || '本社'} <i class="fa-solid fa-star text-yellow-400 text-xs"></i>`;
+        document.getElementById('header-title').innerHTML = `${clubLabel} <i class="fa-solid fa-star text-yellow-400 text-xs"></i>`;
         document.getElementById('header-subtitle').textContent = '社內獨立專區 (資料已隔離)';
     }
 
@@ -754,10 +754,10 @@ function toggleSystemScope() {
 // ============================================================
 function getActiveEventsData() {
     if (systemScope === 'district') return districtEvents;
-    const myClub = clubsData.find(c => c.id === currentUserClubId) || { name: '本社' };
+    const cn = myClubName || '本社';
     return [
-        { id: 2000+currentUserClubId, date: "2026-06-20", displayDate: "2026-06-20", weekday:"星期六", title:`${myClub.name} 第1234次例會`, location:"本社例會餐廳", chair:"本社社長", time:"12:00-14:00", type:"社內例會" },
-        { id: 3000+currentUserClubId, date: "2026-07-15", displayDate: "2026-07-15", weekday:"星期三", title:`${myClub.name} 秋季國內旅遊`, location:"宜蘭礁溪", chair:"旅遊主委", time:"整天", type:"社內旅遊" }
+        { id: 9002, date: "2026-06-20", displayDate: "2026-06-20", weekday:"星期六", title:`${cn} 第1234次例會`, location:"本社例會餐廳", chair:"本社社長", time:"12:00-14:00", type:"社內例會" },
+        { id: 9003, date: "2026-07-15", displayDate: "2026-07-15", weekday:"星期三", title:`${cn} 秋季國內旅遊`, location:"宜蘭礁溪", chair:"旅遊主委", time:"整天", type:"社內旅遊" }
     ];
 }
 
