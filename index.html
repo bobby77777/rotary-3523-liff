@@ -754,14 +754,22 @@ function toggleSystemScope() {
 function getActiveEventsData() {
     if (systemScope === 'district') return districtEvents;
     const cn = myClubName || '本社';
+    // Must mirror the backend _club_events (id + title) so the event card and
+    // 查名單 / 報名 all resolve to the same event.
+    const base = new Date();
+    const iso = (days) => {
+        const x = new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+        return x.toISOString().slice(0, 10);
+    };
     return [
-        { id: 9002, date: "2026-06-20", displayDate: "2026-06-20", weekday:"星期六", title:`${cn} 第1234次例會`, location:"本社例會餐廳", chair:"本社社長", time:"12:00-14:00", type:"社內例會" },
-        { id: 9003, date: "2026-07-15", displayDate: "2026-07-15", weekday:"星期三", title:`${cn} 秋季國內旅遊`, location:"宜蘭礁溪", chair:"旅遊主委", time:"整天", type:"社內旅遊" }
+        { id: 9001, date: iso(9),  displayDate: iso(9),  weekday:"", title:`${cn} 第 1234 次例會 · 專題演講`, location:"本社例會餐廳", chair:"本社社長",     time:"12:00-14:00", type:"社內例會", fee:"NT$300" },
+        { id: 9002, date: iso(24), displayDate: iso(24), weekday:"", title:`${cn} 秋季國內旅遊`,              location:"宜蘭礁溪",     chair:"本社旅遊主委", time:"整天",        type:"社內旅遊", fee:"NT$2,800" },
+        { id: 9003, date: iso(40), displayDate: iso(40), weekday:"", title:`${cn} 高球月例賽`,                location:"美麗華高爾夫", chair:"本社高球主委", time:"06:00-14:00", type:"社內高球", fee:"NT$1,800" }
     ];
 }
 
 function findClosestUpcomingEvent() {
-    const today = new Date("2026-06-01");
+    const today = new Date();
     const events = getActiveEventsData().filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date)-new Date(b.date));
     return events[0] || getActiveEventsData().at(-1);
 }
