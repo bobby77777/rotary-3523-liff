@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
         body { font-family: 'Noto Sans TC', sans-serif; background: #f3f4f6; }
@@ -202,6 +203,25 @@
                 <i class="fa-solid fa-camera text-lg"></i> 開啟相機掃描 QR
             </button>
             <button onclick="closeModal('modal-scanner')" class="w-full py-2.5 rounded-xl font-bold text-gray-400 text-sm bg-white/10">取消</button>
+        </div>
+    </div>
+</div>
+
+<!-- My Report QR Modal -->
+<div id="modal-my-qr" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+        <div class="px-6 py-4 bg-gradient-to-r from-blue-900 to-indigo-800 flex justify-between items-center">
+            <div class="flex items-center gap-2 text-white"><i class="fa-solid fa-qrcode text-yellow-400"></i><h3 class="font-bold text-base">我的活動報到 QR</h3></div>
+            <button onclick="closeModal('modal-my-qr')" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div class="p-6 flex flex-col items-center text-center space-y-4">
+            <p class="text-xs text-gray-500">出示此 QR 給現場接待 / 主委掃描，即可完成報到。</p>
+            <div id="my-qr-canvas" class="p-4 bg-white rounded-2xl border-4 border-slate-100 shadow-inner leading-[0]"></div>
+            <div class="text-center">
+                <p id="my-qr-name" class="font-bold text-gray-800 text-base">—</p>
+                <p class="text-[10px] text-gray-400 mt-0.5">LINE 身份已綁定 · 請勿外流截圖</p>
+            </div>
+            <button onclick="closeModal('modal-my-qr')" class="w-full py-2.5 rounded-xl font-bold text-gray-600 text-sm bg-slate-100 btn-3d btn-3d-white mb-1">關閉</button>
         </div>
     </div>
 </div>
@@ -435,7 +455,8 @@
 //  ★ CONFIGURATION — 部署前請修改這裡 ★
 // ============================================================
 const LIFF_ID = '2010535285-kh8rJmpS';
-const API_BASE = 'https://your-api.example.com'; // 後端 API 伺服器網址
+// 必須與 bot 後端 (app) 的 APP_BASE_URL 相同。目前為 ngrok（重啟會變，需同步更新）。
+const API_BASE = 'https://ded7-114-34-111-66.ngrok-free.app';
 const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
 // ============================================================
 
@@ -858,6 +879,32 @@ function setRole(role) {
 // ============================================================
 //  LIFF QR SCANNER
 // ============================================================
+// Event id captured from an admin scanner deep link (?action=scanner&event=NNN).
+let checkinEventId = null;
+
+function renderQr(containerId, text) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (typeof qrcode === 'undefined' || !text) {
+        el.innerHTML = '<p class="text-xs text-gray-400 py-8">QR 產生失敗</p>';
+        return;
+    }
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    el.innerHTML = qr.createImgTag(6, 0);
+    const img = el.querySelector('img');
+    if (img) { img.style.width = '200px'; img.style.height = '200px'; }
+}
+
+function openMyQrModal() {
+    const uid = lineProfile?.userId || '';
+    if (!uid) { showAlert('尚未登入', '請在 LINE App 內開啟此頁，才能顯示您的專屬報到 QR。'); return; }
+    renderQr('my-qr-canvas', uid);
+    document.getElementById('my-qr-name').textContent = lineProfile?.displayName || '社友';
+    openModal('modal-my-qr');
+}
+
 function launchScannerModal() {
     document.getElementById('scanner-title').textContent = '讀取報到 QR';
     openModal('modal-scanner');
@@ -884,18 +931,26 @@ async function launchLiffScanner() {
     }
 }
 
-function handleQrScanResult(qrValue) {
-    // TODO: validate qrValue against your backend API
-    // await apiFetch('/api/checkin', { method:'POST', body: JSON.stringify({ qrValue, userId: lineProfile?.userId, eventId: currentActiveEvent?.id }) });
-
-    if (currentActiveEvent?.id === 106) {
-        isGolfCheckedIn = true;
-        renderProfileMenu();
-        sendLineMessage(`✅ 高爾夫球大會簽到成功！置物櫃：88 號，第 18 組。`);
-        addChatMessage("bot", `✅ <b>高爾夫球大會簽到成功！</b><br>置物櫃：<b>88 號</b>，第 <b>18</b> 組。<br>下方「我要計分」已解鎖！`);
-    } else {
-        addChatMessage("bot", `✅ <b>到場確認！</b><br>您已完成 <b>${currentActiveEvent?.title}</b> 的簽到。<br>現場座次桌號：第 08 桌`);
-        sendLineMessage(`✅ 已完成【${currentActiveEvent?.title}】簽到！`);
+async function handleQrScanResult(qrValue) {
+    const body = { qr: (qrValue || '').trim() };
+    const evId = checkinEventId || currentActiveEvent?.id;
+    if (evId) body.event_id = evId;
+    try {
+        const data = await apiFetch('/checkin', { method: 'POST', body: JSON.stringify(body) });
+        if (data.status === 'ok') {
+            addChatMessage("bot", `✅ <b>${data.name}</b> 報到成功！<br>${data.event_title}<br>目前已報到 <b>${data.checked_in}</b> / ${data.total} 人`);
+            sendLineMessage(`✅ ${data.name} 已完成【${data.event_title}】報到（${data.checked_in}/${data.total}）`);
+        } else if (data.status === 'already') {
+            addChatMessage("bot", `⚠️ <b>${data.name}</b> 先前已完成報到，未重複計算。`);
+        } else if (data.status === 'not_registered') {
+            showAlert('尚未報名', `${data.name || '此社友'} 沒有「${data.event_title || '本活動'}」的報名紀錄，無法報到。`);
+        } else if (data.status === 'forbidden') {
+            showAlert('權限不足', data.message || '您沒有報到掃描權限。');
+        } else {
+            showAlert('報到失敗', data.message || '無法辨識此 QR，請重試。');
+        }
+    } catch (err) {
+        showAlert('連線失敗', err.message + '\n請確認網路後再試。');
     }
 }
 
@@ -1102,10 +1157,47 @@ function clickClubAwards() {
 // ============================================================
 //  STATISTICS
 // ============================================================
-function openStatisticsModal(e) {
+// Event id captured from an admin stats deep link (?action=stats&event=NNN).
+let statsEventId = null;
+
+async function openStatisticsModal(e) {
     e && e.stopPropagation();
-    renderStatisticsTable();
     openModal('modal-statistics');
+    const evId = statsEventId || currentActiveEvent?.id;
+    try {
+        const data = await apiFetch('/admin/stats' + (evId ? ('?event=' + evId) : ''));
+        if (data.status === 'ok') { renderStatisticsFromApi(data); return; }
+        if (data.status === 'forbidden') { showAlert('權限不足', data.message || '您沒有統計檢視權限。'); return; }
+        if (data.status === 'no_event') { showAlert('無對應活動', data.message || '找不到活動資料。'); return; }
+    } catch (err) {
+        console.warn('stats api fallback to mock:', err.message);
+    }
+    renderStatisticsTable(); // dev/preview fallback (mock clubsData)
+}
+
+function renderStatisticsFromApi(data) {
+    const k = data.kpi || {};
+    document.getElementById('kpi-total-reg').textContent   = `${k.registered || 0} 人`;
+    document.getElementById('kpi-total-check').textContent = `${k.checked_in || 0} 人`;
+    document.getElementById('kpi-total-pay').textContent   = `${k.paid || 0} 筆`;
+    document.getElementById('kpi-total-unpay').textContent = `${k.unpaid || 0} 筆`;
+
+    const sub = document.querySelector('#modal-statistics p');
+    if (sub && data.event_title) sub.textContent = data.event_title;
+
+    const tbody = document.getElementById('statistics-table-body');
+    const rows = data.clubs || [];
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-gray-400 text-xs">目前尚無報名資料</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = rows.map(c =>
+        `<tr class="border-b text-xs"><td class="py-2 px-3 font-bold">${c.club_name}</td>` +
+        `<td class="text-center">${c.registered}</td>` +
+        `<td class="text-center text-teal-600">${c.paid}</td>` +
+        `<td class="text-center text-emerald-600">${c.checked_in}</td>` +
+        `<td class="text-right px-3 font-bold">${c.rate}%</td></tr>`
+    ).join('');
 }
 
 function renderStatisticsTable() {
@@ -1229,10 +1321,24 @@ function handleDeepLink() {
     const p = new URLSearchParams(location.search);
     const tab = p.get('tab');
     const action = p.get('action');
+    const scope = p.get('scope');
+
+    if (scope === 'club' || scope === 'district') {
+        systemScope = scope;
+        if (typeof applyScopeTheme === 'function') applyScopeTheme();
+    }
     if (tab && ['home','profile','ebooks','admin'].includes(tab)) switchTab(tab);
+
     if (action === 'payment') setTimeout(() => openModal('modal-payment-info'), 300);
-    if (action === 'scanner') setTimeout(() => launchScannerModal(), 300);
-    if (action === 'stats')   setTimeout(() => openStatisticsModal(), 300);
+    if (action === 'qrcode')  setTimeout(() => openMyQrModal(), 300);
+    if (action === 'scanner') {
+        checkinEventId = parseInt(p.get('event')) || null;
+        setTimeout(() => launchScannerModal(), 300);
+    }
+    if (action === 'stats') {
+        statsEventId = parseInt(p.get('event')) || null;
+        setTimeout(() => openStatisticsModal(), 300);
+    }
 }
 
 // ============================================================
