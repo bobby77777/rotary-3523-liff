@@ -996,20 +996,22 @@ function triggerMainBannerClick() {
 async function confirmRegistration() {
     const digits = document.getElementById('self-bank-digits').value.trim();
     if (digits && digits.length !== 5) { showAlert('格式錯誤', '如有填寫，請填完整的末 5 碼！'); return; }
-
-    // TODO: call backend
-    // await apiFetch('/api/register', { method:'POST', body: JSON.stringify({ eventId: currentActiveEvent.id, userId: lineProfile?.userId, bankDigits: digits }) });
-
-    closeModal('modal-self-register');
-    const club = clubsData.find(c => c.id === currentUserClubId);
-    if (club) club.registered++;
-    if (currentActiveEvent && !myRegisteredEvents.includes(currentActiveEvent.id)) myRegisteredEvents.push(currentActiveEvent.id);
-
-    let msg = `🎉 <b>報名成功！</b><br>已登記 <b>${currentActiveEvent?.title}</b>。`;
-    if (digits) msg += `<br>轉出末 5 碼：<b class="text-blue-600">${digits}</b>（系統將自動對帳）`;
-    else msg += `<br>⚠️ 未提供帳號末 5 碼，完成匯款後請至「個人中心→回報匯款」補填。`;
-    setTimeout(() => addChatMessage("bot", msg), 300);
-    sendLineMessage(`✅ 報名成功：${currentActiveEvent?.title}`);
+    try {
+        const data = await apiFetch('/payment/report', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: currentActiveEvent?.id, bank_digits: digits })
+        });
+        if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
+        closeModal('modal-self-register');
+        if (currentActiveEvent && !myRegisteredEvents.includes(currentActiveEvent.id)) myRegisteredEvents.push(currentActiveEvent.id);
+        let msg = `🎉 <b>報名成功！</b><br>已登記 <b>${data.event_title}</b>。`;
+        if (digits) msg += `<br>轉出末 5 碼：<b class="text-blue-600">${digits}</b>（待秘書處對帳）`;
+        else msg += `<br>⚠️ 未提供帳號末 5 碼，完成匯款後請至「個人中心→回報匯款」補填。`;
+        addChatMessage("bot", msg);
+        sendLineMessage(`✅ 報名成功：${data.event_title}`);
+    } catch (err) {
+        showAlert('連線失敗', err.message + '\n請確認網路後再試。');
+    }
 }
 
 // Event id captured from an admin exec-register deep link (?action=exec_register&event=NNN).
@@ -1131,14 +1133,19 @@ function clickCheckRegistration(e) {
 async function submitPaymentInfo() {
     const digits = document.getElementById('bank-digits').value.trim();
     if (!digits || digits.length !== 5) { showAlert('格式錯誤', '請輸入正確的匯款帳號末 5 碼！'); return; }
-
-    // TODO: await apiFetch('/api/payment', { method:'POST', body: JSON.stringify({ userId: lineProfile?.userId, eventId: currentActiveEvent?.id, bankDigits: digits }) });
-
-    closeModal('modal-payment-info');
-    addChatMessage("user", "回報匯款後 5 碼");
-    setTimeout(() => addChatMessage("bot", `✅ <b>匯款資訊已登錄</b><br>末 5 碼：<b class="text-blue-600">${digits}</b><br>對帳成功後將通知您！`), 300);
-    document.getElementById('bank-digits').value = '';
-    sendLineMessage(`💰 已回報匯款末5碼：${digits}`);
+    try {
+        const data = await apiFetch('/payment/report', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: currentActiveEvent?.id, bank_digits: digits })
+        });
+        if (data.status !== 'ok') { showAlert('回報失敗', data.message || '請稍後再試。'); return; }
+        closeModal('modal-payment-info');
+        document.getElementById('bank-digits').value = '';
+        addChatMessage("bot", `✅ <b>匯款資訊已登錄</b><br>${data.event_title}<br>末 5 碼：<b class="text-blue-600">${digits}</b><br>對帳完成後將通知您！`);
+        sendLineMessage(`💰 已回報匯款末5碼：${digits}`);
+    } catch (err) {
+        showAlert('連線失敗', err.message + '\n請確認網路後再試。');
+    }
 }
 
 // ============================================================
