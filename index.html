@@ -1463,20 +1463,40 @@ async function submitExecSecRegistration() {
     }
 }
 
-function clickCheckRegistration(e) {
+async function clickCheckRegistration(e) {
     e && e.stopPropagation();
     addChatMessage("user", "查詢名單");
-    const club = clubsData.find(c => c.id === currentUserClubId) || { name: '本社' };
-    const isReg = myRegisteredEvents.includes(currentActiveEvent?.id);
-    const others = ["張三明 社友", "李四華 社友", "陳雅婷 社友"];
-    let html = `🔍 <b>【${currentActiveEvent?.title}】社內報名名單</b><br><br>`;
-    html += `<div class="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2 text-xs"><b>${club.name}</b> 目前報名：${others.length + (isReg ? 1 : 0)} 人</div>`;
-    html += `<div class="space-y-1 text-xs pl-1 border-l-2 border-blue-200 ml-1">`;
-    html += isReg
-        ? `<div class="font-bold text-emerald-600"><i class="fa-solid fa-user-check mr-1"></i>${lineProfile?.displayName || '我'} (我) ✓</div>`
-        : `<div class="font-bold text-rose-500"><i class="fa-solid fa-user-xmark mr-1"></i>${lineProfile?.displayName || '我'} (尚未報名)</div>`;
-    others.forEach(m => { html += `<div><i class="fa-solid fa-check text-emerald-400 mr-1"></i>${m}</div>`; });
-    html += `</div>`;
+    const clubFilter = systemScope === 'club' ? myClubName : '';
+    let data;
+    try {
+        const q = `?event=${currentActiveEvent?.id || ''}${clubFilter ? '&club=' + encodeURIComponent(clubFilter) : ''}`;
+        data = await apiFetch('/admin/registrants' + q);
+    } catch (err) {
+        addChatMessage("bot", `⚠️ 名單載入失敗：${err.message}`);
+        return;
+    }
+    if (data.status === 'forbidden') { addChatMessage("bot", "⚠️ 您沒有查詢名單的權限。"); return; }
+    const list = data.registrants || [];
+    const scopeLabel = clubFilter || '3523地區';
+    let html = `🔍 <b>【${data.event_title || currentActiveEvent?.title}】報名名單</b><br><br>`;
+    html += `<div class="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2 text-xs"><b>${scopeLabel}</b> 目前報名：${data.count} 人</div>`;
+    if (!list.length) {
+        html += `<div class="text-xs text-gray-400 italic">目前尚無人報名此活動。</div>`;
+    } else {
+        html += `<div class="space-y-1 text-xs pl-1 border-l-2 border-blue-200 ml-1">`;
+        list.forEach(m => {
+            const icon = m.checked_in ? '<i class="fa-solid fa-user-check text-emerald-500 mr-1"></i>'
+                       : (m.paid ? '<i class="fa-solid fa-circle-check text-teal-500 mr-1"></i>'
+                       : (m.uploaded ? '<i class="fa-solid fa-clock text-amber-500 mr-1"></i>'
+                       : '<i class="fa-solid fa-circle text-gray-300 mr-1"></i>'));
+            const tag = m.checked_in ? ' <span class="text-emerald-600">已報到</span>'
+                      : (m.paid ? ' <span class="text-teal-600">已繳費</span>'
+                      : (m.uploaded ? ' <span class="text-amber-600">待確認</span>' : ''));
+            const by = m.by_secretary ? ' <span class="text-[9px] text-gray-400">(執秘代報)</span>' : '';
+            html += `<div>${icon}${m.name}${tag}${by}</div>`;
+        });
+        html += `</div>`;
+    }
     setTimeout(() => addChatMessage("bot", html), 400);
 }
 
