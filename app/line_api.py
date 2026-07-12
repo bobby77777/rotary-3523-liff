@@ -59,20 +59,71 @@ def link_rich_menu(user_id: str, rich_menu_id: str) -> None:
     )
 
 
-def reply_flex(reply_token: str, alt_text: str, contents: dict) -> None:
+def reply_flex(
+    reply_token: str,
+    alt_text: str,
+    contents: dict,
+    quick_replies: list | None = None,
+) -> None:
     import logging
+    msg: dict = {"type": "flex", "altText": alt_text, "contents": contents}
+    if quick_replies:
+        msg["quickReply"] = {"items": quick_replies}
     resp = requests.post(
         f"{_BASE}/message/reply",
         headers=_HEADERS,
-        json={
-            "replyToken": reply_token,
-            "messages": [{"type": "flex", "altText": alt_text, "contents": contents}],
-        },
+        json={"replyToken": reply_token, "messages": [msg]},
         timeout=10,
     )
     if not resp.ok:
         logging.getLogger(__name__).error(
             "reply_flex failed: status=%d body=%s", resp.status_code, resp.text[:500]
+        )
+
+
+def reply_text_with_quick_reply(reply_token: str, text: str, items: list) -> None:
+    requests.post(
+        f"{_BASE}/message/reply",
+        headers=_HEADERS,
+        json={
+            "replyToken": reply_token,
+            "messages": [
+                {
+                    "type": "text",
+                    "text": text,
+                    "quickReply": {"items": items},
+                }
+            ],
+        },
+        timeout=10,
+    )
+
+
+def push_flex(user_id: str, alt_text: str, contents: dict) -> None:
+    requests.post(
+        f"{_BASE}/message/push",
+        headers=_HEADERS,
+        json={
+            "to": user_id,
+            "messages": [{"type": "flex", "altText": alt_text, "contents": contents}],
+        },
+        timeout=10,
+    )
+
+
+def multicast(user_ids: list[str], text: str) -> None:
+    if not user_ids:
+        return
+    for i in range(0, len(user_ids), 500):
+        batch = user_ids[i : i + 500]
+        requests.post(
+            f"{_BASE}/message/multicast",
+            headers=_HEADERS,
+            json={
+                "to": batch,
+                "messages": [{"type": "text", "text": text}],
+            },
+            timeout=30,
         )
 
 
