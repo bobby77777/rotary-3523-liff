@@ -537,10 +537,18 @@ async function initLiff() {
 
         lineProfile = await liff.getProfile();
         applyLineProfile();
-        // TODO: fetch user role & club from your backend
-        // const data = await apiFetch(`/api/member/${lineProfile.userId}`);
-        // currentUserClubId = data.clubId;
-        // userRole = data.role;
+
+        // Fetch this member's role/scope from the backend and gate the admin tab.
+        try {
+            const me = await apiFetch('/me');
+            if (me && me.status === 'ok') {
+                if (me.scope === 'club' || me.scope === 'district') systemScope = me.scope;
+                userRole = me.is_admin ? (me.role && me.role !== 'member' ? me.role : 'chairperson') : 'member';
+                setRole(userRole !== 'member' ? 'chairperson' : 'member');
+            }
+        } catch (e) {
+            console.warn('role fetch failed:', e.message);
+        }
 
         hideLiffLoadingScreen();
         initApp();
