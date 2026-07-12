@@ -994,22 +994,48 @@ async function confirmRegistration() {
     sendLineMessage(`✅ 報名成功：${currentActiveEvent?.title}`);
 }
 
-function clickHelpRegister(e) {
+// Event id captured from an admin exec-register deep link (?action=exec_register&event=NNN).
+let execRegEventId = null;
+
+async function clickHelpRegister(e) {
     e && e.stopPropagation();
-    addChatMessage("user", "執秘報名");
-    const select = document.getElementById('exec-sec-club');
-    select.innerHTML = clubsData.map(c => `<option value="${c.id}" ${c.id === currentUserClubId ? 'selected' : ''}>${c.name}</option>`).join('');
-    renderClubMembers();
     document.getElementById('guest-inputs-container').innerHTML = '';
     document.getElementById('exec-sec-bank-digits').value = '';
+    const select = document.getElementById('exec-sec-club');
+    try {
+        const data = await apiFetch('/admin/clubs');
+        if (data.status === 'forbidden') { showAlert('權限不足', '您沒有批次報名權限。'); return; }
+        const clubs = data.clubs || [];
+        select.innerHTML = clubs.length
+            ? clubs.map(c => `<option value="${c}">${c}</option>`).join('')
+            : `<option value="">（尚無已綁定社友）</option>`;
+    } catch (err) {
+        select.innerHTML = clubsData.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    }
+    await renderClubMembers();
     openModal('modal-exec-sec-register');
 }
 
-function renderClubMembers() {
-    const clubId = parseInt(document.getElementById('exec-sec-club').value);
-    const members = Array.from({ length: 10 }, (_, i) => ({ id: `m_${clubId}_${i+1}`, name: `社友 ${i+1}` }));
-    if (clubId === 6) members[0] = { id: 'm_6_0', name: lineProfile?.displayName || '王大同' };
-    document.getElementById('exec-sec-member-list').innerHTML = members.map(m =>
+async function renderClubMembers() {
+    const clubName = document.getElementById('exec-sec-club').value;
+    const listEl = document.getElementById('exec-sec-member-list');
+    listEl.innerHTML = `<p class="text-xs text-gray-400 p-2">載入中…</p>`;
+    let members = [];
+    try {
+        const data = await apiFetch('/admin/club_members?club=' + encodeURIComponent(clubName));
+        members = (data.members || []).map(m => ({
+            id: m.line_user_id,
+            name: m.full_name + (m.nickname ? `（${m.nickname}）` : '')
+        }));
+    } catch (err) {
+        members = Array.from({ length: 6 }, (_, i) => ({ id: `mock_${i+1}`, name: `社友 ${i+1}` }));
+    }
+    if (!members.length) {
+        listEl.innerHTML = `<p class="text-xs text-gray-400 p-2">此社目前沒有已綁定資料的社友。</p>`;
+        updateSelectedCount();
+        return;
+    }
+    listEl.innerHTML = members.map(m =>
         `<label class="flex items-center gap-3 p-2 hover:bg-blue-50 rounded-lg cursor-pointer border border-transparent hover:border-blue-100">
             <input type="checkbox" value="${m.id}" class="member-checkbox w-4 h-4 text-blue-600 rounded" onchange="updateSelectedCount()">
             <span class="text-sm text-gray-800 font-medium">${m.name}</span>
@@ -1037,26 +1063,31 @@ function selectAllMembers() {
 }
 
 async function submitExecSecRegistration() {
-    const select = document.getElementById('exec-sec-club');
-    const clubName = select.options[select.selectedIndex].text;
-    const clubId = parseInt(select.value);
-    const memberCount = document.querySelectorAll('.member-checkbox:checked').length;
-    const guests = [...document.querySelectorAll('.guest-name')].filter(i => i.value.trim()).length;
+    const clubName = document.getElementById('exec-sec-club').value;
+    const uids = [...document.querySelectorAll('.member-checkbox:checked')].map(cb => cb.value);
+    const guests = [...document.querySelectorAll('.guest-name')].map(i => i.value.trim()).filter(Boolean);
     const digits = document.getElementById('exec-sec-bank-digits').value.trim();
-    const total = memberCount + guests;
 
-    if (total === 0) return showAlert('未選擇', '請至少勾選一位社友或填寫一位來賓！');
+    if (uids.length + guests.length === 0) return showAlert('未選擇', '請至少勾選一位社友或填寫一位來賓！');
     if (digits && digits.length !== 5) return showAlert('格式錯誤', '匯款帳號請填寫完整的末 5 碼！');
 
-    // TODO: await apiFetch('/api/register/batch', { method:'POST', body: JSON.stringify({ clubId, eventId: currentActiveEvent?.id, count: total, bankDigits: digits }) });
-
-    closeModal('modal-exec-sec-register');
-    const club = clubsData.find(c => c.id === clubId);
-    if (club) club.registered += total;
-
-    let msg = `✅ <b>執秘批次報名成功</b><br>為 <b>${clubName}</b> 完成 <b>${total} 人</b>報名！`;
-    if (digits) msg += `<br>末 5 碼：<b class="text-blue-600">${digits}</b>`;
-    setTimeout(() => addChatMessage("bot", msg), 300);
+    const evId = execRegEventId || currentActiveEvent?.id;
+    try {
+        const data = await apiFetch('/admin/bulk_register', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: evId, uids, guests, bank_digits: digits })
+        });
+        if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
+        closeModal('modal-exec-sec-register');
+        let msg = `✅ <b>執秘批次報名完成</b><br>${data.event_title}<br>新報名 <b>${data.members_new}</b> 人`;
+        if (data.members_dup) msg += `（${data.members_dup} 人先前已報名）`;
+        if (data.guests)      msg += `<br>附加來賓 <b>${data.guests}</b> 位`;
+        if (digits)           msg += `<br>末 5 碼：<b class="text-blue-600">${digits}</b>`;
+        addChatMessage("bot", msg);
+        sendLineMessage(`✅ 已為 ${clubName} 完成 ${data.members_new + data.guests} 筆【${data.event_title}】報名`);
+    } catch (err) {
+        showAlert('連線失敗', err.message + '\n請確認網路後再試。');
+    }
 }
 
 function clickCheckRegistration(e) {
@@ -1338,6 +1369,10 @@ function handleDeepLink() {
     if (action === 'stats') {
         statsEventId = parseInt(p.get('event')) || null;
         setTimeout(() => openStatisticsModal(), 300);
+    }
+    if (action === 'exec_register') {
+        execRegEventId = parseInt(p.get('event')) || null;
+        setTimeout(() => clickHelpRegister(), 300);
     }
 }
 
