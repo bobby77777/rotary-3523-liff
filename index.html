@@ -368,6 +368,24 @@
     </div>
 </div>
 
+<!-- Attendance Modal (personal record + club leaderboard) -->
+<div id="modal-attendance" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <div class="bg-gradient-to-r from-emerald-900 via-teal-800 to-emerald-900 px-6 py-5 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-clipboard-user text-yellow-300"></i>
+                <h3 class="font-extrabold text-base" id="attendance-title">出席累計</h3>
+            </div>
+            <button onclick="closeModal('modal-attendance')" class="text-white hover:text-gray-200"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="p-4 bg-gray-50 shrink-0" id="attendance-summary"></div>
+        <div class="overflow-y-auto px-4 pb-4 flex-1 bg-gray-50 no-scrollbar" id="attendance-body"></div>
+        <div class="bg-gray-100 px-6 py-3 shrink-0">
+            <button onclick="closeModal('modal-attendance')" class="bg-emerald-800 text-white font-bold py-2 px-5 rounded-xl text-xs w-full btn-3d btn-3d-dark mb-1">關閉</button>
+        </div>
+    </div>
+</div>
+
 <!-- Golf Scorecard Modal -->
 <div id="modal-golf-scorecard" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
@@ -1231,6 +1249,92 @@ function renderStatisticsFromApi(data) {
     ).join('');
 }
 
+// ============================================================
+//  ATTENDANCE  (personal record + club leaderboard)
+// ============================================================
+async function openAttendanceModal(mode) {
+    openModal('modal-attendance');
+    const titleEl = document.getElementById('attendance-title');
+    const sumEl = document.getElementById('attendance-summary');
+    const bodyEl = document.getElementById('attendance-body');
+    sumEl.innerHTML = '';
+    bodyEl.innerHTML = `<p class="text-xs text-gray-400 py-8 text-center">載入中…</p>`;
+    try {
+        if (mode === 'club') {
+            titleEl.textContent = '社友出席率';
+            const data = await apiFetch('/admin/club_attendance');
+            if (data.status === 'forbidden') { closeModal('modal-attendance'); showAlert('權限不足', '您沒有檢視社友出席的權限。'); return; }
+            renderClubAttendance(data);
+        } else {
+            titleEl.textContent = '我的出席累計';
+            const data = await apiFetch('/attendance/me');
+            renderMyAttendance(data);
+        }
+    } catch (err) {
+        bodyEl.innerHTML = `<p class="text-xs text-rose-500 py-8 text-center">載入失敗：${err.message}</p>`;
+    }
+}
+
+function attKpi(label, value, color) {
+    return `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm py-3 text-center">
+        <div class="text-2xl font-black ${color}">${value}</div>
+        <div class="text-[10px] text-gray-400 font-bold mt-0.5">${label}</div></div>`;
+}
+
+function renderMyAttendance(data) {
+    document.getElementById('attendance-summary').innerHTML =
+        `<div class="grid grid-cols-3 gap-2">
+            ${attKpi('已出席', data.attended || 0, 'text-emerald-600')}
+            ${attKpi('已報名', data.registered || 0, 'text-gray-800')}
+            ${attKpi('出席率', (data.rate || 0) + '%', 'text-teal-600')}
+        </div>`;
+    const events = data.events || [];
+    const body = document.getElementById('attendance-body');
+    if (!events.length) {
+        body.innerHTML = `<p class="text-xs text-gray-400 py-8 text-center">目前沒有報名紀錄。</p>`;
+        return;
+    }
+    body.innerHTML = events.map(e => {
+        const done = e.checked_in;
+        return `<div class="bg-white rounded-xl border border-gray-100 p-3 mb-2 flex items-center gap-3">
+            <i class="fa-solid ${done ? 'fa-circle-check text-emerald-500' : 'fa-circle-o text-gray-300'} text-lg"></i>
+            <div class="flex-1 min-w-0">
+                <p class="text-xs font-bold text-gray-800 truncate">${e.title}</p>
+                <p class="text-[10px] text-gray-400">${e.date || ''}</p>
+            </div>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${done ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'}">${done ? '已報到' : '未報到'}</span>
+        </div>`;
+    }).join('');
+}
+
+function renderClubAttendance(data) {
+    document.getElementById('attendance-summary').innerHTML =
+        `<div class="mb-2"><p class="text-xs font-bold text-gray-700">${data.club || '本社'}</p></div>
+        <div class="grid grid-cols-2 gap-2">
+            ${attKpi('社友人數', data.member_count || 0, 'text-gray-800')}
+            ${attKpi('平均出席率', (data.avg_rate || 0) + '%', 'text-emerald-600')}
+        </div>`;
+    const members = data.members || [];
+    const body = document.getElementById('attendance-body');
+    if (!members.length) {
+        body.innerHTML = `<p class="text-xs text-gray-400 py-8 text-center">此社目前沒有社友資料。</p>`;
+        return;
+    }
+    body.innerHTML = members.map(m => {
+        const rate = m.rate || 0;
+        const barColor = rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-400' : 'bg-rose-400';
+        return `<div class="bg-white rounded-xl border border-gray-100 p-3 mb-2">
+            <div class="flex justify-between items-center mb-1.5">
+                <p class="text-xs font-bold text-gray-800 truncate">${m.name}</p>
+                <span class="text-xs font-black text-gray-700">${m.attended}/${m.registered} · ${rate}%</span>
+            </div>
+            <div class="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div class="h-full ${barColor} rounded-full" style="width:${rate}%"></div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
 function renderStatisticsTable() {
     const tbody = document.getElementById('statistics-table-body');
     let tr=0, tp=0, tu=0, ta=0;
@@ -1373,6 +1477,9 @@ function handleDeepLink() {
     if (action === 'exec_register') {
         execRegEventId = parseInt(p.get('event')) || null;
         setTimeout(() => clickHelpRegister(), 300);
+    }
+    if (action === 'attendance') {
+        setTimeout(() => openAttendanceModal(tab === 'admin' ? 'club' : 'me'), 300);
     }
 }
 
