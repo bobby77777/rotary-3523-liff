@@ -423,9 +423,9 @@
                             <tr class="bg-gray-50 border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase">
                                 <th class="py-3 px-3 text-center w-12">排名</th>
                                 <th class="py-3 px-3">姓名</th>
-                                <th class="py-3 px-2 text-center">OUT</th>
-                                <th class="py-3 px-2 text-center">IN</th>
-                                <th class="py-3 px-2 text-center font-black text-emerald-700">總桿</th>
+                                <th class="py-3 px-2 text-center">總桿</th>
+                                <th class="py-3 px-2 text-center">差點</th>
+                                <th class="py-3 px-2 text-center font-black text-emerald-700">淨桿</th>
                                 <th class="py-3 px-2 text-center">桿差</th>
                             </tr>
                         </thead>
@@ -1353,67 +1353,108 @@ function renderStatisticsTable() {
 // ============================================================
 //  GOLF
 // ============================================================
-function openGolfScorecard() { renderGolfScorecard(); openModal('modal-golf-scorecard'); }
+// ============================================================
+//  GOLF SCORECARD  (my own 18 holes, wired to backend + New Peoria)
+// ============================================================
+let golfScoreEventId = null;
+let myGolfScores = golfPars.slice();  // start at par
 
-function renderGolfScorecard() {
-    const tPar = golfPars.reduce((a,b)=>a+b,0);
-    let html = `<table class="w-full text-center text-xs border-collapse"><thead>
-        <tr class="bg-emerald-900 text-white"><th class="py-2 px-3 sticky left-0 bg-emerald-900 z-20">球員</th>`;
-    for (let i=0;i<18;i++) html+=`<th class="min-w-[45px]">H${i+1}</th>`;
-    html+=`<th>總桿</th><th>桿差</th></tr>
-        <tr class="bg-emerald-50"><td class="py-1.5 sticky left-0 bg-emerald-50 z-20 font-bold text-xs">標準桿</td>`;
-    golfPars.forEach(p => { html+=`<td class="font-bold text-emerald-800">${p}</td>`; });
-    html+=`<td class="font-bold bg-emerald-100">${tPar}</td><td class="bg-emerald-100 font-bold">E</td></tr></thead><tbody class="divide-y divide-gray-100 bg-white">`;
-
-    golfPlayers.forEach((player, pIdx) => {
-        let pScore=0;
-        html+=`<tr><td class="py-2 px-3 sticky left-0 ${player.isMe?'bg-amber-50 font-bold':'bg-white font-semibold'} z-20 border-r border-slate-100 text-[11px]">${player.name}</td>`;
-        player.scores.forEach((score, hIdx) => {
-            pScore+=score;
-            const par=golfPars[hIdx];
-            let cls="text-sm font-bold w-6 h-6 flex items-center justify-center mx-auto";
-            if (score<=par-2) cls="ring-2 ring-yellow-400 bg-yellow-400 font-black rounded-full w-6 h-6 flex items-center justify-center mx-auto text-[10px] text-slate-950";
-            else if (score===par-1) cls="border border-amber-500 text-amber-600 bg-amber-50 font-extrabold rounded-full w-6 h-6 flex items-center justify-center mx-auto text-[10px]";
-            else if (score===par+1) cls="border border-slate-400 text-slate-600 bg-slate-50 font-bold rounded w-6 h-6 flex items-center justify-center mx-auto text-[10px]";
-            else if (score>=par+2) cls="border-2 border-rose-500 text-rose-600 bg-rose-50 font-black rounded w-6 h-6 flex items-center justify-center mx-auto text-[10px]";
-            else cls="text-emerald-700 font-extrabold text-xs w-6 h-6 flex items-center justify-center mx-auto";
-            html+=`<td class="min-w-[50px] border-r border-slate-50 py-1.5"><div class="flex flex-col items-center gap-1"><div class="${cls}">${score}</div><div class="flex gap-0.5"><button onclick="adjustGolfScore(${pIdx},${hIdx},-1)" class="w-5 h-5 bg-gray-100 rounded text-[10px] btn-3d btn-3d-white">-</button><button onclick="adjustGolfScore(${pIdx},${hIdx},1)" class="w-5 h-5 bg-gray-100 rounded text-[10px] btn-3d btn-3d-white">+</button></div></div></td>`;
-        });
-        const diff=pScore-tPar;
-        html+=`<td class="font-black text-sm bg-emerald-50/20">${pScore}</td><td class="font-black text-sm ${diff>0?'text-rose-600':'text-emerald-700'}">${diff>0?'+':''}${diff||'E'}</td></tr>`;
-    });
-    document.getElementById('golf-table-container').innerHTML=html+'</tbody></table>';
+async function openGolfScorecard(e) {
+    e && e.stopPropagation();
+    openModal('modal-golf-scorecard');
+    document.getElementById('golf-table-container').innerHTML =
+        `<p class="text-xs text-gray-400 py-8 text-center">載入中…</p>`;
+    try {
+        const q = golfScoreEventId ? ('?event=' + golfScoreEventId) : '';
+        const data = await apiFetch('/golf/my_score' + q);
+        myGolfScores = Array.isArray(data.scores) && data.scores.length === 18
+            ? data.scores.slice() : golfPars.slice();
+    } catch (err) {
+        myGolfScores = golfPars.slice();
+    }
+    renderGolfScorecard();
 }
 
-function adjustGolfScore(p, h, d) {
-    golfPlayers[p].scores[h] = Math.max(1, golfPlayers[p].scores[h]+d);
+function renderGolfScorecard() {
+    const tPar = golfPars.reduce((a, b) => a + b, 0);
+    let html = `<table class="w-full text-center text-xs border-collapse"><thead>
+        <tr class="bg-emerald-900 text-white"><th class="py-2 px-3 sticky left-0 bg-emerald-900 z-20">洞次</th>`;
+    for (let i = 0; i < 18; i++) html += `<th class="min-w-[45px]">H${i+1}</th>`;
+    html += `<th>總桿</th></tr>
+        <tr class="bg-emerald-50"><td class="py-1.5 sticky left-0 bg-emerald-50 z-20 font-bold text-xs">標準桿</td>`;
+    golfPars.forEach(p => { html += `<td class="font-bold text-emerald-800">${p}</td>`; });
+    html += `<td class="font-bold bg-emerald-100">${tPar}</td></tr></thead><tbody class="bg-white">`;
+
+    let gross = 0;
+    html += `<tr><td class="py-2 px-3 sticky left-0 bg-amber-50 font-bold z-20 border-r border-slate-100 text-[11px]">${lineProfile?.displayName || '我'}</td>`;
+    myGolfScores.forEach((score, hIdx) => {
+        gross += score;
+        const par = golfPars[hIdx];
+        let cls = "text-emerald-700 font-extrabold text-xs w-6 h-6 flex items-center justify-center mx-auto";
+        if (score <= par - 2)      cls = "ring-2 ring-yellow-400 bg-yellow-400 font-black rounded-full w-6 h-6 flex items-center justify-center mx-auto text-[10px] text-slate-950";
+        else if (score === par - 1) cls = "border border-amber-500 text-amber-600 bg-amber-50 font-extrabold rounded-full w-6 h-6 flex items-center justify-center mx-auto text-[10px]";
+        else if (score === par + 1) cls = "border border-slate-400 text-slate-600 bg-slate-50 font-bold rounded w-6 h-6 flex items-center justify-center mx-auto text-[10px]";
+        else if (score >= par + 2)  cls = "border-2 border-rose-500 text-rose-600 bg-rose-50 font-black rounded w-6 h-6 flex items-center justify-center mx-auto text-[10px]";
+        html += `<td class="min-w-[50px] border-r border-slate-50 py-1.5"><div class="flex flex-col items-center gap-1"><div class="${cls}">${score}</div><div class="flex gap-0.5"><button onclick="adjustGolfScore(${hIdx},-1)" class="w-5 h-5 bg-gray-100 rounded text-[10px] btn-3d btn-3d-white">-</button><button onclick="adjustGolfScore(${hIdx},1)" class="w-5 h-5 bg-gray-100 rounded text-[10px] btn-3d btn-3d-white">+</button></div></div></td>`;
+    });
+    const diff = gross - tPar;
+    html += `<td class="font-black text-sm bg-emerald-50/20">${gross}</td></tr>`;
+    document.getElementById('golf-table-container').innerHTML = html + '</tbody></table>' +
+        `<p class="text-[10px] text-gray-400 mt-2 text-center">總桿 ${gross}（${diff > 0 ? '+' + diff : (diff || 'E')}）· 淨桿以新貝利亞賽制於送出後計算</p>`;
+}
+
+function adjustGolfScore(h, d) {
+    myGolfScores[h] = Math.max(1, myGolfScores[h] + d);
     renderGolfScorecard();
 }
 
 async function submitGolfScores() {
-    // TODO: await apiFetch('/api/golf/scores', { method:'POST', body: JSON.stringify({ playerId: lineProfile?.userId, scores: golfPlayers[0].scores }) });
-    closeModal('modal-golf-scorecard');
-    showAlert('成功', '成績已提交大會雲端！');
-    sendLineMessage('⛳️ 我的高爾夫成績已提交大會系統！');
+    try {
+        const data = await apiFetch('/golf/scores', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: golfScoreEventId || currentActiveEvent?.id, scores: myGolfScores })
+        });
+        if (data.status !== 'ok') { showAlert('送出失敗', data.message || '請稍後再試。'); return; }
+        closeModal('modal-golf-scorecard');
+        showAlert('成績已送出', `總桿 ${data.gross} · 差點 ${data.handicap} · 淨桿 ${data.net}`);
+        sendLineMessage(`⛳️ 我的成績已送出【${data.event_title}】：總桿 ${data.gross}、淨桿 ${data.net}（新貝利亞）`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
 }
 
-function openGolfLeaderboard() {
+async function openGolfLeaderboard(e) {
+    e && e.stopPropagation();
     const tbody = document.getElementById('golf-leaderboard-body');
-    const medals = ['','<i class="fa-solid fa-medal text-yellow-400 text-lg"></i>','<i class="fa-solid fa-medal text-gray-400 text-lg"></i>','<i class="fa-solid fa-medal text-amber-600 text-lg"></i>'];
-    tbody.innerHTML = golfLeaderboardData.map(p => {
+    tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-400 text-xs">載入中…</td></tr>`;
+    openModal('modal-golf-leaderboard');
+    try {
+        const q = golfScoreEventId ? ('?event=' + golfScoreEventId) : '';
+        const data = await apiFetch('/golf/leaderboard' + q);
+        renderGolfLeaderboard(data.players || []);
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-rose-500 text-xs">載入失敗：${err.message}</td></tr>`;
+    }
+}
+
+function renderGolfLeaderboard(players) {
+    const tbody = document.getElementById('golf-leaderboard-body');
+    if (!players.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-400 text-xs">尚無選手送出成績。</td></tr>`;
+        return;
+    }
+    const medals = ['', '<i class="fa-solid fa-medal text-yellow-400 text-lg"></i>', '<i class="fa-solid fa-medal text-gray-400 text-lg"></i>', '<i class="fa-solid fa-medal text-amber-600 text-lg"></i>'];
+    tbody.innerHTML = players.map(p => {
         const rank = p.rank <= 3 ? medals[p.rank] : p.rank;
-        const diffText = p.diff===0?'E':(p.diff>0?`+${p.diff}`:p.diff);
-        const diffCls = p.diff===0?'text-emerald-600':(p.diff>0?'text-red-500':'text-amber-600');
-        return `<tr class="hover:bg-emerald-50 ${p.rank===1?'bg-yellow-50/30':''}">
+        return `<tr class="hover:bg-emerald-50 ${p.rank === 1 ? 'bg-yellow-50/30' : ''}">
             <td class="py-3 px-3 text-center font-black">${rank}</td>
-            <td class="py-3 px-3 font-bold text-gray-900">${p.name}</td>
-            <td class="py-3 px-2 text-center text-gray-500">${p.out}</td>
-            <td class="py-3 px-2 text-center text-gray-500">${p.in}</td>
-            <td class="py-3 px-2 text-center font-black text-emerald-700 bg-emerald-50/50">${p.total}</td>
-            <td class="py-3 px-2 text-center font-bold ${diffCls}">${diffText}</td>
+            <td class="py-3 px-3 font-bold text-gray-900">${p.name}<span class="block text-[9px] text-gray-400 font-normal">${p.club || ''}</span></td>
+            <td class="py-3 px-2 text-center text-gray-500">${p.gross}</td>
+            <td class="py-3 px-2 text-center text-gray-500">${p.handicap}</td>
+            <td class="py-3 px-2 text-center font-black text-emerald-700 bg-emerald-50/50">${p.net}</td>
+            <td class="py-3 px-2 text-center font-bold ${p.diff === 0 ? 'text-emerald-600' : (p.diff > 0 ? 'text-red-500' : 'text-amber-600')}">${p.diff === 0 ? 'E' : (p.diff > 0 ? '+' + p.diff : p.diff)}</td>
         </tr>`;
     }).join('');
-    openModal('modal-golf-leaderboard');
 }
 
 function executeGroupSwap() {
@@ -1480,6 +1521,14 @@ function handleDeepLink() {
     }
     if (action === 'attendance') {
         setTimeout(() => openAttendanceModal(tab === 'admin' ? 'club' : 'me'), 300);
+    }
+    if (action === 'golf_scorecard') {
+        golfScoreEventId = parseInt(p.get('event')) || null;
+        setTimeout(() => openGolfScorecard(), 300);
+    }
+    if (action === 'leaderboard') {
+        golfScoreEventId = parseInt(p.get('event')) || null;
+        setTimeout(() => openGolfLeaderboard(), 300);
     }
 }
 
