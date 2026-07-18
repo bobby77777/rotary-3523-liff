@@ -74,6 +74,9 @@
         .btn-3d-teal { box-shadow: 0 4px 0 #134e4a; } /* Teal 900 */
         .btn-3d-teal:active { box-shadow: 0 0px 0 #134e4a; }
 
+        .btn-3d-amber { box-shadow: 0 4px 0 #b45309; } /* Amber 700 */
+        .btn-3d-amber:active { box-shadow: 0 0px 0 #b45309; }
+
         .btn-3d-tab { box-shadow: 0 3px 0 #d1d5db; z-index: 10; transition: transform 0.1s ease, box-shadow 0.1s ease; }
         .btn-3d-tab:active { transform: translateY(3px) !important; box-shadow: 0 0px 0 #d1d5db; }
 
@@ -86,7 +89,7 @@
             animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        /* 核心優化：隱藏所有數字輸入框的上下箭頭，讓使用者能直接打字 */
+        /* 核心優化：隱藏所有數字輸入框的上下箭頭 */
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button {
             -webkit-appearance: none;
@@ -105,7 +108,7 @@
             <i class="fa-solid fa-circle-nodes text-yellow-500"></i>
             國際扶輪 3523 地區
         </h1>
-        <p class="text-gray-600 mt-2 font-medium">全年度活動 LINE Rich Menu 整合管理與報到模擬系統 (版本二)</p>
+        <p class="text-gray-600 mt-2 font-medium">全年度活動 LINE Rich Menu 整合管理與報到模擬系統 (旗艦版)</p>
         <p class="text-xs text-gray-500 mt-1">本系統模擬 LINE 官方帳號之多頁籤切換、權限控管、獨立資料庫連動，及全新【社長專區】面板。</p>
     </div>
 
@@ -137,7 +140,7 @@
                             <optgroup label="社內層級權限 (Club Level)">
                                 <option value="member">👤 一般社友 (無管理權限)</option>
                                 <option value="chair_club_golf">⛳ 本社高球主委 (僅限社內球隊)</option>
-                                <option value="chair_club_admin">🏠 社長 / 秘書 (社內最高權限)</option>
+                                <option value="chair_club_admin" selected>🏠 社長 / 秘書 (社內最高權限)</option>
                             </optgroup>
                             <optgroup label="地區層級權限 (District Level)">
                                 <option value="chair_rye">🌐 地區主委 - 青少年交換(RYE)</option>
@@ -238,6 +241,7 @@
                 </div>
 
                 <!-- Chat Messages Area (Scrollable) -->
+                <!-- 加大 pb-[360px] 以確保滑到最底時，訊息不會被 Rich Menu 擋住 -->
                 <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-[360px]">
                     
                     <!-- Welcome Msg -->
@@ -308,14 +312,14 @@
                                 <!-- 左側：Banner + 兩個底部按鈕 -->
                                 <div class="col-span-2 flex flex-col gap-1.5 h-full">
                                     <!-- 上：動態活動大 Banner -->
-                                    <div id="banner-bg-gradient" onclick="triggerMainBannerClick()" class="flex-1 bg-gradient-to-tr from-[#1e2a5f] to-[#2a3c7c] p-2.5 pb-2 flex flex-col justify-between rounded-xl relative overflow-hidden cursor-pointer btn-3d btn-3d-dark hover:brightness-110 active:brightness-95 transition-all text-white shadow-sm border border-[#3b4c8c]">
+                                    <div id="banner-bg-gradient" onclick="triggerMainBannerClick()" class="flex-1 bg-gradient-to-tr from-blue-950 via-blue-900 to-indigo-800 p-2.5 pb-2 flex flex-col justify-between rounded-xl relative overflow-hidden cursor-pointer btn-3d btn-3d-dark hover:brightness-110 active:brightness-95 transition-all text-white shadow-sm border border-[#3b4c8c]">
                                         <div class="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
                                         <div class="z-10">
                                             <div class="flex items-center justify-between">
-                                                <span id="banner-tag" class="text-[10px] bg-[#f0c14b] text-slate-900 font-extrabold px-1.5 py-0.5 rounded tracking-wider">講習培訓</span>
-                                                <span id="banner-date" class="text-[10px] text-[#f0c14b] font-bold bg-black/20 px-1.5 py-0.5 rounded-full">2026-09-15</span>
+                                                <span id="banner-tag" class="text-[10px] bg-[#f0c14b] text-slate-900 font-extrabold px-1.5 py-0.5 rounded tracking-wider uppercase">即將舉辦</span>
+                                                <span id="banner-date" class="text-[10px] text-[#f0c14b] font-bold bg-black/20 px-1.5 py-0.5 rounded-full">2026-06-15</span>
                                             </div>
-                                            <h4 id="banner-title" class="font-black text-[13px] sm:text-sm mt-1.5 tracking-wide leading-tight drop-shadow-sm truncate-2-lines">
+                                            <h4 id="banner-title" class="font-black text-white text-[13px] sm:text-sm mt-1.5 tracking-wide leading-tight drop-shadow-sm truncate-2-lines">
                                                 地區青少年交換(RYE)講習會
                                             </h4>
                                             <p id="banner-loc-text" class="text-[9px] text-gray-300 mt-1 truncate flex items-center gap-1"><i class="fa-solid fa-location-dot text-rose-400"></i>台北福華大飯店</p>
@@ -345,7 +349,7 @@
                                 <div class="col-span-1 flex flex-col gap-1.5 h-full">
                                     <div onclick="clickMenuItem('年度活動行事曆', 'home-calendar')" class="flex-1 bg-white rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer shadow-sm btn-3d btn-3d-white hover:bg-emerald-50 transition-colors">
                                         <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shadow-inner">
-                                            <i class="fa-solid fa-calendar-days"></i>
+                                            <i class="fa-solid fa-calendar-days animate-bounce"></i>
                                         </div>
                                         <span class="text-[11px] font-black text-slate-700">行事曆</span>
                                     </div>
@@ -353,7 +357,7 @@
                                         <div id="home-btn-2-icon" class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-lg shadow-inner">
                                             <i class="fa-solid fa-globe"></i>
                                         </div>
-                                        <span id="home-btn-2-text" class="text-[11px] font-black text-slate-700">官網</span>
+                                        <span id="home-btn-2-text" class="text-[11px] font-black text-slate-700">地區官網</span>
                                     </div>
                                 </div>
                             </div>
@@ -364,21 +368,21 @@
                             </div>
 
                             <!-- TAB 3: E-BOOKS -->
-                            <div id="menu-content-ebooks" class="hidden grid grid-cols-3 h-full gap-1 p-1 bg-gray-50">
+                            <div id="menu-content-ebooks" class="hidden grid grid-cols-3 h-full bg-white divide-x divide-gray-200">
                                 <!-- Populated dynamically via JS renderEbooksMenu() -->
                             </div>
 
                             <!-- TAB 4: ADMIN/CHAIRPERSON (Gatekeeper Pattern & Dynamic) -->
                             <div id="menu-content-admin" class="hidden h-full">
-                                <div id="admin-gate-unauthorized" class="h-full bg-gray-900 flex flex-col items-center justify-center p-4 text-center text-white m-1 rounded-xl shadow-inner">
+                                <div id="admin-gate-unauthorized" class="h-full bg-gray-900/95 flex flex-col items-center justify-center p-4 text-center text-white">
                                     <i class="fa-solid fa-user-lock text-4xl text-red-500 mb-3 drop-shadow-md"></i>
                                     <h4 class="text-sm font-bold tracking-wide">【權限不符】</h4>
-                                    <p class="text-[10px] text-gray-400 mt-1 max-w-[80%] leading-relaxed">本專區僅限管理團隊進入。<br>您無權調閱此資料。</p>
+                                    <p class="text-[10px] text-gray-400 mt-1 max-w-[80%] leading-relaxed">本專區僅限「主辦該活動之管理團隊」進入。<br>您目前無權調閱此活動之數據。</p>
                                     <button class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-full text-[10px] font-bold shadow-md btn-3d btn-3d-primary" onclick="document.getElementById('sim-user-role').value='admin_all'; changeUserRole();">
-                                        切換最高權限測試 &gt;
+                                        一鍵切換最高權限測試 &gt;
                                     </button>
                                 </div>
-                                <div id="admin-gate-authorized" class="hidden h-full grid grid-cols-3 gap-1 p-1">
+                                <div id="admin-gate-authorized" class="hidden h-full grid grid-cols-3">
                                     <!-- Populated dynamically via JS renderAdminMenu() -->
                                 </div>
                             </div>
@@ -387,7 +391,8 @@
                     </div> <!-- End of rich-menu-body -->
 
                     <!-- Toggle Rich Menu Open/Close Button -->
-                    <div onclick="toggleRichMenu()" class="bg-gray-100 text-gray-500 pt-2 pb-6 text-center text-[11px] font-semibold cursor-pointer border-t border-gray-200 flex items-center justify-center gap-1.5 hover:bg-gray-200 transition-colors btn-3d-tab z-40 relative">
+                    <!-- 增加了 pb-6 避免被手機圓角遮擋，並加入 onClick 切換隱藏功能 -->
+                    <div onclick="toggleRichMenu()" class="bg-gray-100 text-gray-500 pt-2 pb-6 text-center text-[11px] font-semibold cursor-pointer border-t border-gray-200 flex items-center justify-center gap-1.5 hover:bg-gray-200 active:bg-gray-300 transition-colors">
                         <i class="fa-solid fa-keyboard text-gray-400"></i>
                         <span id="rm-toggle-text">隱藏圖文選單</span>
                         <i id="rm-toggle-icon" class="fa-solid fa-chevron-down text-[9px] text-gray-400"></i>
@@ -487,13 +492,16 @@
                     <i class="fa-solid fa-circle-info mr-1"></i>您即將報名：<b id="self-reg-event-title">載入中...</b><br>系統已自動帶入您的社籍。
                 </div>
                 
-                <!-- 新增：寶尊眷 / 攜伴人數 (依視角動態顯示) -->
+                <!-- [2026-07-15 修改: 本人自行報名也加上寶尊眷動態表單] -->
                 <div id="self-family-container" class="hidden">
-                    <label class="block text-xs font-bold text-gray-700 mb-1">寶尊眷 / 攜伴人數 (若無請填0)</label>
-                    <div class="relative w-full">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none"><i class="fa-solid fa-users"></i></span>
-                        <input type="number" id="self-family-count" placeholder="0" min="0" class="w-full bg-white border border-gray-300 text-indigo-700 rounded-xl py-2 pl-9 pr-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition-all" onfocus="this.select()">
+                    <label id="self-family-label" class="block text-xs font-bold text-gray-700 mb-1">寶尊眷 / 攜伴 (請勾選或新增)</label>
+                    <div id="self-family-list" class="bg-gray-50 border border-gray-200 rounded-xl p-2 space-y-1 shadow-inner">
+                        <!-- JS 動態載入 -->
                     </div>
+                    <div id="self-extra-family-container" class="mt-1 space-y-1"></div>
+                    <button onclick="addSelfExtraFamilyInput()" class="mt-1 text-[10px] text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded shadow-sm transition-colors border border-indigo-100 font-bold active:scale-95">
+                        <i class="fa-solid fa-plus mr-1"></i>備用填入格
+                    </button>
                 </div>
 
                 <div id="self-handicap-container" class="hidden">
@@ -504,7 +512,7 @@
                 <div>
                     <label class="block text-xs font-bold text-gray-700 mb-1">匯款帳號後 5 碼 (供對帳使用)</label>
                     <input type="text" id="self-bank-digits" maxlength="5" pattern="\d{5}" class="w-full bg-white border border-gray-300 text-gray-900 rounded-xl py-2 px-3 text-center tracking-[0.5em] text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" placeholder="XXXXX">
-                    <p class="text-[10px] text-gray-400 mt-1 text-center">※ 若稍後才匯款可先空白，後續至「個人中心」補填。</p>
+                    <p id="self-bank-hint" class="text-[10px] text-gray-400 mt-1 text-center">※ 若稍後才匯款可先空白，後續至「個人中心」補填。</p>
                 </div>
                 <div class="flex gap-2 w-full pt-2 border-t border-gray-200">
                     <button onclick="closeModal('modal-self-register')" class="w-1/2 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-600 text-sm bg-white hover:bg-gray-50 transition-colors btn-3d btn-3d-white mb-1">取消</button>
@@ -522,26 +530,51 @@
                 <button onclick="closeModal('modal-exec-sec-register')" class="text-white/70 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
             <div class="p-6 flex flex-col space-y-3 bg-slate-50 overflow-y-auto flex-1 no-scrollbar">
+                <!-- [2026-07-15 修改: 變更執秘報名的說明文字，強調「整合」與「送交給主委」的概念] -->
                 <div class="bg-blue-50 border border-blue-100 p-2.5 rounded-xl text-xs text-blue-800 leading-relaxed shadow-sm">
-                    <i class="fa-solid fa-circle-info mr-1"></i>可切換社名，並以勾選方式快速為多位社友完成集體報名。
+                    <i class="fa-solid fa-circle-info mr-1"></i>此處將整合「社友自行報名」與「執秘代為報名」的名單。確認無誤後，系統會將名單正式送交給本次活動主委與大會。
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-700 mb-1">所屬社名切換</label>
-                    <select id="exec-sec-club" onchange="renderClubMembers()" class="w-full bg-white border border-gray-300 text-gray-900 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"></select>
+                    <select id="exec-sec-club" onchange="renderExecSecClubMembers()" class="w-full bg-white border border-gray-300 text-gray-900 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"></select>
                 </div>
                 
-                <!-- 新增：高爾夫球賽事專屬身分選單 -->
+                <!-- 新增：高爾夫球賽事專屬身分選單 (升級互動式卡片) -->
                 <div id="exec-sec-golf-role-container" class="hidden">
                     <label class="block text-xs font-bold text-gray-700 mb-1">本賽事參與身分 <span class="text-red-500">*</span></label>
-                    <select id="exec-sec-golf-role" class="w-full bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl py-2 px-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm">
-                        <option value="">請選擇...</option>
-                        <option value="主辦社">主辦社</option>
-                        <option value="協辦社">協辦社</option>
-                        <option value="贊助社">贊助社</option>
-                    </select>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div onclick="selectGolfRole('主辦社')" data-role="主辦社" class="golf-role-btn cursor-pointer border border-gray-200 bg-white rounded-xl p-2 flex justify-between items-center transition-all shadow-sm hover:bg-gray-50">
+                            <span class="text-[13px] font-bold text-gray-700">主辦社</span>
+                            <span class="role-amt text-[11px] text-gray-400 font-semibold transition-colors">20,000元</span>
+                        </div>
+                        <div onclick="selectGolfRole('協辦社')" data-role="協辦社" class="golf-role-btn cursor-pointer border border-gray-200 bg-white rounded-xl p-2 flex justify-between items-center transition-all shadow-sm hover:bg-gray-50">
+                            <span class="text-[13px] font-bold text-gray-700">協辦社</span>
+                            <span class="role-amt text-[11px] text-gray-400 font-semibold transition-colors">10,000元</span>
+                        </div>
+                        <div onclick="selectGolfRole('贊助社')" data-role="贊助社" class="golf-role-btn cursor-pointer border border-gray-200 bg-white rounded-xl p-2 flex justify-between items-center transition-all shadow-sm hover:bg-gray-50">
+                            <span class="text-[13px] font-bold text-gray-700">贊助社</span>
+                            <span class="role-amt text-[11px] text-gray-400 font-semibold transition-colors">5,000元</span>
+                        </div>
+                        <div onclick="selectGolfRole('不贊助')" data-role="不贊助" class="golf-role-btn cursor-pointer border border-gray-200 bg-white rounded-xl p-2 flex justify-between items-center transition-all shadow-sm hover:bg-gray-50">
+                            <span class="text-[13px] font-bold text-gray-700">不贊助</span>
+                            <span class="role-amt text-[11px] text-gray-400 font-semibold transition-colors">-</span>
+                        </div>
+                    </div>
+                    <input type="hidden" id="exec-sec-golf-role" value="">
                 </div>
 
-                <div class="flex-1 min-h-[120px] flex flex-col">
+                <!-- 新增：高爾夫球賽事個人贊助 -->
+                <div id="exec-sec-personal-sponsor-container" class="hidden mt-2 border-t border-gray-200 pt-3">
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label class="block text-xs font-bold text-gray-700">個人贊助 (金額/禮品選填)</label>
+                        <button onclick="addPersonalSponsorInput()" class="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 px-2 py-1 rounded font-bold shadow-sm transition-colors btn-3d btn-3d-white mb-1"><i class="fa-solid fa-plus"></i> 新增贊助</button>
+                    </div>
+                    <div id="personal-sponsor-list" class="space-y-2 max-h-36 overflow-y-auto no-scrollbar pb-1">
+                        <!-- JS 動態新增 -->
+                    </div>
+                </div>
+
+                <div class="flex-1 min-h-[120px] flex flex-col mt-2 border-t border-gray-200 pt-3">
                     <label class="block text-xs font-bold text-gray-700 mb-1">選擇報名社友 (可複選)</label>
                     <div id="exec-sec-member-list" class="w-full bg-white border border-gray-200 rounded-xl max-h-40 overflow-y-auto p-2 shadow-inner space-y-1"></div>
                     <div class="flex justify-between mt-2 px-1">
@@ -564,7 +597,8 @@
             <div class="p-4 bg-white border-t border-gray-200 shrink-0">
                 <div class="flex gap-2 w-full">
                     <button onclick="closeModal('modal-exec-sec-register')" class="w-1/3 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-600 text-sm bg-white hover:bg-gray-50 transition-colors btn-3d btn-3d-white mb-1">取消</button>
-                    <button onclick="submitExecSecRegistration()" class="w-2/3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1 transition-all btn-3d btn-3d-primary mb-1"><i class="fa-solid fa-paper-plane"></i> 確定送出報名</button>
+                    <!-- [2026-07-15 修改: 按鈕文字變更] -->
+                    <button onclick="submitExecSecRegistration()" class="w-2/3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1 transition-all btn-3d btn-3d-primary mb-1"><i class="fa-solid fa-paper-plane"></i> 確定送出全社名單</button>
                 </div>
             </div>
         </div>
@@ -598,7 +632,6 @@
                         <div class="w-10 h-10 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center text-lg"><i class="fa-solid fa-wallet"></i></div>
                         <div><span class="text-xxs text-gray-400 block font-bold">完成繳費數</span><span class="text-xl font-black text-teal-600" id="kpi-total-pay">0 筆</span></div>
                     </div>
-                    <!-- 修改：將待繳費區塊加上游標互動與點擊事件 -->
                     <div onclick="openUnpaidDetailsModal()" class="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm flex items-center gap-3 cursor-pointer hover:bg-rose-50 active:bg-rose-100 transition-colors relative overflow-hidden group">
                         <div class="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center text-lg group-hover:scale-110 transition-transform"><i class="fa-solid fa-hourglass-half"></i></div>
                         <div>
@@ -611,16 +644,17 @@
 
                 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" id="district-stats-table">
                     <div class="px-5 py-3.5 bg-gray-100/50 border-b border-gray-100 flex justify-between items-center">
-                        <span class="text-xs font-bold text-gray-700">依分區及創社先後排序明細</span>
+                        <span class="text-xs font-bold text-gray-700" id="stats-subtitle">依分區及創社先後排序明細</span>
                         <span class="text-xxs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-semibold">即時同步中</span>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
-                            <thead>
+                            <thead id="statistics-table-head">
                                 <tr class="bg-gray-50 border-b border-gray-200 text-xxs font-bold text-gray-400 uppercase tracking-wider">
                                     <th class="py-3.5 px-4">分區</th>
                                     <th class="py-3.5 px-4">扶輪社名稱</th>
                                     <th class="py-3.5 px-4 text-center">報名人數</th>
+                                    <th class="py-3.5 px-4 text-center text-rose-600 bg-rose-50/50">應繳總額</th>
                                     <th class="py-3.5 px-4 text-center">完成繳費</th>
                                     <th class="py-3.5 px-4 text-center">尚未完成</th>
                                     <th class="py-3.5 px-4 text-center">已報到</th>
@@ -922,6 +956,77 @@
         </div>
     </div>
 
+    <!-- MODERN MODAL 13.5: CLUB FINANCE (社務對帳與請款) -->
+    <div id="modal-club-finance" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transform scale-95 transition-all">
+            <div class="bg-gradient-to-r from-green-700 via-emerald-600 to-green-700 px-6 py-4 text-white flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-file-invoice-dollar text-green-100"></i></div>
+                    <div>
+                        <h3 class="font-extrabold text-base">社務對帳與請款系統</h3>
+                        <p class="text-[10px] text-green-100">執秘向社長請款與代墊款連動</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-club-finance')" class="text-green-200 hover:text-white active:translate-y-1 transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="overflow-y-auto p-5 space-y-4 flex-1 bg-gray-50 no-scrollbar">
+                <!-- 1. 固定請款區 -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div class="px-4 py-2 bg-gray-100/50 flex items-center justify-between border-b border-gray-100">
+                        <span class="text-xs font-bold text-gray-700"><i class="fa-solid fa-lock text-gray-400 mr-1"></i> 固定請款項目</span>
+                        <button onclick="addFinanceFixedRow()" class="text-[10px] bg-white border border-gray-300 text-gray-700 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-gray-200 transition-colors flex items-center gap-1"><i class="fa-solid fa-plus"></i> 手動新增</button>
+                    </div>
+                    <div class="p-3 space-y-2" id="finance-fixed-container">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-semibold text-gray-700">社辦租金</span>
+                            <div class="relative w-1/2">
+                                <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
+                                <input type="number" id="finance-rent" value="20000" class="w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-6 pr-2 text-sm text-right font-bold focus:outline-none focus:ring-2 focus:ring-green-500 transition-all" oninput="calcFinanceTotal()" onfocus="this.select()">
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-semibold text-gray-700">社秘薪資</span>
+                            <div class="relative w-1/2">
+                                <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
+                                <input type="number" id="finance-salary" value="35000" class="w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-6 pr-2 text-sm text-right font-bold focus:outline-none focus:ring-2 focus:ring-green-500 transition-all" oninput="calcFinanceTotal()" onfocus="this.select()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 社友代墊款區 -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div class="px-4 py-2 bg-emerald-50 flex items-center justify-between border-b border-emerald-100">
+                        <span class="text-xs font-bold text-emerald-800"><i class="fa-solid fa-people-arrows text-emerald-500 mr-1"></i> 社友代墊款 (自動連動社費)</span>
+                        <div class="flex gap-1">
+                            <button onclick="fetchGmailAdvances()" class="text-[10px] bg-white border border-red-200 text-red-600 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-red-50 transition-colors flex items-center gap-1"><i class="fa-brands fa-google"></i> 抓取信件</button>
+                            <button onclick="addFinanceAdvanceRow()" class="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-emerald-100 transition-colors"><i class="fa-solid fa-plus"></i> 手動新增</button>
+                        </div>
+                    </div>
+                    <div class="p-3 space-y-3" id="finance-advances-container">
+                        <!-- JS 動態新增 -->
+                        <div class="text-xs text-gray-400 italic text-center py-2" id="no-advance-msg">本月尚無任何社友代墊款</div>
+                    </div>
+                </div>
+
+                <!-- 總計區塊 -->
+                <div class="bg-gray-900 rounded-2xl p-4 shadow-lg flex justify-between items-center border border-gray-800 btn-3d btn-3d-dark mt-2">
+                    <span class="text-gray-300 font-bold text-sm">本期請款總計</span>
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-green-400 font-bold text-xs">NT$</span>
+                        <span class="text-white font-black text-2xl tracking-wide" id="finance-total-amount">55,000</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white border-t border-gray-200 p-4 flex gap-2 shrink-0">
+                <button onclick="closeModal('modal-club-finance')" class="w-1/3 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-xl text-sm border border-gray-200 btn-3d btn-3d-white mb-1">取消</button>
+                <button onclick="submitClubFinance()" class="w-2/3 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1 btn-3d mb-1 transition-all" style="box-shadow: 0 4px 0 #14532d;"><i class="fa-solid fa-paper-plane"></i> 呈報社長並連動帳單</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODERN MODAL 14: CLUB DUES MANAGEMENT (社友社費管理) -->
     <div id="modal-club-dues" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
         <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transform scale-95 transition-all">
@@ -1060,6 +1165,89 @@
         </div>
     </div>
 
+    <!-- NEW MODAL 18: CLUB REGISTRATION ADMIN (報名專區 / 通知與統計) -->
+    <div id="modal-club-reg-admin" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[95vh] transform scale-95 transition-all">
+            <div class="bg-gradient-to-r from-amber-600 to-yellow-500 px-6 py-4 text-white flex justify-between items-center shrink-0 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-clipboard-list text-yellow-100"></i></div>
+                    <div>
+                        <h3 class="font-extrabold text-base tracking-wide text-white">報名專區</h3>
+                        <p class="text-[10px] text-yellow-100">社內與地區活動調查及追蹤</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-club-reg-admin')" class="text-yellow-100 hover:text-white transition-colors active:scale-90"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="overflow-y-auto flex-1 bg-gray-50 no-scrollbar p-5 space-y-5">
+                
+                <!-- 1. 活動選擇區 (整合地區與社內) -->
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-black text-gray-700"><i class="fa-solid fa-calendar-day mr-1 text-amber-600"></i> 1. 選擇要調查的活動</label>
+                    <select id="club-reg-event-select" onchange="loadEventSurveyData()" class="w-full bg-white border border-gray-300 text-gray-900 rounded-xl py-2.5 px-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm cursor-pointer transition-all">
+                        <!-- Populated via JS -->
+                    </select>
+                </div>
+
+                <!-- 2. 發送通知區 -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" id="club-reg-notice-section">
+                    <div class="px-4 py-2.5 bg-gray-100 border-b border-gray-200 flex justify-between items-center">
+                        <span class="text-xs font-bold text-gray-700"><i class="fa-solid fa-paper-plane mr-1 text-blue-500"></i> 2. 選擇發送對象</span>
+                        <button onclick="toggleAllSurveyMembers()" class="text-[10px] text-blue-600 font-bold hover:text-blue-800 flex items-center gap-1 bg-white px-2 py-0.5 rounded shadow-sm border border-gray-200 active:scale-95 transition-all"><i class="fa-solid fa-check-double"></i>全選/全不選</button>
+                    </div>
+                    <div class="p-3">
+                        <div id="club-reg-member-list" class="max-h-36 overflow-y-auto no-scrollbar space-y-1 bg-gray-50 p-2 rounded-xl border border-gray-200 shadow-inner">
+                            <!-- Populated via JS -->
+                        </div>
+                        <button onclick="sendClubSurvey()" class="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-[12px] flex items-center justify-center gap-1.5 btn-3d btn-3d-primary mb-1 transition-all">
+                            <i class="fa-regular fa-paper-plane"></i> 發送活動報名通知 (LINE 推播)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. 即時統計與追蹤區 (發送後顯示) -->
+                <div id="club-reg-stats-section" class="hidden space-y-3">
+                    <label class="block text-xs font-black text-gray-700"><i class="fa-solid fa-chart-pie mr-1 text-indigo-500"></i> 3. 即時報名狀態追蹤</label>
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-2 text-center shadow-sm">
+                            <span class="block text-[10px] text-emerald-700 font-bold mb-0.5">🟢 已參加</span>
+                            <span class="block text-xl font-black text-emerald-600" id="survey-stat-attending">0</span>
+                        </div>
+                        <div class="bg-rose-50 border border-rose-200 rounded-xl p-2 text-center shadow-sm">
+                            <span class="block text-[10px] text-rose-700 font-bold mb-0.5">🔴 已請假</span>
+                            <span class="block text-xl font-black text-rose-600" id="survey-stat-leave">0</span>
+                        </div>
+                        <div class="bg-gray-100 border border-gray-300 rounded-xl p-2 text-center shadow-sm relative overflow-hidden">
+                            <span class="block text-[10px] text-gray-600 font-bold mb-0.5">⚪ 未回覆</span>
+                            <span class="block text-xl font-black text-gray-700" id="survey-stat-pending">0</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden text-xs">
+                        <div class="max-h-40 overflow-y-auto no-scrollbar p-2 space-y-1.5" id="survey-detail-list">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200">
+                        <button onclick="simulateMemberReply()" class="col-span-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 font-bold py-2 rounded-xl text-[11px] transition-colors mb-2">
+                            <i class="fa-solid fa-users-viewfinder"></i> [模擬] 社友陸續點擊回覆...
+                        </button>
+
+                        <button onclick="remindPendingMembers()" class="bg-amber-500 hover:bg-amber-600 text-yellow-950 font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 btn-3d btn-3d-warning mb-1 transition-all">
+                            <i class="fa-solid fa-bell"></i> 三天後自動跟催
+                        </button>
+                        <button onclick="reportToPresident()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 btn-3d btn-3d-dark mb-1 transition-all">
+                            <i class="fa-solid fa-file-export"></i> 呈報未回覆名單
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
     <!-- MODERN MODAL 16: GPS Map LIFF (80% 高度防弊地圖視窗) -->
     <div id="modal-gps-map" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex flex-col justify-end hidden transition-all">
         <div class="bg-white w-full h-[80vh] rounded-t-[2rem] shadow-2xl flex flex-col overflow-hidden animate-slideUp">
@@ -1148,12 +1336,13 @@
             { id: 10, area: "第三分區", name: "台北忠孝扶輪社", charterYear: 1996, registered: 13, paid: 11, attended: 5 }
         ];
 
-        // --- 2. EXCEL DATABASE (2025-26 訓練會議時間表) 增加 LBS 座標庫 ---
+        // --- 2. EXCEL DATABASE (2025-26 訓練會議時間表) ---
         const districtEventSchedule = [
             { id: 102, date: "2025-05-25", displayDate: "2025-05-25", weekday: "星期日", title: "DTTS 地區團隊訓練研討會", location: "漢來飯店", chair: "王維宏", club: "南欣社", time: "13:00-17:00", type: "訓練研討", lat: 25.0531, lng: 121.6143 },
             { id: 104, date: "2025-08-24", displayDate: "2025-08-24", weekday: "星期日", title: "DTA 地區訓練講習會", location: "大直典華", chair: "蔡圻", club: "南海社", time: "10:00-16:30", type: "訓練研討", lat: 25.0833, lng: 121.5562 },
             { id: 107, date: "2026-09-15", displayDate: "2026-09-15", weekday: "星期二", title: "地區青少年交換(RYE)講習會", location: "台北福華大飯店", chair: "陳俊宇", club: "逸仙社", time: "10:00-15:00", type: "講習培訓", lat: 25.0375, lng: 121.5434 },
             { id: 106, date: "2026-10-14", displayDate: "2026-10-14", weekday: "星期三", title: "總監盃高爾夫球比賽", location: "老淡水高爾夫球場", chair: "林星煌", club: "忠孝社", time: "整天", type: "地區運動", lat: 25.1822, lng: 121.4300 },
+            { id: 110, date: "2026-12-03", displayDate: "2026-12-03", weekday: "星期四", title: "眷聯會", location: "香格里拉", chair: "May", club: "地區委員會", time: "12:00-14:00", type: "眷聯會", lat: 25.0263, lng: 121.5484 },
             { id: 109, date: "2026-12-26", displayDate: "2026-12-26~27", weekday: "星期六、日", title: "地區年會", location: "圓山飯店", chair: "王欽秉", club: "地區委員會", time: "整天", type: "地區年會", lat: 25.0785, lng: 121.5262 }
         ];
 
@@ -1166,7 +1355,7 @@
             { name: "陳建國 社友", scores: [4, 4, 5, 4, 5, 3, 4, 6, 4, 5, 4, 4, 5, 4, 4, 4, 5, 5], isMe: false },
             { name: "林永生 社友", scores: [6, 2, 7, 5, 4, 3, 5, 6, 5, 5, 5, 4, 7, 4, 5, 4, 6, 4], isMe: false }
         ];
-        const golfPars = [4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4]; // Total Par 72
+        const golfPars = [4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4]; 
         
         let golfGroupAttendance = [
             { name: "李志明 社友", arrived: true },
@@ -1185,7 +1374,6 @@
             { club: "台北向陽扶輪社", name: "劉德華", out: 51, in: 51, grossTotal: 102, registeredHandicap: 28.0 }
         ];
 
-        // 虛擬的本社社友出席率總覽資料
         const clubMembersAttendance = [
             { name: "王大同 (本人)", year: "88%", h1: "92%", q1: "100%", q2: "85%" },
             { name: "李志明", year: "95%", h1: "90%", q1: "90%", q2: "90%" },
@@ -1195,26 +1383,32 @@
         ];
 
         // --- 4. GLOBAL STATE ---
-        let userRole = 'member'; 
+        let userRole = 'chair_club_admin'; 
         let activeTab = 'home'; 
-        let systemScope = 'district'; 
+        let systemScope = 'club'; 
         let currentUserClubId = 6; 
         let currentActiveEvent = null; 
         let isGolfCheckedIn = false; 
         let myRegisteredEvents = []; 
         let isRichMenuOpen = true; 
-
         let isNewNewPeoriaDrawn = false;
         let drawnHiddenHoles = [];
 
-        // NEW: Event-Based Registration Database (獨立活動報名資料庫)
-        // eventRegistrations[eventId][clubId] = [ {id: '...', name: '...', type: '...', handicap: '...'} ]
         let eventRegistrations = {
             102: { 6: [{id: 'm_6_1', name: '李志明 社友', type:'exec'}, {id: 'm_6_2', name: '陳建國 社友', type:'exec'}] },
             104: { 6: [{id: 'm_6_3', name: '林永生 社友', type:'exec'}] },
         };
 
-        // Attendance Tracking State
+        // [2026-07-15 新增: 社友寶尊眷預設資料庫]
+        const familyDB = {
+            "m_6_0": ["王美麗 (妻)", "王大寶 (子)"],
+            "m_6_1": ["李小花 (女)"],
+            "m_6_2": ["陳太太 (妻)"]
+        };
+
+        // NEW: 社內報名專區調查資料庫 (Survey DB)
+        let clubSurveyDB = {}; 
+
         let currentAttendanceStats = {
             rates: { year: "88%", h1: "92%", q1: "100%", q2: "85%", q3: "90%" },
             monthly: [
@@ -1226,30 +1420,20 @@
             newMakeups: [] 
         };
 
-        // NEW: User Bank Accounts History (記憶社友後5碼)
-        let userBankAccounts = {
-            'm_6_0': [] // User '王大同' bank accounts
-        };
+        let userBankAccounts = { 'm_6_0': [] };
 
-        // NEW: Dues Database (社費資料庫)
-        // duesDB[clubId][month][memberId] = { meal: 0, iou: 0, customs: [ {name: '...', amount: 0} ], isPaid: false }
         let duesDB = {
-            6: {
-                "2026-07": {
-                    "m_6_0": { meal: 1000, iou: 500, customs: [{name: "總監之夜", amount: 3000}], isPaid: false }
-                }
-            }
+            6: { "2026-07": { "m_6_0": { meal: 1000, iou: 500, customs: [{name: "總監之夜", amount: 3000}], isPaid: false } } }
         };
 
-        // NEW: VIP Database for Event Calling (貴賓介紹資料庫)
         let vipDatabase = {
-            107: [ // RYE
+            107: [
                 { id: 'v1', name: '陳俊宇', title: '地區總監 DG', order: 1, arrived: true, arriveTime: '09:30', isCalled: false },
                 { id: 'v2', name: '林大智', title: '前總監 PDG', order: 2, arrived: true, arriveTime: '09:45', isCalled: false },
                 { id: 'v3', name: '黃美麗', title: '總監當選人 DGE', order: 3, arrived: false, arriveTime: '', isCalled: false },
                 { id: 'v4', name: '張惠妹', title: '總監提名人 DGN', order: 4, arrived: true, arriveTime: '10:45', isCalled: false }
             ],
-            109: [ // Annual
+            109: [
                 { id: 'v1', name: '王欽秉', title: '地區總監 DG', order: 1, arrived: true, arriveTime: '09:15', isCalled: false },
                 { id: 'v2', name: '李世民', title: '前總監 PDG', order: 2, arrived: true, arriveTime: '10:20', isCalled: false },
                 { id: 'v3', name: '趙子龍', title: '國際扶輪理事 RI Dir.', order: 3, arrived: true, arriveTime: '10:40', isCalled: false },
@@ -1258,23 +1442,12 @@
             ]
         };
 
-        // Helper Function to check if an event is a Golf event
         const isGolfEvent = (ev) => ev && (ev.id === 106 || ev.type === '社內高球');
 
         // --- 5. STARTUP ENGINE ---
         window.onload = function() {
             populateSimUserClubDropdown();
-            currentActiveEvent = findClosestUpcomingEvent();
-            updateUIMonitors();
-            renderEbooksMenu();
-            renderProfileMenu(); 
-            renderAdminMenu(); 
-            renderGolfScorecard(); 
-
-            addChatMessage("bot", "💡 <b>地區秘書處系統啟動：</b><br>已為您建置 <b>專屬活動報名資料庫</b>！<br>現在「我要報名」或「執秘報名」，都會獨立寫入您當下所選活動的資料庫。您可以切換至 <b>「地區年會」</b> 來體驗乾淨、獨立的名單同步功能！");
-            
-            renderStatisticsTable();
-            populateScanTargetDropdown();
+            toggleSystemScope(true); 
         };
 
         // --- 6. CORE HELPER: GET EVENTS BY SCOPE ---
@@ -1289,6 +1462,17 @@
                     { id: 4000 + currentUserClubId, date: "2026-08-10", displayDate: "2026-08-10", weekday: "星期一", title: `${myClub.name} 8月份高球月例賽`, location: "美麗華高爾夫球場", chair: "本社高球主委", club: myClub.name, time: "06:00-14:00", type: "社內高球" }
                 ];
             }
+        }
+
+        function getAllCombinedEvents() {
+            const myClub = clubsData.find(c => c.id === currentUserClubId) || {name: "本社"};
+            const clubEvents = [
+                { id: 2000 + currentUserClubId, date: "2026-06-20", displayDate: "2026-06-20", title: `${myClub.name} 第 1234 次例會`, type: "社內例會", scope: "社內" },
+                { id: 3000 + currentUserClubId, date: "2026-07-15", displayDate: "2026-07-15", title: `${myClub.name} 秋季國內旅遊`, type: "社內旅遊", scope: "社內" },
+                { id: 4000 + currentUserClubId, date: "2026-08-10", displayDate: "2026-08-10", title: `${myClub.name} 8月份高球月例賽`, type: "社內高球", scope: "社內" }
+            ];
+            const distEvents = districtEventSchedule.map(e => ({...e, scope: "地區"}));
+            return [...distEvents, ...clubEvents].sort((a, b) => new Date(a.date) - new Date(b.date));
         }
 
         function findClosestUpcomingEvent() {
@@ -1313,17 +1497,16 @@
             document.getElementById('active-chair').innerText = `${currentActiveEvent.chair} (${currentActiveEvent.club})`;
             document.getElementById('active-notes').innerText = `${currentActiveEvent.time} ${currentActiveEvent.weekday}`;
 
-            let gradientStr = systemScope === 'district' ? 'from-[#1e2a5f] to-[#2a3c7c]' : 'from-emerald-900 to-teal-800';
+            let gradientStr = systemScope === 'district' ? 'from-blue-950 via-blue-900 to-indigo-800' : 'from-emerald-900 via-emerald-800 to-teal-800';
             const bannerBg = document.getElementById('banner-bg-gradient');
             if (bannerBg) {
-                // 確保動態切換視角時，Padding 等比例樣式維持一致
-                bannerBg.className = `flex-1 bg-gradient-to-tr ${gradientStr} p-2.5 pb-2 flex flex-col justify-between rounded-xl relative overflow-hidden cursor-pointer btn-3d btn-3d-dark hover:brightness-110 active:brightness-95 transition-all text-white shadow-sm border border-[#3b4c8c]`;
+                bannerBg.className = `col-span-2 row-span-2 bg-gradient-to-tr ${gradientStr} p-3 flex flex-col border-r border-gray-200 relative overflow-hidden text-white`;
             }
             
             document.getElementById('banner-title').innerText = currentActiveEvent.title;
             document.getElementById('banner-date').innerText = currentActiveEvent.displayDate || currentActiveEvent.date;
             document.getElementById('banner-tag').innerText = currentActiveEvent.type;
-            document.getElementById('banner-loc-text').innerHTML = `<i class="fa-solid fa-location-dot ${systemScope==='district'?'text-rose-400':'text-yellow-400'}"></i>${currentActiveEvent.location}`;
+            document.getElementById('banner-loc-text').innerHTML = `<i class="fa-solid fa-location-dot ${systemScope==='district'?'text-rose-400':'text-yellow-400'} mr-1.5"></i>${currentActiveEvent.location}`;
             
             renderProfileMenu();
             renderAdminMenu();
@@ -1342,8 +1525,13 @@
             }
         }
 
-        function toggleSystemScope() {
-            systemScope = (systemScope === 'district') ? 'club' : 'district';
+        function toggleSystemScope(forceClub = false) {
+            if (forceClub) {
+                systemScope = 'club';
+            } else {
+                systemScope = (systemScope === 'district') ? 'club' : 'district';
+            }
+
             const scopeText = document.getElementById('ui-current-scope');
             const scopeIcon = document.getElementById('scope-icon');
             const scopeIconBg = document.getElementById('scope-icon-bg');
@@ -1352,10 +1540,13 @@
             const headerSub = document.getElementById('chat-header-subtitle');
             const myClub = clubsData.find(c => c.id === currentUserClubId);
 
-            wrapper.classList.add('opacity-50', 'scale-[0.98]');
+            if (!forceClub) wrapper.classList.add('opacity-50', 'scale-[0.98]');
             
             setTimeout(() => {
                 if (systemScope === 'district') {
+                    document.getElementById('sim-user-role').value = 'admin_all';
+                    userRole = 'admin_all';
+
                     scopeText.innerText = "🌐 3523 地區總部";
                     scopeText.className = "text-xs font-bold tracking-wide text-yellow-400";
                     scopeIcon.className = "fa-solid fa-globe text-white text-xs";
@@ -1368,11 +1559,14 @@
                     const homeBtn2 = document.getElementById('home-btn-2');
                     if (homeBtn2) {
                         homeBtn2.setAttribute('onclick', "clickMenuItem('地區官網首頁', 'home-website')");
-                        document.getElementById('home-btn-2-icon').className = "w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-lg shadow-inner";
+                        document.getElementById('home-btn-2-icon').className = "w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm shadow-inner";
                         document.getElementById('home-btn-2-icon').innerHTML = '<i class="fa-solid fa-globe"></i>';
-                        document.getElementById('home-btn-2-text').innerText = "官網";
+                        document.getElementById('home-btn-2-text').innerText = "地區官網";
                     }
                 } else {
+                    document.getElementById('sim-user-role').value = 'chair_club_admin';
+                    userRole = 'chair_club_admin';
+
                     scopeText.innerText = `🏠 ${myClub ? myClub.name : '本社'}專區`;
                     scopeText.className = "text-xs font-bold tracking-wide text-emerald-300";
                     scopeIcon.className = "fa-solid fa-house-flag text-emerald-900 text-xs";
@@ -1384,20 +1578,22 @@
                     
                     const homeBtn2 = document.getElementById('home-btn-2');
                     if (homeBtn2) {
-                        homeBtn2.setAttribute('onclick', "clickMenuItem('出席累計', 'home-attendance')");
-                        document.getElementById('home-btn-2-icon').className = "w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg shadow-inner";
-                        document.getElementById('home-btn-2-icon').innerHTML = '<i class="fa-solid fa-clipboard-user"></i>';
-                        document.getElementById('home-btn-2-text').innerText = "出席累計";
+                        let shortName = myClub ? myClub.name.replace('台北', '').replace('扶輪社', '') : '本社';
+                        homeBtn2.setAttribute('onclick', `clickMenuItem('${shortName}官網', 'home-website')`);
+                        document.getElementById('home-btn-2-icon').className = "w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm shadow-inner";
+                        document.getElementById('home-btn-2-icon').innerHTML = '<i class="fa-solid fa-globe"></i>';
+                        document.getElementById('home-btn-2-text').innerText = `${shortName}官網`;
                     }
                 }
 
                 currentActiveEvent = findClosestUpcomingEvent();
                 updateUIMonitors();
                 renderEbooksMenu();
-                switchTab('home');
-                wrapper.classList.remove('opacity-50', 'scale-[0.98]');
-                addChatMessage("system", `🔄 <b>資料視角切換至：${systemScope === 'district' ? '地區總部' : '社內專區'}</b>`);
-            }, 300);
+                if (!forceClub) switchTab('home');
+                if (!forceClub) wrapper.classList.remove('opacity-50', 'scale-[0.98]');
+                
+                if (!forceClub) addChatMessage("system", `🔄 <b>資料視角切換至：${systemScope === 'district' ? '地區總部' : '社內專區'}</b><br><span class="text-[10px] text-gray-400">💡 系統已自動切換對應權限以利測試。</span>`);
+            }, forceClub ? 0 : 300);
         }
 
         function toggleRichMenu() {
@@ -1446,10 +1642,24 @@
             addChatMessage("system", `🔑 系統已將您的身分切換為：<br><b class="text-blue-600">${roleNames[userRole]}</b>`);
             
             renderAdminMenu();
-            
-            if(activeTab === 'admin') {
-                addChatMessage("system", `🛡️ <b>權限重新驗證：</b><br>正在驗證您是否具備檢視「${currentActiveEvent.title}」後台的權限...`);
-            }
+        }
+
+        function switchTab(tabId) {
+            activeTab = tabId;
+            ['home', 'profile', 'ebooks', 'admin'].forEach(t => {
+                document.getElementById(`menu-content-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}-indicator`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).classList.remove('bg-white');
+                document.getElementById(`tab-${t}`).classList.add('hover:bg-gray-50');
+                if (t === 'home') document.getElementById(`tab-${t}`).classList.replace('text-blue-900', 'text-gray-600');
+                else document.getElementById(`tab-${t}`).classList.replace('text-blue-900', 'text-gray-600');
+            });
+
+            document.getElementById(`menu-content-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabId}-indicator`).classList.remove('hidden');
+            document.getElementById(`tab-${tabId}`).classList.remove('hover:bg-gray-50');
+            document.getElementById(`tab-${tabId}`).classList.add('bg-white');
+            document.getElementById(`tab-${tabId}`).classList.replace('text-gray-600', 'text-blue-900');
         }
 
         // --- 9. RENDER DYNAMIC MENUS ---
@@ -1528,7 +1738,6 @@
             let themeColor = systemScope === 'district' ? 'from-teal-800 to-emerald-700' : 'from-indigo-800 to-blue-700';
             let bannerTag = systemScope === 'district' ? 'LIFF 身份識別已綁定' : 'LIFF 身份識別已綁定';
 
-            // 動態判斷右下角按鈕：地區視角維持原設計「回報匯款」，社內視角為「本月社費」
             let profileActionBtn = systemScope === 'district' ? `
                 <div onclick="openModal('modal-payment-info')" class="bg-white flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
                     <i class="fa-solid fa-money-check-dollar text-lg text-teal-600"></i>
@@ -1541,6 +1750,18 @@
                 </div>
             `;
 
+            let middleBtn = systemScope === 'district' ? `
+                <div onclick="openMatchmakingModal()" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                    <i class="fa-solid fa-robot text-lg text-blue-500"></i>
+                    <span class="text-xxs font-bold text-slate-700 text-center">產業媒合</span>
+                </div>
+            ` : `
+                <div onclick="clickMenuItem('出席累計', 'home-attendance')" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
+                    <i class="fa-solid fa-clipboard-user text-lg text-indigo-500"></i>
+                    <span class="text-xxs font-bold text-slate-700 text-center">出席累計</span>
+                </div>
+            `;
+
             if (isGolf) {
                 if (!isGolfCheckedIn) {
                     container.className = "grid grid-cols-3 h-full";
@@ -1549,7 +1770,7 @@
                             <div>
                                 <span class="text-[9px] bg-emerald-400 text-teal-950 font-extrabold px-1.5 py-0.5 rounded tracking-wider uppercase">${bannerTag}</span>
                                 <h4 class="font-bold text-sm mt-1.5 drop-shadow-md">讀取大會報到 QR</h4>
-                                <p class="text-xxs text-white/80 mt-1 leading-snug">請掃描現場專屬條碼，一秒解鎖您的專屬電子計分卡。</p>
+                                <p class="text-xxs text-white/80 mt-1 leading-snug">掃描後自動啟用計分卡，並核發電子補出席單。</p>
                             </div>
                             <div class="flex items-center justify-between text-[10px] font-bold text-yellow-300">
                                 <span>開啟掃描相機 <i class="fa-solid fa-camera ml-1"></i></span>
@@ -1557,10 +1778,7 @@
                             </div>
                         </div>
                         <div class="grid grid-rows-2">
-                            <div onclick="openMatchmakingModal()" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
-                                <i class="fa-solid fa-robot text-lg text-indigo-500"></i>
-                                <span class="text-xxs font-bold text-slate-700 text-center">產業媒合</span>
-                            </div>
+                            ${middleBtn}
                             ${profileActionBtn}
                         </div>
                     `;
@@ -1622,14 +1840,12 @@
                                 <i class="fa-solid fa-trophy text-yellow-500"></i>我得什麼獎
                             </button>
                             <button onclick="clickClubAwards(event)" class="bg-white hover:bg-gray-100 text-slate-800 text-[10px] font-bold flex items-center justify-center gap-1 rounded-lg border border-gray-200 transition-colors shadow-sm">
-                                <i class="fa-solid fa-medal text-amber-500"></i>社內得獎名單
+                                <i class="fa-solid fa-medal text-amber-500"></i>社內名單
                             </button>
                         </div>
                     </div>
                     <div class="grid grid-rows-2">
-                        <div onclick="openMatchmakingModal()" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
-                            <i class="fa-solid fa-robot text-lg text-indigo-500"></i><span class="text-xxs font-bold text-slate-700">產業媒合</span>
-                        </div>
+                        ${middleBtn}
                         ${profileActionBtn}
                     </div>`;
             } else {
@@ -1639,7 +1855,7 @@
                         <div>
                             <span class="text-[9px] bg-white/20 text-white font-extrabold px-1.5 py-0.5 rounded shadow-sm">${bannerTag}</span>
                             <h4 class="font-bold text-sm mt-1.5 drop-shadow-md">讀取大會報到 QR</h4>
-                            <p class="text-xxs text-white/80 mt-1 leading-snug">請掃描大會現場提供的專屬條碼，一秒完成報到並累加您的出席次數。</p>
+                            <p class="text-xxs text-white/80 mt-1 leading-snug">請掃描大會現場提供的專屬條碼，一秒完成報到。</p>
                         </div>
                         <div class="flex items-center justify-between text-[10px] font-bold text-yellow-300">
                             <span>開啟相機 <i class="fa-solid fa-camera ml-1"></i></span>
@@ -1647,9 +1863,7 @@
                         </div>
                     </div>
                     <div class="grid grid-rows-2">
-                        <div onclick="openMatchmakingModal()" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
-                            <i class="fa-solid fa-robot text-lg text-indigo-500"></i><span class="text-xxs font-bold text-slate-700">產業媒合</span>
-                        </div>
+                        ${middleBtn}
                         ${profileActionBtn}
                     </div>`;
             }
@@ -1700,7 +1914,7 @@
                     <div class="mt-4 bg-white/10 p-2 rounded-lg border border-white/20 text-left w-[85%]">
                         <p class="text-[9px] text-gray-300">嘗試存取：<span class="text-yellow-400 font-bold">${currentActiveEvent ? currentActiveEvent.title : '未知'}</span></p>
                     </div>
-                    <button class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-[10px] font-bold shadow-md transition-colors" onclick="document.getElementById('sim-user-role').value='admin_all'; changeUserRole();">
+                    <button class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-[10px] font-bold shadow-md transition-colors btn-3d btn-3d-primary mb-1" onclick="document.getElementById('sim-user-role').value='admin_all'; changeUserRole();">
                         一鍵切換最高權限測試 &gt;
                     </button>
                 `;
@@ -1783,7 +1997,6 @@
                         </div>
                     </div>
                     <div class="grid grid-rows-2">
-                        <!-- 修改：將 RYE 的報到相機改為貴賓介紹 -->
                         <div onclick="openVIPListModal()" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-purple-50 active:bg-purple-100 transition-colors">
                             <i class="fa-solid fa-microphone-lines text-lg text-purple-600"></i><span class="text-[10px] font-bold text-slate-700">貴賓介紹</span>
                         </div>
@@ -1814,7 +2027,6 @@
                         </div>
                     </div>
                     <div class="grid grid-rows-2">
-                        <!-- 修改：將年會的年會相機改為貴賓介紹 -->
                         <div onclick="openVIPListModal()" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-purple-50 active:bg-purple-100 transition-colors">
                             <i class="fa-solid fa-microphone-lines text-lg text-purple-600"></i><span class="text-[10px] font-bold text-slate-700">貴賓介紹</span>
                         </div>
@@ -1830,13 +2042,13 @@
                             <i class="fa-solid fa-chart-pie text-[#5c8cf3] text-2xl drop-shadow-md"></i>
                             <span class="text-white font-bold text-[10px] tracking-widest mt-0.5">社友出席率</span>
                         </div>
-                        <div onclick="showAlert('社務對帳', '載入本社各項收支與活動帳務核對系統...')" class="bg-[#343e4f] rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:bg-[#3f4a5c] active:scale-95 transition-all shadow-sm border border-[#48566b]">
+                        <div onclick="openClubFinanceModal()" class="bg-[#343e4f] rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:bg-[#3f4a5c] active:scale-95 transition-all shadow-sm border border-[#48566b]">
                             <i class="fa-solid fa-file-invoice-dollar text-[#7dd579] text-2xl drop-shadow-md"></i>
                             <span class="text-white font-bold text-[10px] tracking-widest mt-0.5">社務對帳</span>
                         </div>
-                        <div onclick="showAlert('理監事專區', '載入理監事會議紀錄與專屬決策區...')" class="bg-[#343e4f] rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:bg-[#3f4a5c] active:scale-95 transition-all shadow-sm border border-[#48566b]">
-                            <i class="fa-solid fa-users-gear text-[#f7c244] text-2xl drop-shadow-md"></i>
-                            <span class="text-white font-bold text-[10px] tracking-widest mt-0.5">理監事專區</span>
+                        <div onclick="openClubRegAdminModal()" class="bg-[#343e4f] rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:bg-[#3f4a5c] active:scale-95 transition-all shadow-sm border border-[#48566b]">
+                            <i class="fa-solid fa-clipboard-list text-[#f7c244] text-2xl drop-shadow-md"></i>
+                            <span class="text-white font-bold text-[10px] tracking-widest mt-0.5">報名專區</span>
                         </div>
                         <div onclick="openClubDuesModal()" class="bg-[#343e4f] rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:bg-[#3f4a5c] active:scale-95 transition-all shadow-sm border border-[#48566b]">
                             <i class="fa-solid fa-file-invoice text-[#eb6790] text-2xl drop-shadow-md"></i>
@@ -1860,7 +2072,7 @@
                     </div>
                     <div class="grid grid-rows-2">
                         <div onclick="openAdminScanner()" class="bg-white border-b border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-emerald-50 active:bg-emerald-100 transition-colors">
-                            <i class="fa-solid fa-camera text-lg text-emerald-600"></i><span class="text-[10px] font-bold text-slate-700">現場相機</span>
+                            <i class="fa-solid fa-camera text-lg text-emerald-600"></i><span class="text-[10px] font-bold text-slate-700">貴賓介紹</span>
                         </div>
                         <div onclick="clickMenuItem('秘書處支援', 'admin-contact')" class="bg-white flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors">
                             <i class="fa-solid fa-headset text-lg text-gray-500"></i><span class="text-[10px] font-bold text-slate-700">後台支援</span>
@@ -1869,30 +2081,6 @@
             }
 
             container.innerHTML = contentHtml;
-        }
-
-        function getTabNameInChinese(id) {
-            if (id === 'admin') {
-                return (systemScope === 'club' && userRole === 'chair_club_admin') ? '社長專區' : '主委專區';
-            }
-            return {'home':'首頁活動','profile':'個人中心','ebooks':'大會刊物'}[id] || '';
-        }
-
-        function switchTab(tabId) {
-            activeTab = tabId;
-            ['home', 'profile', 'ebooks', 'admin'].forEach(t => {
-                const btn = document.getElementById(`tab-${t}`);
-                if(btn) { btn.classList.remove('text-blue-900', 'bg-white'); btn.classList.add('text-gray-500'); }
-                document.getElementById(`tab-${t}-indicator`)?.classList.add('hidden');
-                document.getElementById(`menu-content-${t}`)?.classList.add('hidden');
-            });
-            const activeBtn = document.getElementById(`tab-${tabId}`);
-            if(activeBtn) { activeBtn.classList.remove('text-gray-500'); activeBtn.classList.add('text-blue-900', 'bg-white'); }
-            document.getElementById(`tab-${tabId}-indicator`)?.classList.remove('hidden');
-            document.getElementById(`menu-content-${tabId}`)?.classList.remove('hidden');
-
-            if(tabId === 'profile') renderProfileMenu();
-            if(tabId === 'admin') renderAdminMenu();
         }
 
         // --- 10. ACTION HANDLERS ---
@@ -1916,11 +2104,8 @@
                     filteredEvents.forEach(ev => {
                         const isUpcoming = new Date(ev.date) >= SIMULATED_TODAY;
                         const badgeColor = isUpcoming ? "bg-emerald-500" : "bg-gray-400";
-                        
-                        // 高球比賽等非補出席活動，不顯示補課標籤
                         const makeupBadge = (systemScope === 'district' && !isGolfEvent(ev)) ? `<div class="mt-1"><span class="bg-indigo-50 text-indigo-600 border border-indigo-200 px-1.5 py-0.5 rounded text-[9px] font-bold"><i class="fa-solid fa-stamp mr-1"></i>參加本活動可計入跨社補出席</span></div>` : '';
                         
-                        // --- 新增：動態判斷，若是社內例會，則顯示專屬 PDF 按鈕 ---
                         let actionButtons = '';
                         if (systemScope === 'club' && ev.type === '社內例會') {
                             actionButtons = `
@@ -1944,7 +2129,7 @@
                         listHtml += `
                             <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm space-y-2">
                                 <div class="flex justify-between items-center">
-                                    <span class="px-2 py-0.5 rounded text-white text-[10px] font-bold ${badgeColor}">${isUpcoming ? '即轉到來' : '已結束'}</span>
+                                    <span class="px-2 py-0.5 rounded text-white text-[10px] font-bold ${badgeColor}">${isUpcoming ? '即將到來' : '已結束'}</span>
                                     <span class="text-gray-400 font-black text-sm tracking-wide">${ev.displayDate || ev.date}</span>
                                 </div>
                                 <h5 class="font-bold text-gray-900 text-sm leading-snug">${ev.title}</h5>
@@ -1993,7 +2178,6 @@
             setTimeout(() => addChatMessage("bot", `📖 即將開啟電子文件《${bookName}》...`), 500);
         }
 
-        // --- NEW: 開啟例會 PDF 預覽 ---
         function openMeetingPDF() {
             addChatMessage("user", "查看例會 PDF");
             setTimeout(() => {
@@ -2001,29 +2185,232 @@
             }, 600);
         }
 
-        // --- 11. REGISTRATION LOGIC ---
+        function simulateUserScanEvent() {
+            closeModal('modal-user-scanner');
+            addChatMessage("user", "讀取大會報到 QR Code");
+
+            // v1 併入：報到成功後的回覆訊息
+            const finishCheckin = () => {
+                if (isGolfEvent(currentActiveEvent)) {
+                    isGolfCheckedIn = true;
+                    addChatMessage("bot", "✅ <b>報到成功！</b><br>您已完成 <b>總監盃高爾夫球比賽</b> 的報到。<br>已解鎖您的「專屬計分卡」功能，並安排在【第 18 組】出發！");
+                    renderProfileMenu();
+                } else if (currentActiveEvent && (currentActiveEvent.id === 108 || currentActiveEvent.id === 109)) {
+                    addChatMessage("bot", `✅ <b>報到成功！</b><br>您已完成 <b>${currentActiveEvent.title}</b> 報到。<br>系統已自動將您加入大會摸彩名單。`);
+                } else {
+                    addChatMessage("bot", `✅ <b>報到成功！</b><br>已為您完成 <b>${currentActiveEvent ? currentActiveEvent.title : '本次活動'}</b> 的電子簽到！`);
+                }
+            };
+
+            setTimeout(() => {
+                // v1 併入：地區年會 (id 109) 需通過 LBS 定位防弊驗證 (允許誤差 100 公尺)
+                if (currentActiveEvent && currentActiveEvent.id === 109 && !isGolfEvent(currentActiveEvent)) {
+                    const eventLat = currentActiveEvent.lat || 25.0785;
+                    const eventLng = currentActiveEvent.lng || 121.5262;
+                    addChatMessage("system", `📍 <b>【LBS 定位驗證中】</b><br>正在獲取您的實際 GPS 定位，以核對是否在「${currentActiveEvent.location}」活動現場 (允許誤差 100 公尺)...`);
+
+                    const runGpsCheck = (userLat, userLng) => {
+                        const dist = calculateDistance(userLat, userLng, eventLat, eventLng);
+                        setTimeout(() => {
+                            if (dist <= 100) {
+                                addChatMessage("system", `✅ <b>定位驗證通過</b><br>距離會場：${Math.round(dist)} 公尺。`);
+                                finishCheckin();
+                            } else {
+                                openGpsMapModal(userLat, userLng, eventLat, eventLng, Math.round(dist));
+                                addChatMessage("system", `❌ <b>定位驗證失敗</b><br>距離會場 <b>${Math.round(dist)} 公尺</b>，超過允許範圍。<br><span class="text-[10px] text-gray-500">※ 已自動彈出 LIFF 視窗顯示您的實際座標。</span>`);
+                            }
+                        }, 1000);
+                    };
+
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            (position) => runGpsCheck(position.coords.latitude, position.coords.longitude),
+                            () => {
+                                // 未授權定位 -> 展示專用模擬座標 (台北 101 信義區)
+                                addChatMessage("system", `❌ <b>未獲取真實定位授權</b><br>因瀏覽器安全性限制，無法讀取您的真實 GPS。<br><span class="text-[10px] text-gray-500">※ 已自動為您載入模擬座標 (台北信義區) 進行功能展示。</span>`);
+                                setTimeout(() => runGpsCheck(25.0339, 121.5644), 1000);
+                            },
+                            { enableHighAccuracy: true }
+                        );
+                    } else {
+                        showAlert('錯誤', '您的瀏覽器不支援定位功能。');
+                    }
+                    return;
+                }
+                finishCheckin();
+            }, 600);
+        }
+
+        // ===== v1 併入：以下 5 個函式的 modal/按鈕在 v2 已存在，但缺少對應 JS =====
+
+        // 回報匯款 (modal-payment-info)
+        function submitPaymentInfo() {
+            const digits = document.getElementById('bank-digits').value.trim();
+            if (!digits || digits.length !== 5) {
+                showAlert('格式錯誤', '請輸入正確的匯款帳號末 5 碼！');
+                return;
+            }
+            closeModal('modal-payment-info');
+            addChatMessage("user", "回報匯款後 5 碼");
+            setTimeout(() => {
+                addChatMessage("bot", `✅ <b>【匯款資訊已登錄】</b><br>您已送出末 5 碼：<b class="text-blue-600">${digits}</b><br>對帳成功後將發送通知給您！`);
+                document.getElementById('bank-digits').value = '';
+            }, 500);
+        }
+
+        // AI 產業媒合 (modal-matchmaking)
+        function openMatchmakingModal() {
+            document.getElementById('matchmaking-query').value = '';
+            openModal('modal-matchmaking');
+        }
+
+        function submitMatchmakingQuery() {
+            const query = document.getElementById('matchmaking-query').value.trim();
+            if (!query) {
+                showAlert('請輸入需求', '請告訴 AI 助理您需要尋找什麼產業或服務喔！');
+                return;
+            }
+
+            closeModal('modal-matchmaking');
+            addChatMessage("user", `AI 產業媒合：${query}`);
+
+            setTimeout(() => {
+                addChatMessage("bot", `🤖 <b>AI 助理分析中...</b><br>正在檢索地區內 80 社社友的 LIFF 職業資料庫，尋找符合「${query}」的專業社友...`);
+
+                setTimeout(() => {
+                    let response = `✅ <b>【AI 產業媒合結果】</b><br>`;
+                    response += `為您找到高度相關的社友資訊：<br><br>`;
+                    response += `<div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg mb-2 shadow-sm">`;
+                    response += `<p class="font-bold text-indigo-900 text-sm mb-1"><i class="fa-solid fa-building text-indigo-500"></i> 綠境室內裝修設計</p>`;
+                    response += `<p class="text-xs text-gray-700">👤 <b>林建國 社友</b> (台北松青社)</p>`;
+                    response += `<p class="text-xs text-gray-700">💼 <b>職業分類：</b>室內裝潢設計</p>`;
+                    response += `<p class="text-xs text-gray-700 mt-1">📝 <b>公司簡介：</b><br>20年商辦與住宅設計經驗，自有專業工班，專攻企業總部與高階住宅，品質保證。</p>`;
+                    response += `<div class="mt-2 bg-yellow-100 border border-yellow-300 p-1.5 rounded text-yellow-800 text-[10px] font-bold">`;
+                    response += `🎁 <b>社友專屬優惠：</b><br>出示 LIFF 數位社友卡，享免初步提案費，總工程款 95 折！`;
+                    response += `</div>`;
+                    response += `<a href="#" class="mt-2 block text-center bg-white border border-indigo-200 text-indigo-600 py-1.5 rounded-lg shadow-sm text-xs font-bold hover:bg-indigo-100 transition-colors mt-2">瀏覽數位名片</a>`;
+                    response += `</div>`;
+                    addChatMessage("bot", response);
+                }, 1500);
+            }, 500);
+        }
+
+        // LBS 定位防弊地圖 (modal-gps-map)
+        function openGpsMapModal(userLat, userLng, eventLat, eventLng, dist) {
+            document.getElementById('gps-distance-text').innerText = dist;
+            // 串接 Google Maps Iframe (純座標顯示)
+            document.getElementById('gps-map-iframe').src = `https://maps.google.com/maps?q=${userLat},${userLng}&z=16&output=embed`;
+            openModal('modal-gps-map');
+        }
+
+        // Haversine 公式計算地球上兩點距離 (公尺)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const p1 = lat1 * Math.PI/180;
+            const p2 = lat2 * Math.PI/180;
+            const dp = (lat2-lat1) * Math.PI/180;
+            const dl = (lon2-lon1) * Math.PI/180;
+
+            const a = Math.sin(dp/2) * Math.sin(dp/2) +
+                      Math.cos(p1) * Math.cos(p2) *
+                      Math.sin(dl/2) * Math.sin(dl/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c;
+        }
+
+        function openSwapGroupModal(e) {
+            if (e) e.stopPropagation();
+            openModal('modal-swap-group');
+        }
+
+        function executeGroupSwap() {
+            const p1 = document.getElementById('swap-player-a').value;
+            const p2 = document.getElementById('swap-player-b').value;
+            closeModal('modal-swap-group');
+            addChatMessage("system", `🔄 <b>即時調組成功：</b><br>已將 <b>${p1}</b> 與 <b>${p2}</b> 的出發組別互換，並同步至大會雲端及雙方的 LIFF 頁面。`);
+        }
+
+        // [2026-07-15 新增: 本人報名的額外寶尊眷輸入框]
+        function addSelfExtraFamilyInput() {
+            const isSpouseEvent = currentActiveEvent && currentActiveEvent.title.includes('眷聯會');
+            const placeholderTxt = isSpouseEvent ? "社友 / 攜伴姓名" : "寶尊眷姓名";
+            
+            const container = document.getElementById('self-extra-family-container');
+            const div = document.createElement('div');
+            div.className = "flex items-center gap-1.5 mt-1";
+            div.innerHTML = `
+                <i class="fa-solid fa-user-plus text-indigo-400 text-[10px] ml-1"></i>
+                <input type="text" placeholder="${placeholderTxt}" class="self-extra-fam-input flex-1 bg-white border border-gray-300 rounded px-1.5 py-1 text-[11px] font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm">
+                <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 ml-1"><i class="fa-solid fa-xmark text-[11px]"></i></button>
+            `;
+            container.appendChild(div);
+        }
+
+        // --- 16. REGISTRATION / ATTENDANCE ACTION HANDLERS ---
         function triggerMainBannerClick() {
             addChatMessage("user", `我要報名 ${currentActiveEvent.title}`);
             setTimeout(() => {
-                document.getElementById('self-reg-event-title').innerText = currentActiveEvent.title;
-                document.getElementById('self-bank-digits').value = '';
-                
-                // 控制高球差點欄位
+                const bankHint = document.getElementById('self-bank-hint');
+                const isSpouseEvent = currentActiveEvent && currentActiveEvent.title.includes('眷聯會');
+
                 if (isGolfEvent(currentActiveEvent)) {
                     document.getElementById('self-handicap-container').classList.remove('hidden');
                     document.getElementById('self-handicap').value = '';
+                    if (bankHint) bankHint.innerText = '※ 高球賽事由執秘統一匯款，此處可直接留白送出。';
                 } else {
                     document.getElementById('self-handicap-container').classList.add('hidden');
+                    if (bankHint) bankHint.innerText = '※ 若稍後才匯款可先空白，後續至「個人中心」補填。';
                 }
 
-                // 控制寶尊眷欄位 (僅限社內視角顯示，且「排除高球賽事」)
-                if (systemScope === 'club' && !isGolfEvent(currentActiveEvent)) {
+                // 控制寶尊眷欄位 (眷聯會強制顯示，且主客對調)
+                if (isSpouseEvent) {
                     document.getElementById('self-family-container').classList.remove('hidden');
-                    document.getElementById('self-family-count').value = '';
+                    document.getElementById('self-family-label').innerText = "社友 / 攜伴 (請勾選或新增)";
+                    
+                    const myId = `m_${currentUserClubId}_0`;
+                    const listContainer = document.getElementById('self-family-list');
+                    const rotarianName = currentUserClubId === 6 ? "王大同 (社友)" : "社長 (社友)";
+                    
+                    listContainer.innerHTML = `
+                        <label class="flex items-center gap-2 hover:bg-indigo-50/50 rounded cursor-pointer text-xs text-gray-700 font-bold p-1 transition-colors">
+                            <input type="checkbox" value="${rotarianName}" class="self-fam-checkbox w-4 h-4 text-indigo-500 rounded focus:ring-indigo-500">
+                            <span>${rotarianName}</span>
+                        </label>
+                    `;
+                    document.getElementById('self-extra-family-container').innerHTML = '';
+                    
+                    // 以寶尊眷為報名主體
+                    const primarySpouse = (familyDB[myId] && familyDB[myId].length > 0) ? familyDB[myId][0] : "王美麗 (寶尊眷)";
+                    document.getElementById('self-reg-event-title').innerHTML = `${currentActiveEvent.title}<br><span class="text-pink-600 mt-1 block">👤 報名人：${primarySpouse}</span>`;
+
+                } else if (systemScope === 'club' && !isGolfEvent(currentActiveEvent)) {
+                    document.getElementById('self-family-container').classList.remove('hidden');
+                    document.getElementById('self-family-label').innerText = "寶尊眷 / 攜伴 (請勾選或新增)";
+                    
+                    // 帶入該使用者的預設寶尊眷名單
+                    const myId = `m_${currentUserClubId}_0`; 
+                    const fams = familyDB[myId] || [];
+                    const listContainer = document.getElementById('self-family-list');
+                    
+                    listContainer.innerHTML = fams.map(f => `
+                        <label class="flex items-center gap-2 hover:bg-indigo-50/50 rounded cursor-pointer text-xs text-gray-700 font-bold p-1 transition-colors">
+                            <input type="checkbox" value="${f}" class="self-fam-checkbox w-4 h-4 text-indigo-500 rounded focus:ring-indigo-500">
+                            <span>${f}</span>
+                        </label>
+                    `).join('');
+                    
+                    if(fams.length === 0) listContainer.innerHTML = '<div class="text-[10px] text-gray-400 italic p-1">尚無預設資料，請點擊下方新增</div>';
+                    
+                    document.getElementById('self-extra-family-container').innerHTML = '';
+                    document.getElementById('self-reg-event-title').innerText = currentActiveEvent.title;
+
                 } else {
                     document.getElementById('self-family-container').classList.add('hidden');
+                    document.getElementById('self-reg-event-title').innerText = currentActiveEvent.title;
                 }
                 
+                document.getElementById('self-bank-digits').value = '';
                 openModal('modal-self-register');
                 addChatMessage("bot", `📝 <b>【報名系統開啟】</b><br>請確認報名資訊並填寫轉出帳號末 5 碼${isGolfEvent(currentActiveEvent) ? '及高球差點' : ''}。`);
             }, 500);
@@ -2050,10 +2437,21 @@
                 }
             }
 
+            // [2026-07-15 修改: 本人報名計算人數與擷取名字，並判斷是否為主客對調的眷聯會]
             let familyCount = 0;
-            // 確保留存資料時，高球賽事的寶尊眷數強制為 0
-            if (systemScope === 'club' && !isGolfEvent(currentActiveEvent)) {
-                familyCount = parseInt(document.getElementById('self-family-count').value) || 0;
+            let familyNames = [];
+            const isSpouseEvent = currentActiveEvent && currentActiveEvent.title.includes('眷聯會');
+
+            if ((systemScope === 'club' && !isGolfEvent(currentActiveEvent)) || isSpouseEvent) {
+                const famCheckboxes = document.querySelectorAll('.self-fam-checkbox:checked');
+                famCheckboxes.forEach(cb => familyNames.push(cb.value));
+                
+                const extraInputs = document.querySelectorAll('.self-extra-fam-input');
+                extraInputs.forEach(input => {
+                    let v = input.value.trim();
+                    if (v !== '') familyNames.push(v + (isSpouseEvent ? " (來賓)" : " (寶尊眷)"));
+                });
+                familyCount = familyNames.length;
             }
 
             closeModal('modal-self-register');
@@ -2061,28 +2459,44 @@
             initEventRegistration(currentActiveEvent.id, currentUserClubId);
             let clubRegs = eventRegistrations[currentActiveEvent.id][currentUserClubId];
             
-            if (!clubRegs.some(r => r.id === 'm_self')) {
-                clubRegs.push({ 
-                    id: 'm_self', 
-                    name: "王大同 社友 (本人)", 
-                    type: "self",
-                    handicap: handicap,
-                    digits: digits,
-                    familyCount: familyCount
-                });
+            // 決定正式登記的主報名人姓名
+            const myId = `m_${currentUserClubId}_0`;
+            let primaryName = currentUserClubId === 6 ? "王大同 社友 (本人)" : "社長 (本人)";
+            if (isSpouseEvent) {
+                primaryName = (familyDB[myId] && familyDB[myId].length > 0) ? familyDB[myId][0] : "王美麗 (寶尊眷)";
             }
 
-            // 更新總覽統計看板 (社友本人 1 + 寶尊眷人數)
+            // 避免重複寫入，先移除舊紀錄
+            const existingIdx = clubRegs.findIndex(r => r.id === myId || r.id === 'm_self');
+            if(existingIdx !== -1) clubRegs.splice(existingIdx, 1);
+
+            clubRegs.push({ 
+                id: myId, 
+                name: primaryName, 
+                type: "self",
+                handicap: handicap,
+                digits: digits,
+                familyCount: familyCount,
+                familyNames: familyNames, // 存入名單
+                isPaid: false
+            });
+
             const targetClub = clubsData.find(c => c.id === currentUserClubId);
-            if (targetClub) { targetClub.registered += (1 + familyCount); renderStatisticsTable(); }
+            if (targetClub && targetClub.id !== 6) { targetClub.registered += (1 + familyCount); }
+            renderStatisticsTable();
+            
             if (currentActiveEvent && !myRegisteredEvents.includes(currentActiveEvent.id)) {
                 myRegisteredEvents.push(currentActiveEvent.id);
             }
             
             let replyMsg = `🎉 <b>報名成功！</b><br>系統已為您登記 <b>${currentActiveEvent.title}</b>。`;
-            if (familyCount > 0) {
+            if (isSpouseEvent) {
+                replyMsg += `<br>· 報名人：<b class="text-pink-600">${primaryName}</b>`;
+                if (familyCount > 0) replyMsg += `<br>· 攜伴：<b class="text-indigo-600">${familyNames.join(', ')}</b>`;
+            } else if (familyCount > 0) {
                 replyMsg += `<br>· 攜伴人數：<b class="text-indigo-600">${familyCount} 位寶尊眷</b>`;
             }
+
             if (handicap) {
                 replyMsg += `<br>· 您的差點 (HDCP)：<b class="text-emerald-600">${handicap}</b>`;
             }
@@ -2092,78 +2506,52 @@
                 replyMsg += `<br>· 尚未提供匯款帳號 (提醒：若完成繳費，請至個人中心回報末 5 碼)`;
             }
             setTimeout(() => addChatMessage("bot", replyMsg), 500);
-        }
 
-        function submitPaymentInfo() {
-            const digits = document.getElementById('bank-digits').value.trim();
-            if (!digits || digits.length !== 5) {
-                showAlert('格式錯誤', '請輸入正確的匯款帳號末 5 碼！');
-                return;
-            }
-            closeModal('modal-payment-info');
-            addChatMessage("user", "回報匯款後 5 碼");
-            setTimeout(() => {
-                addChatMessage("bot", `✅ <b>【匯款資訊已登錄】</b><br>您已送出末 5 碼：<b class="text-blue-600">${digits}</b><br>對帳成功後將發送通知給您！`);
-                document.getElementById('bank-digits').value = ''; 
-            }, 500);
-        }
-
-        function openMatchmakingModal() {
-            document.getElementById('matchmaking-query').value = '';
-            openModal('modal-matchmaking');
-        }
-
-        function submitMatchmakingQuery() {
-            const query = document.getElementById('matchmaking-query').value.trim();
-            if (!query) {
-                showAlert('請輸入需求', '請告訴 AI 助理您需要尋找什麼產業或服務喔！');
-                return;
-            }
-
-            closeModal('modal-matchmaking');
-            addChatMessage("user", `AI 產業媒合：${query}`);
-            
-            setTimeout(() => {
-                addChatMessage("bot", `🤖 <b>AI 助理分析中...</b><br>正在檢索地區內 80 社社友的 LIFF 職業資料庫，尋找符合「${query}」的專業社友...`);
-                
+            if (digits) {
                 setTimeout(() => {
-                    let response = `✅ <b>【AI 產業媒合結果】</b><br>`;
-                    response += `為您找到高度相關的社友資訊：<br><br>`;
-                    response += `<div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg mb-2 shadow-sm">`;
-                    response += `<p class="font-bold text-indigo-900 text-sm mb-1"><i class="fa-solid fa-building text-indigo-500"></i> 綠境室內裝修設計</p>`;
-                    response += `<p class="text-xs text-gray-700">👤 <b>林建國 社友</b> (台北松青社)</p>`;
-                    response += `<p class="text-xs text-gray-700">💼 <b>職業分類：</b>室內裝潢設計</p>`;
-                    response += `<p class="text-xs text-gray-700 mt-1">📝 <b>公司簡介：</b><br>20年商辦與住宅設計經驗，自有專業工班，專攻企業總部與高階住宅，品質保證。</p>`;
-                    response += `<div class="mt-2 bg-yellow-100 border border-yellow-300 p-1.5 rounded text-yellow-800 text-[10px] font-bold">`;
-                    response += `🎁 <b>社友專屬優惠：</b><br>出示 LIFF 數位社友卡，享免初步提案費，總工程款 95 折！`;
-                    response += `</div>`;
-                    response += `<a href="#" class="mt-2 block text-center bg-white border border-indigo-200 text-indigo-600 py-1.5 rounded-lg shadow-sm text-xs font-bold hover:bg-indigo-100 transition-colors mt-2">瀏覽數位名片</a>`;
-                    response += `</div>`;
-                    addChatMessage("bot", response);
-                }, 1500);
-            }, 500);
+                    let myReg = clubRegs.find(r => r.id === 'm_self');
+                    if (myReg) myReg.isPaid = true;
+                    addChatMessage("system", `💰 <b>【虛擬銀行 API 對帳成功】</b><br>系統已接收入帳通知！<br><b>${targetClub ? targetClub.name : '本社'} 王大同 社友</b> 的大會報名費已自動核銷為「✅ 已繳費」，並即時同步至<b>大會看板</b>與<b>查名單</b>系統。`);
+                    renderStatisticsTable();
+                }, 2500);
+            }
         }
 
-        // --- 12. EXEC SEC REGISTRATION LOGIC ---
         function clickHelpRegister(e) {
             e.stopPropagation();
             addChatMessage("user", "執秘報名");
             setTimeout(() => {
                 const select = document.getElementById('exec-sec-club');
                 select.innerHTML = clubsData.map(c => `<option value="${c.id}" ${c.id === currentUserClubId ? 'selected' : ''}>${c.name}</option>`).join('');
-                renderClubMembers(); 
+                renderExecSecClubMembers(); 
                 document.getElementById('guest-inputs-container').innerHTML = ''; 
                 document.getElementById('exec-sec-bank-digits').value = ''; 
                 
                 const isGolf = isGolfEvent(currentActiveEvent);
-                
-                // --- 新增：處理高球賽專屬的「賽事身分」欄位顯示隱藏 ---
                 const roleContainer = document.getElementById('exec-sec-golf-role-container');
+                const psContainer = document.getElementById('exec-sec-personal-sponsor-container');
+                
                 if (isGolf) {
                     roleContainer.classList.remove('hidden');
-                    document.getElementById('exec-sec-golf-role').value = ''; // 重置選項
+                    psContainer.classList.remove('hidden');
+                    document.getElementById('exec-sec-golf-role').value = ''; 
+                    
+                    const buttons = document.querySelectorAll('.golf-role-btn');
+                    buttons.forEach(btn => {
+                        const title = btn.querySelector('span:first-child');
+                        const amt = btn.querySelector('.role-amt');
+                        btn.classList.remove('border-emerald-500', 'bg-emerald-50', 'ring-1', 'ring-emerald-500');
+                        btn.classList.add('border-gray-200', 'bg-white');
+                        title.classList.remove('text-emerald-800');
+                        title.classList.add('text-gray-700');
+                        amt.classList.remove('text-emerald-600', 'font-black');
+                        amt.classList.add('text-gray-400', 'font-semibold');
+                    });
+                    
+                    renderPersonalSponsors(); 
                 } else {
                     roleContainer.classList.add('hidden');
+                    psContainer.classList.add('hidden');
                 }
                 
                 openModal('modal-exec-sec-register');
@@ -2171,7 +2559,70 @@
             }, 500);
         }
 
-        function renderClubMembers() {
+        function selectGolfRole(selectedRole) {
+            document.getElementById('exec-sec-golf-role').value = selectedRole;
+            const buttons = document.querySelectorAll('.golf-role-btn');
+            buttons.forEach(btn => {
+                const isSelected = btn.getAttribute('data-role') === selectedRole;
+                const title = btn.querySelector('span:first-child');
+                const amt = btn.querySelector('.role-amt');
+                if (isSelected) {
+                    btn.classList.remove('border-gray-200', 'bg-white');
+                    btn.classList.add('border-emerald-500', 'bg-emerald-50', 'ring-1', 'ring-emerald-500');
+                    title.classList.remove('text-gray-700');
+                    title.classList.add('text-emerald-800');
+                    amt.classList.remove('text-gray-400', 'font-semibold');
+                    amt.classList.add('text-emerald-600', 'font-black');
+                } else {
+                    btn.classList.remove('border-emerald-500', 'bg-emerald-50', 'ring-1', 'ring-emerald-500');
+                    btn.classList.add('border-gray-200', 'bg-white');
+                    title.classList.remove('text-emerald-800');
+                    title.classList.add('text-gray-700');
+                    amt.classList.remove('text-emerald-600', 'font-black');
+                    amt.classList.add('text-gray-400', 'font-semibold');
+                }
+            });
+        }
+
+        function renderPersonalSponsors() {
+            document.getElementById('personal-sponsor-list').innerHTML = '';
+        }
+
+        function addPersonalSponsorInput() {
+            const container = document.getElementById('personal-sponsor-list');
+            container.insertAdjacentHTML('beforeend', createPersonalSponsorHTML(''));
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function createPersonalSponsorHTML(name) {
+            return `
+                <div class="bg-amber-50/50 border border-amber-200 p-2 rounded-lg shadow-sm relative personal-sponsor-item">
+                    <button onclick="this.closest('.personal-sponsor-item').remove();" class="absolute top-1 right-1 text-red-400 hover:text-red-600 transition-colors z-10"><i class="fa-solid fa-xmark"></i></button>
+                    <div class="flex items-center gap-1.5 mb-1.5 pr-5">
+                        <span class="text-[10px] font-bold text-amber-800 shrink-0"><i class="fa-solid fa-gift mr-0.5"></i>贊助</span>
+                        <input type="text" class="ps-name w-[38%] bg-white border border-gray-300 rounded px-1.5 py-1 text-xs focus:ring-amber-500 font-bold" placeholder="姓名" value="${name}">
+                        <input type="text" class="ps-title flex-1 bg-white border border-gray-300 rounded px-1.5 py-1 text-xs focus:ring-amber-500" placeholder="地區職務(選填)">
+                    </div>
+                    <div class="grid grid-cols-12 gap-1.5">
+                        <div class="col-span-4 relative">
+                            <span class="absolute left-2 top-1 text-[10px] text-gray-400 pointer-events-none">$</span>
+                            <input type="number" class="ps-money w-full bg-white border border-gray-300 rounded py-1 pl-4 pr-1 text-[11px] focus:ring-amber-500 font-bold text-right" placeholder="金額">
+                        </div>
+                        <div class="col-span-5">
+                            <input type="text" class="ps-gift-name w-full bg-white border border-gray-300 rounded px-1.5 py-1 text-[11px] focus:ring-amber-500" placeholder="禮品名稱">
+                        </div>
+                        <div class="col-span-3 relative">
+                            <input type="number" class="ps-gift-qty w-full bg-white border border-gray-300 rounded py-1 pl-1 pr-4 text-[11px] focus:ring-amber-500 text-center" placeholder="數量">
+                            <span class="absolute right-1 top-1 text-[10px] text-gray-500 pointer-events-none">件</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // [2026-07-15 修改: 執秘報名寶尊眷功能擴充 - 自動過濾已自行報名的社友，並鎖定狀態]
+        // [2026-07-16 修正: 加上「眷聯會」主客對調邏輯]
+        function renderExecSecClubMembers() {
             const select = document.getElementById('exec-sec-club');
             const clubId = parseInt(select.value);
             
@@ -2182,20 +2633,109 @@
             }
 
             const isGolf = isGolfEvent(currentActiveEvent);
-            // 執秘報名的寶尊眷欄位：社內視角顯示，且「排除高球賽事」
-            const showFamily = systemScope === 'club' && !isGolf;
+            const isSpouseEvent = currentActiveEvent && currentActiveEvent.title.includes('眷聯會');
             const listContainer = document.getElementById('exec-sec-member-list');
             
-            listContainer.innerHTML = members.map(m => `
-                <label class="flex items-center gap-2 p-2 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-blue-100">
-                    <input type="checkbox" value="${m.id}" class="member-checkbox w-4 h-4 text-blue-600 rounded focus:ring-blue-500" onchange="updateSelectedCount()">
-                    <span class="text-sm text-gray-800 font-medium whitespace-nowrap">${m.name}</span>
-                    <div class="ml-auto flex gap-1 items-center">
-                        ${showFamily ? `<input type="number" class="member-family-count w-16 bg-white border border-gray-300 rounded px-1.5 py-1 text-xs text-center font-bold text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" placeholder="+寶尊眷" min="0" onclick="event.stopPropagation()" oninput="updateSelectedCount()" onfocus="this.select()">` : ''}
-                        ${isGolf ? `<input type="number" class="w-14 bg-white border border-gray-300 rounded px-1.5 py-1 text-xs text-center font-bold text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all" placeholder="差點" onclick="event.stopPropagation()" onfocus="this.select()">` : ''}
+            // 取得該活動、該社已經在資料庫中的名單
+            let clubRegs = eventRegistrations[currentActiveEvent.id] && eventRegistrations[currentActiveEvent.id][clubId] || [];
+
+            listContainer.innerHTML = members.map(m => {
+                // 判斷此人是否已經有報名紀錄
+                let existingReg = clubRegs.find(r => r.id === m.id);
+                let isSelfReg = existingReg && existingReg.type === 'self';
+                let isExecReg = existingReg && existingReg.type === 'exec';
+                
+                let isChecked = isSelfReg || isExecReg ? 'checked' : '';
+                let isDisabled = isSelfReg ? 'disabled' : '';
+                let badge = isSelfReg ? `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[9px] ml-2 border border-emerald-200 shadow-sm"><i class="fa-solid fa-user-check"></i> 自行報名</span>` : '';
+
+                // --- 眷聯會主客對調邏輯 ---
+                const rawFams = familyDB[m.id] || [];
+                let primaryName = m.name;
+                let companionList = rawFams;
+
+                if (isSpouseEvent) {
+                    primaryName = rawFams.length > 0 ? rawFams[0] : `${m.name.replace(' (本人)', '').replace(' 社友', '')} 之寶尊眷`;
+                    companionList = [m.name]; // 原本的社友變成攜伴
+                }
+
+                let famHtml = '';
+                let extraFamBtn = '';
+
+                if (isSelfReg) {
+                    // 如果已經自己報名了，顯示他帶了誰，且不允許執秘修改
+                    if (existingReg.familyNames && existingReg.familyNames.length > 0) {
+                        famHtml = existingReg.familyNames.map(fn => `<div class="pl-6 py-1 text-xs text-gray-500 font-bold"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> ${fn}</div>`).join('');
+                    } else if (existingReg.familyCount > 0) {
+                        famHtml = `<div class="pl-6 py-1 text-xs text-gray-500 font-bold"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> 攜伴 ${existingReg.familyCount} 人</div>`;
+                    }
+                } else {
+                    // 若尚未報名或由執秘代報，則顯示核取方塊與新增按鈕
+                    famHtml = companionList.map((f, i) => `
+                        <label class="flex items-center gap-2 pl-6 py-1 hover:bg-indigo-50/50 rounded cursor-pointer text-xs text-gray-600">
+                            <input type="checkbox" value="${m.id}_fam_${i}" data-name="${f}" class="fam-checkbox w-3.5 h-3.5 text-indigo-500 rounded focus:ring-indigo-500" onchange="updateSelectedCount()">
+                            <span>${f}</span>
+                        </label>
+                    `).join('');
+                    
+                    extraFamBtn = `
+                        <div class="pl-6 py-1 space-y-1" id="extra-fam-container-${m.id}"></div>
+                        <div class="pl-6 py-1">
+                            <button onclick="addExtraFamilyInput('${m.id}')" class="text-[10px] text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded shadow-sm transition-colors border border-indigo-100 font-bold active:scale-95"><i class="fa-solid fa-plus mr-1"></i>備用填入格</button>
+                        </div>
+                    `;
+                }
+
+                return `
+                <div class="member-row-group border border-transparent hover:border-blue-100 rounded-lg pb-1 mb-1 transition-colors bg-white shadow-sm">
+                    <label class="flex items-center gap-2 p-2 hover:bg-blue-50 cursor-pointer rounded-t-lg ${isDisabled ? 'opacity-80' : ''}">
+                        <input type="checkbox" value="${m.id}" data-name="${primaryName}" data-fam-count="${existingReg ? (existingReg.familyCount || 0) : 0}" class="member-checkbox w-4 h-4 text-blue-600 rounded focus:ring-blue-500" onchange="toggleFamilyPanel('${m.id}', this.checked); updateSelectedCount()" ${isChecked} ${isDisabled}>
+                        <span class="text-sm text-gray-800 font-medium whitespace-nowrap">${primaryName} ${isSpouseEvent && !isSelfReg ? '<span class="text-[10px] text-pink-600 ml-1">(主報名人)</span>' : ''}</span>
+                        ${badge}
+                        ${isGolf ? `<input type="number" class="w-14 ml-auto bg-white border border-gray-300 rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-500" placeholder="差點" onclick="event.stopPropagation()" ${isDisabled ? `value="${existingReg.handicap||''}" disabled` : ''}>` : ''}
+                    </label>
+                    <div id="fam-panel-${m.id}" class="${isChecked && !isSelfReg ? 'flex' : (isSelfReg && (existingReg && existingReg.familyCount > 0) ? 'block' : 'hidden')} flex-col gap-0.5 mt-0.5 border-l-2 border-indigo-200 ml-3 bg-gray-50/50 rounded-br-lg pb-1">
+                        ${famHtml}
+                        ${extraFamBtn}
                     </div>
-                </label>`).join('');
+                </div>
+                `;
+            }).join('');
             updateSelectedCount();
+        }
+
+        // [2026-07-15 新增: 處理寶尊眷面板展開與動態欄位]
+        function toggleFamilyPanel(memberId, isChecked) {
+            const panel = document.getElementById(`fam-panel-${memberId}`);
+            if (panel) {
+                if (isChecked) {
+                    panel.classList.remove('hidden');
+                    panel.classList.add('flex');
+                } else {
+                    panel.classList.add('hidden');
+                    panel.classList.remove('flex');
+                    // 取消勾選時，將寶尊眷狀態清空
+                    panel.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+                    document.getElementById(`extra-fam-container-${memberId}`).innerHTML = '';
+                }
+            }
+        }
+
+        // [2026-07-15 新增: 動態加入額外的寶尊眷輸入框]
+        // [2026-07-16 修正: 判斷是否為眷聯會切換 placeholder]
+        function addExtraFamilyInput(memberId) {
+            const isSpouseEvent = currentActiveEvent && currentActiveEvent.title.includes('眷聯會');
+            const placeholderTxt = isSpouseEvent ? "社友 / 攜伴姓名" : "寶尊眷姓名";
+
+            const container = document.getElementById(`extra-fam-container-${memberId}`);
+            const div = document.createElement('div');
+            div.className = "flex items-center gap-1.5 mt-1";
+            div.innerHTML = `
+                <i class="fa-solid fa-user-plus text-indigo-400 text-[10px] ml-1"></i>
+                <input type="text" placeholder="${placeholderTxt}" class="extra-fam-input w-32 bg-white border border-gray-300 rounded px-1.5 py-1 text-[11px] font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm" oninput="updateSelectedCount()">
+                <button onclick="this.parentElement.remove(); updateSelectedCount()" class="text-red-400 hover:text-red-600 ml-1"><i class="fa-solid fa-xmark text-[11px]"></i></button>
+            `;
+            container.appendChild(div);
         }
 
         function addGuestInput() {
@@ -2206,23 +2746,32 @@
             div.innerHTML = `
                 <input type="text" placeholder="來賓姓名" class="guest-name flex-1 bg-white border border-gray-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
                 ${isGolf ? `<input type="number" placeholder="差點" class="w-12 bg-white border border-gray-300 rounded-lg py-1.5 px-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500">` : ''}
-                <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 p-1"><i class="fa-solid fa-circle-minus"></i></button>`;
+                <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 p-1 transition-colors"><i class="fa-solid fa-trash-can"></i></button>`;
             container.appendChild(div);
         }
 
+        // [2026-07-15 修改: 計算包含「自行報名」與「寶尊眷」的精準總人數]
         function updateSelectedCount() {
             const checkboxes = document.querySelectorAll('.member-checkbox:checked');
             let memberCount = checkboxes.length;
             let familyCount = 0;
             
             checkboxes.forEach(cb => {
-                const famInput = cb.parentElement.querySelector('.member-family-count');
-                if (famInput) {
-                    familyCount += (parseInt(famInput.value) || 0);
+                const isSelfReg = cb.disabled;
+                if (isSelfReg) {
+                    familyCount += parseInt(cb.getAttribute('data-fam-count')) || 0;
+                } else {
+                    const panel = document.getElementById(`fam-panel-${cb.value}`);
+                    if (panel) {
+                        familyCount += panel.querySelectorAll('.fam-checkbox:checked').length;
+                        panel.querySelectorAll('.extra-fam-input').forEach(input => {
+                            if (input.value.trim() !== '') familyCount++;
+                        });
+                    }
                 }
             });
 
-            let displayTxt = `已選擇: ${memberCount} 位社友`;
+            let displayTxt = `總匯整人數: ${memberCount} 位社友`;
             if (familyCount > 0) {
                 displayTxt += ` <span class="text-indigo-600">(+ ${familyCount} 寶尊眷)</span>`;
             }
@@ -2250,34 +2799,46 @@
             
             let familyTotal = 0;
             const isGolf = isGolfEvent(currentActiveEvent);
+            const isSpouseEvent = currentActiveEvent && currentActiveEvent.title.includes('眷聯會');
             
             let golfRole = '';
+            let personalSponsors = [];
             
-            // --- NEW: 高爾夫球賽事必填防呆驗證 ---
             if (isGolf) {
-                // 1. 驗證賽事身分 (主辦/協辦/贊助)
                 golfRole = document.getElementById('exec-sec-golf-role').value;
                 if (!golfRole) {
-                    return showAlert('資料不完整', '高爾夫球賽事請務必選擇該社的參與身分（主辦社/協辦社/贊助社）！');
+                    return showAlert('資料不完整', '高爾夫球賽事請務必選擇該社的參與身分（主辦社/協辦社/贊助社/不贊助）！');
                 }
 
-                let missingHandicap = false;
-                
-                // 2. 檢查勾選的社友是否都有填寫差點
-                checkedBoxes.forEach(cb => {
-                    let hcpInput = cb.parentElement.querySelector('input[placeholder="差點"]');
-                    if (!hcpInput || hcpInput.value.trim() === '') {
-                        missingHandicap = true;
+                const psItems = document.querySelectorAll('.personal-sponsor-item');
+                psItems.forEach(item => {
+                    const name = item.querySelector('.ps-name').value.trim();
+                    const title = item.querySelector('.ps-title').value.trim();
+                    const money = parseInt(item.querySelector('.ps-money').value) || 0;
+                    const giftName = item.querySelector('.ps-gift-name').value.trim();
+                    const giftQty = parseInt(item.querySelector('.ps-gift-qty').value) || 0;
+
+                    if (money > 0 || (giftName !== '' && giftQty > 0)) {
+                        personalSponsors.push({
+                            name: name || '未具名',
+                            title: title,
+                            money: money,
+                            giftName: giftName,
+                            giftQty: giftQty
+                        });
                     }
                 });
+
+                let missingHandicap = false;
+                checkedBoxes.forEach(cb => {
+                    let hcpInput = cb.parentElement.querySelector('input[placeholder="差點"]');
+                    if (!hcpInput || hcpInput.value.trim() === '') missingHandicap = true;
+                });
                 
-                // 3. 檢查有填寫名字的來賓是否都有填寫差點
                 guestInputs.forEach(input => {
                     if (input.value.trim() !== '') {
                         let hcpInput = input.parentElement.querySelector('input[placeholder="差點"]');
-                        if (!hcpInput || hcpInput.value.trim() === '') {
-                            missingHandicap = true;
-                        }
+                        if (!hcpInput || hcpInput.value.trim() === '') missingHandicap = true;
                     }
                 });
                 
@@ -2285,18 +2846,36 @@
                     return showAlert('資料不完整', '高爾夫球賽事請務必為所有勾選的「社友」與「來賓」填寫【差點】！');
                 }
             }
-            // ---------------------------------------------
             
             initEventRegistration(currentActiveEvent.id, clubId);
             let clubRegs = eventRegistrations[currentActiveEvent.id][clubId];
+            
+            if (isGolf && golfRole) {
+                clubRegs.golfRole = golfRole;
+                clubRegs.personalSponsors = personalSponsors;
+            }
 
+            let newIds = []; 
+            // [2026-07-15 修改: 執秘報名儲存連帶儲存寶尊眷詳細名單，且跳過已自行報名的資料]
+            // [2026-07-16 修正: 根據眷聯會身分附加對應的身份 Tag]
             checkedBoxes.forEach(cb => {
-                let name = cb.nextElementSibling.innerText;
-                let hcpInput = cb.parentElement.querySelector('input[placeholder="差點"]');
+                // 若已經是自行報名，直接跳過處理，保留既有資料
+                if (cb.disabled) return; 
+
+                let name = cb.getAttribute('data-name');
+                let hcpInput = cb.closest('.member-row-group').querySelector('input[placeholder="差點"]');
                 let hcp = hcpInput ? hcpInput.value : '';
                 
-                let famInput = cb.parentElement.querySelector('.member-family-count');
-                let famCount = famInput ? (parseInt(famInput.value) || 0) : 0;
+                let famNames = [];
+                const panel = document.getElementById(`fam-panel-${cb.value}`);
+                if (panel) {
+                    panel.querySelectorAll('.fam-checkbox:checked').forEach(fcb => famNames.push(fcb.getAttribute('data-name')));
+                    panel.querySelectorAll('.extra-fam-input').forEach(input => {
+                        let v = input.value.trim();
+                        if (v !== '') famNames.push(v + (isSpouseEvent ? " (社友/來賓)" : " (寶尊眷)"));
+                    });
+                }
+                let famCount = famNames.length;
                 familyTotal += famCount;
                 
                 if (!clubRegs.some(r => r.id === cb.value)) {
@@ -2305,45 +2884,69 @@
                         name: name, 
                         type: "exec",
                         handicap: hcp,
-                        familyCount: famCount
+                        familyCount: famCount,
+                        familyNames: famNames, // 紀錄攜伴名字陣列
+                        isPaid: false
                     });
+                    newIds.push(cb.value);
                 }
             });
 
-            const totalSelected = checkedBoxes.length + guestCount + familyTotal;
+            const newlyAddedCount = newIds.length + guestCount + familyTotal;
             const digits = document.getElementById('exec-sec-bank-digits').value.trim();
 
-            if (totalSelected === 0) return showAlert('未選擇', '請至少勾選一位社友或填寫一位來賓！');
-            if (digits && digits.length !== 5) return showAlert('格式錯誤', '匯款帳號請填寫完整的末 5 碼！');
+            // 確保名單中至少有人，不用檢查 totalSelected (因為可能全部都是自己報名，執秘只是幫忙統整送出)
+            if (clubRegs.length === 0 && guestCount === 0) return showAlert('名單空白', '全社名單目前空白，請至少勾選一位社友或填寫一位來賓！');
             
+            if (digits && digits.length !== 5 && !isGolf) return showAlert('格式錯誤', '匯款帳號請填寫完整的末 5 碼！');
+            if (digits && digits.length !== 5 && isGolf) return showAlert('格式錯誤', '如果有填寫匯款帳號，請填寫完整的末 5 碼！');
+
             closeModal('modal-exec-sec-register');
 
-            guestInputs.forEach(input => {
+            guestInputs.forEach((input, idx) => {
                 let name = input.value.trim();
                 if (name) {
                     let hcpInput = input.parentElement.querySelector('input[placeholder="差點"]');
                     let hcp = hcpInput ? hcpInput.value : '';
+                    let newId = `guest_${Date.now()}_${idx}`;
                     clubRegs.push({ 
-                        id: 'guest_' + Date.now() + Math.random(), 
+                        id: newId, 
                         name: name + " (來賓)", 
                         type: "exec_guest",
-                        handicap: hcp
+                        handicap: hcp,
+                        isPaid: false
                     });
                 }
             });
 
+            // 計算最終匯整總人數 (社友 + 寶尊眷 + 來賓)
+            let finalCount = guestCount;
+            clubRegs.forEach(r => finalCount += 1 + (r.familyCount || 0));
+
             const club = clubsData.find(c => c.id === clubId);
-            if (club) { club.registered += totalSelected; renderStatisticsTable(); }
+            if (club && club.id !== 6) { club.registered += newlyAddedCount; } // 視覺模擬用
+            renderStatisticsTable();
             
+            // [2026-07-15 修改: 送出後訊息明確顯示送給「主委」與同步至「執秘統計」]
             setTimeout(() => {
-                let msg = `✅ <b>【執秘批次報名成功】</b><br>您已成功為 <b>${clubName}</b> 完成報名！<br>共計：<b>${totalSelected} 人</b> (含寶尊眷及來賓)`;
+                let msg = `✅ <b>【全社名單正式送出】</b><br>您已將 <b>${clubName}</b> 的最終報名名單 (共 <b>${finalCount} 人</b>) 送交給 <b>${currentActiveEvent.chair} 主委</b>！`;
+                msg += `<br>· 名單已整合社友自行報名與執秘代報`;
                 if (isGolf) {
                     msg += `<br>· 參與身分：<b class="text-emerald-600">${golfRole}</b>`;
-                    msg += `<br>· 包含各選手差點登錄完成`;
+                    msg += `<br>· 各選手專屬差點已登錄完成`;
                 }
-                if (digits) msg += `<br>· 轉出帳號末 5 碼：<b class="text-blue-600">${digits}</b>`;
+                if (digits) msg += `<br>· 統一轉出帳號末 5 碼：<b class="text-blue-600">${digits}</b>`;
+                msg += `<br><br><span class="text-[10px] text-gray-500">※ 資料已同步至您的執秘後台與大會資料庫。</span>`;
                 addChatMessage("bot", msg);
             }, 500);
+
+            if (digits) {
+                setTimeout(() => {
+                    clubRegs.forEach(r => r.isPaid = true);
+                    addChatMessage("system", `💰 <b>【虛擬銀行 API 對帳成功】</b><br>系統已接收入帳通知！<br><b>${clubName}</b> 的統一匯款已自動核銷，全社名單皆轉為「✅ 已繳費」，並即時同步至<b>大會看板</b>與<b>查名單</b>系統。`);
+                    renderStatisticsTable();
+                }, 2500);
+            }
         }
 
         function clickCheckRegistration(e) {
@@ -2364,10 +2967,72 @@
                     registeredCount += 1 + (reg.familyCount || 0);
                 });
 
+                let golfRoleTag = '';
+                let amountDetails = '';
+                let clubPaidStatusTag = '';
+                
+                if (isGolfEvent(currentActiveEvent)) {
+                    if (clubRegs.golfRole) {
+                        golfRoleTag = `<span class="inline-block mt-1 mb-0.5 text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold shadow-sm border border-emerald-200">參與身分：${clubRegs.golfRole}</span><br>`;
+                    }
+                    
+                    let allPaid = clubRegs.length > 0 && clubRegs.every(r => r.isPaid === true);
+                    if (allPaid) {
+                        clubPaidStatusTag = `<span class="inline-block mt-1 mb-0.5 text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded font-bold shadow-sm border border-teal-200"><i class="fa-solid fa-check-double"></i> 帳務狀態：全社已結清</span><br>`;
+                    } else if (clubRegs.length > 0) {
+                        clubPaidStatusTag = `<span class="inline-block mt-1 mb-0.5 text-[10px] bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded font-bold shadow-sm border border-rose-200"><i class="fa-solid fa-hourglass-half"></i> 帳務狀態：待執秘統一匯款</span><br>`;
+                    }
+
+                    if (clubRegs.golfRole) {
+                        let roleAmount = 0;
+                        if (clubRegs.golfRole === '主辦社') roleAmount = 20000;
+                        else if (clubRegs.golfRole === '協辦社') roleAmount = 10000;
+                        else if (clubRegs.golfRole === '贊助社') roleAmount = 5000;
+
+                        let psTotalMoney = 0;
+                        let psHtml = '';
+                        if (clubRegs.personalSponsors && clubRegs.personalSponsors.length > 0) {
+                            psHtml += `<div class="mt-1.5 pt-1.5 border-t border-dashed border-emerald-200 text-[10px]">`;
+                            psHtml += `<span class="text-[10px] font-bold text-emerald-800 block mb-0.5"><i class="fa-solid fa-gift"></i> 個人贊助明細：</span>`;
+                            clubRegs.personalSponsors.forEach(ps => {
+                                let details = [];
+                                if (ps.money > 0) {
+                                    details.push(`$${ps.money.toLocaleString()}`);
+                                    psTotalMoney += ps.money;
+                                }
+                                if (ps.giftName) details.push(`${ps.giftName} ${ps.giftQty}件`);
+                                
+                                let displayName = ps.name;
+                                if (ps.title) displayName += ` (${ps.title})`;
+
+                                psHtml += `<div class="text-[10px] text-gray-600 pl-1">· <b>${displayName}</b>: ${details.join(' / ')}</div>`;
+                            });
+                            psHtml += `</div>`;
+                        }
+
+                        let participantAmount = registeredCount * 1000;
+                        let totalAmount = roleAmount + participantAmount + psTotalMoney;
+
+                        if (registeredCount > 0 || psTotalMoney > 0 || roleAmount > 0) {
+                            amountDetails = `
+                                ${psHtml}
+                                <div class="mt-1.5 pt-1.5 border-t border-blue-200 text-[10px]">
+                                    <span class="text-gray-600 font-bold">總計應匯金額：</span>
+                                    <span class="text-rose-600 font-black text-[13px]">NT$ ${totalAmount.toLocaleString()}</span><br>
+                                    <span class="text-gray-400 font-medium tracking-wide leading-relaxed">💡 算法：${clubRegs.golfRole}(${roleAmount > 0 ? roleAmount.toLocaleString() : '0'}) + (${registeredCount}人 x 1000)${psTotalMoney > 0 ? ` + 個人贊助(${psTotalMoney.toLocaleString()})` : ''}</span>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+
                 let replyMsg = `🔍 <b>【${currentActiveEvent.title}】社內報名名單</b><br><br>`;
-                replyMsg += `<div class="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2 text-xs">`;
+                replyMsg += `<div class="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2 text-xs shadow-sm">`;
                 replyMsg += `<span class="font-bold text-blue-900"><i class="fa-solid fa-house-flag"></i> ${targetClub.name}</span><br>`;
+                if (golfRoleTag) replyMsg += golfRoleTag;
+                if (clubPaidStatusTag) replyMsg += clubPaidStatusTag;
                 replyMsg += `<span class="text-[10px] text-gray-500">目前本社總計報名：${registeredCount} 人</span>`;
+                if (amountDetails) replyMsg += amountDetails;
                 replyMsg += `</div>`;
 
                 if (registeredCount === 0) {
@@ -2375,6 +3040,7 @@
                 } else {
                     replyMsg += `<div class="space-y-1.5 text-xs text-gray-700 pl-1 border-l-2 border-blue-200 ml-1">`;
                     
+                    // [2026-07-15 修改: 名單查詢顯示寶尊眷姓名]
                     clubRegs.forEach(reg => {
                         let icon = "fa-check";
                         let colorClass = "text-gray-700";
@@ -2395,9 +3061,22 @@
                         }
 
                         let hdcpTag = reg.handicap ? `<span class="text-[9px] text-gray-500 ml-1">(差點:${reg.handicap})</span>` : '';
-                        let famTag = (reg.familyCount && reg.familyCount > 0) ? `<span class="text-[9px] text-indigo-600 font-black ml-1 bg-indigo-50 border border-indigo-200 px-1 rounded">+${reg.familyCount} 寶尊眷</span>` : '';
+                        
+                        let paidTag = reg.isPaid 
+                            ? `<span class="text-[9px] bg-teal-100 text-teal-700 px-1 rounded ml-1 border border-teal-200"><i class="fa-solid fa-check"></i>已繳費</span>` 
+                            : `<span class="text-[9px] bg-rose-100 text-rose-700 px-1 rounded ml-1 border border-rose-200">待繳費</span>`;
 
-                        replyMsg += `<div class="${colorClass} flex items-center"><i class="fa-solid ${icon} mr-1.5 w-3 text-center"></i><span class="truncate">${reg.name}</span>${typeTag}${hdcpTag}${famTag}</div>`;
+                        // 渲染寶尊眷名單縮排
+                        let famDetailsHtml = '';
+                        if (reg.familyNames && reg.familyNames.length > 0) {
+                            famDetailsHtml = `<div class="pl-5 mt-1 space-y-0.5">`;
+                            reg.familyNames.forEach(fn => {
+                                famDetailsHtml += `<div class="text-[10px] text-indigo-600 flex items-center font-bold bg-indigo-50/50 w-max px-1.5 rounded"><i class="fa-solid fa-heart mr-1.5 text-rose-400 w-3 text-center"></i>${fn}</div>`;
+                            });
+                            famDetailsHtml += `</div>`;
+                        }
+
+                        replyMsg += `<div class="${colorClass} flex flex-col mt-2 border-b border-gray-100 pb-1.5"><div class="flex items-center"><i class="fa-solid ${icon} mr-1.5 w-3 text-center"></i><span class="truncate">${reg.name}</span>${typeTag}${hdcpTag}${paidTag}</div>${famDetailsHtml}</div>`;
                     });
 
                     replyMsg += `</div>`;
@@ -2407,7 +3086,189 @@
             }, 600);
         }
 
-        // --- 13. UTILS & MODALS ---
+        // --- NEW: 社長報名專區管理功能 (Club Registration Admin) ---
+        function openClubRegAdminModal() {
+            const allEvents = getAllCombinedEvents();
+            const selectEl = document.getElementById('club-reg-event-select');
+            
+            selectEl.innerHTML = '<option value="">請選擇要發送/追蹤的活動...</option>';
+            allEvents.forEach(e => {
+                const prefix = e.scope === '地區' ? '🌐 ' : '🏠 ';
+                selectEl.innerHTML += `<option value="${e.id}">${prefix}[${e.scope}] ${e.displayDate} - ${e.title}</option>`;
+            });
+
+            document.getElementById('club-reg-notice-section').classList.add('hidden');
+            document.getElementById('club-reg-stats-section').classList.add('hidden');
+            
+            openModal('modal-club-reg-admin');
+        }
+
+        function loadEventSurveyData() {
+            const eventId = document.getElementById('club-reg-event-select').value;
+            if (!eventId) {
+                document.getElementById('club-reg-notice-section').classList.add('hidden');
+                document.getElementById('club-reg-stats-section').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('club-reg-notice-section').classList.remove('hidden');
+            
+            const listContainer = document.getElementById('club-reg-member-list');
+            const clubId = currentUserClubId;
+            const members = [
+                { id: `m_${clubId}_1`, name: `李志明 社友` },
+                { id: `m_${clubId}_2`, name: `陳建國 社友` },
+                { id: `m_${clubId}_3`, name: `林永生 社友` },
+                { id: `m_${clubId}_4`, name: `張三明 社友` },
+                { id: `m_${clubId}_5`, name: `劉德華 社友` }
+            ];
+
+            listContainer.innerHTML = members.map(m => `
+                <label class="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors border border-transparent">
+                    <input type="checkbox" value="${m.id}" data-name="${m.name}" class="survey-member-checkbox w-4 h-4 text-amber-500 rounded focus:ring-amber-500" checked>
+                    <span class="text-sm text-gray-800 font-bold">${m.name}</span>
+                </label>`).join('');
+
+            if (clubSurveyDB[eventId] && Object.keys(clubSurveyDB[eventId]).length > 0) {
+                document.getElementById('club-reg-stats-section').classList.remove('hidden');
+                renderSurveyStats(eventId);
+            } else {
+                document.getElementById('club-reg-stats-section').classList.add('hidden');
+            }
+        }
+
+        function toggleAllSurveyMembers() {
+            const checkboxes = document.querySelectorAll('.survey-member-checkbox');
+            let allSelected = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allSelected);
+        }
+
+        function sendClubSurvey() {
+            const eventId = document.getElementById('club-reg-event-select').value;
+            if (!eventId) return showAlert('錯誤', '請先選擇活動');
+
+            const checkboxes = document.querySelectorAll('.survey-member-checkbox:checked');
+            if (checkboxes.length === 0) return showAlert('錯誤', '請至少勾選一位發送對象');
+
+            if (!clubSurveyDB[eventId]) clubSurveyDB[eventId] = {};
+
+            checkboxes.forEach(cb => {
+                if (!clubSurveyDB[eventId][cb.value]) {
+                    clubSurveyDB[eventId][cb.value] = { name: cb.getAttribute('data-name'), status: 'pending' };
+                }
+            });
+
+            const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
+
+            addChatMessage("system", `📩 <b>【系統廣播】</b><br>執秘已向 ${checkboxes.length} 位社友發送了 <b>${eventObj.title}</b> 的參加意願調查表 (Flex Message)。`);
+            
+            document.getElementById('club-reg-stats-section').classList.remove('hidden');
+            renderSurveyStats(eventId);
+            showAlert('發送成功', `已成功推播報名調查表給 ${checkboxes.length} 位社友！`);
+        }
+
+        function renderSurveyStats(eventId) {
+            const data = clubSurveyDB[eventId];
+            let attending = [], leave = [], pending = [], reminded = [];
+
+            for (const [id, info] of Object.entries(data)) {
+                if (info.status === 'attending') attending.push(info.name);
+                else if (info.status === 'leave') leave.push(info.name);
+                else if (info.status === 'pending') pending.push(info.name);
+                else if (info.status === 'reminded') reminded.push(info.name);
+            }
+
+            document.getElementById('survey-stat-attending').innerText = attending.length;
+            document.getElementById('survey-stat-leave').innerText = leave.length;
+            document.getElementById('survey-stat-pending').innerText = pending.length + reminded.length;
+
+            let html = '';
+            if (attending.length > 0) {
+                html += `<div class="flex items-start gap-2"><span class="bg-emerald-100 text-emerald-700 px-1.5 rounded font-bold shrink-0">參加</span> <span class="text-gray-600">${attending.join(', ')}</span></div>`;
+            }
+            if (leave.length > 0) {
+                html += `<div class="flex items-start gap-2"><span class="bg-rose-100 text-rose-700 px-1.5 rounded font-bold shrink-0">請假</span> <span class="text-gray-600">${leave.join(', ')}</span></div>`;
+            }
+            if (pending.length > 0 || reminded.length > 0) {
+                let pendingNames = [...pending];
+                let remindedHtml = reminded.length > 0 ? `<span class="text-[10px] text-amber-600 ml-1">(已跟催: ${reminded.join(', ')})</span>` : '';
+                html += `<div class="flex items-start gap-2 border-t border-gray-100 pt-1.5 mt-1.5"><span class="bg-gray-200 text-gray-700 px-1.5 rounded font-bold shrink-0">未回</span> <span class="text-gray-600">${pendingNames.join(', ')} ${remindedHtml}</span></div>`;
+            }
+
+            if(html === '') html = '<div class="text-gray-400 italic text-center">尚無資料</div>';
+            
+            document.getElementById('survey-detail-list').innerHTML = html;
+        }
+
+        function simulateMemberReply() {
+            const eventId = document.getElementById('club-reg-event-select').value;
+            if (!eventId || !clubSurveyDB[eventId]) return;
+
+            const data = clubSurveyDB[eventId];
+            let changed = false;
+
+            for (const [id, info] of Object.entries(data)) {
+                if (info.status === 'pending' || info.status === 'reminded') {
+                    info.status = Math.random() > 0.2 ? 'attending' : 'leave';
+                    changed = true;
+                    addChatMessage("system", `📱 <b>【社友回覆】</b><br>${info.name} 剛剛在 LINE 點擊了「${info.status === 'attending' ? '✅ 參加' : '❌ 請假'}」。`);
+                    break; 
+                }
+            }
+
+            if (changed) {
+                renderSurveyStats(eventId);
+            } else {
+                showAlert('模擬完畢', '所有收到通知的社友都已經回覆完畢囉！');
+            }
+        }
+
+        function remindPendingMembers() {
+            const eventId = document.getElementById('club-reg-event-select').value;
+            if (!eventId || !clubSurveyDB[eventId]) return;
+
+            const data = clubSurveyDB[eventId];
+            let remindCount = 0;
+
+            for (const [id, info] of Object.entries(data)) {
+                if (info.status === 'pending') {
+                    info.status = 'reminded'; 
+                    remindCount++;
+                }
+            }
+
+            if (remindCount > 0) {
+                renderSurveyStats(eventId);
+                addChatMessage("system", `⚠️ <b>【系統自動化】</b><br>系統已自動抓出過期 3 天未回覆的 ${remindCount} 位社友，並發送了「二次意願確認」推播通知！`);
+                showAlert('跟催發送成功', `已向 ${remindCount} 位尚未回覆的社友發送二次推播。`);
+            } else {
+                showAlert('無須跟催', '目前沒有尚未回覆的社友喔！');
+            }
+        }
+
+        function reportToPresident() {
+            const eventId = document.getElementById('club-reg-event-select').value;
+            if (!eventId || !clubSurveyDB[eventId]) return;
+
+            const data = clubSurveyDB[eventId];
+            const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
+            let pendingNames = [];
+
+            for (const [id, info] of Object.entries(data)) {
+                if (info.status === 'pending' || info.status === 'reminded') {
+                    pendingNames.push(info.name);
+                }
+            }
+
+            if (pendingNames.length > 0) {
+                closeModal('modal-club-reg-admin');
+                addChatMessage("system", `📄 <b>【未回覆名單呈報】</b><br>已將 <b>${eventObj.title}</b> 尚未回覆的 ${pendingNames.length} 位社友名單：<br><span class="text-gray-500">${pendingNames.join('、')}</span><br><br>👉 統整完畢並傳送給 <b>社長</b> 進行後續關心。`);
+            } else {
+                showAlert('無未回覆者', '太棒了！所有社友皆已明確回覆意願，無須呈報。');
+            }
+        }
+
+        // --- UTILS & MODALS ---
         function addChatMessage(sender, text) {
             const chatArea = document.getElementById('chat-messages');
             const msgDiv = document.createElement('div');
@@ -2429,149 +3290,14 @@
 
         function openUserScanner() { openModal('modal-user-scanner'); }
         
-        // --- 核心更新：加入 LBS 座標檢核與防弊機制 ---
-        function simulateUserScanEvent() {
-            closeModal('modal-user-scanner');
-            
-            const isMakeupEvent = systemScope === 'district' && !isGolfEvent(currentActiveEvent);
-
-            if (isMakeupEvent && currentActiveEvent) {
-                if (currentActiveEvent.id === 107) {
-                    // RYE 模擬人在現場
-                    addChatMessage("system", `📍 <b>【LBS 定位驗證中】</b><br>模擬讀取：您目前位於 <b>台北福華大飯店</b> (誤差 5 公尺內)。`);
-                    setTimeout(() => processScanSuccess(), 800);
-                } else if (currentActiveEvent.id === 109) {
-                    // 地區年會 抓取實際 GPS
-                    addChatMessage("system", `📍 <b>【LBS 定位驗證中】</b><br>正在獲取您的實際 GPS 定位，以核對是否在「${currentActiveEvent.location}」活動現場 (允許誤差 100 公尺)...`);
-                    
-                    if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition((position) => {
-                            const userLat = position.coords.latitude;
-                            const userLng = position.coords.longitude;
-                            const eventLat = currentActiveEvent.lat || 25.0785;
-                            const eventLng = currentActiveEvent.lng || 121.5262;
-
-                            const dist = calculateDistance(userLat, userLng, eventLat, eventLng);
-                            
-                            setTimeout(() => {
-                                if (dist <= 100) {
-                                    addChatMessage("system", `✅ <b>定位驗證通過</b><br>距離會場：${Math.round(dist)} 公尺。`);
-                                    processScanSuccess();
-                                } else {
-                                    // 真實打擊防弊：開啟 80% 版面的 LIFF Google Maps
-                                    openGpsMapModal(userLat, userLng, eventLat, eventLng, Math.round(dist));
-                                    addChatMessage("system", `❌ <b>定位驗證失敗</b><br>距離會場 <b>${Math.round(dist)} 公尺</b>，超過允許範圍。<br><span class="text-[10px] text-gray-500">※ 已自動彈出 LIFF 視窗顯示您的實際座標。</span>`);
-                                }
-                            }, 1000);
-                        }, (error) => {
-                            // 未授權定位防弊 -> 啟動「展示專用模擬降落機制」
-                            const mockLat = 25.0339; // 模擬位置：台北 101 (信義區)
-                            const mockLng = 121.5644;
-                            const eventLat = currentActiveEvent.lat || 25.0785;
-                            const eventLng = currentActiveEvent.lng || 121.5262;
-                            const dist = calculateDistance(mockLat, mockLng, eventLat, eventLng);
-
-                            addChatMessage("system", `❌ <b>未獲取真實定位授權</b><br>因瀏覽器安全性限制，無法讀取您的真實 GPS。<br><span class="text-[10px] text-gray-500">※ 已自動為您載入模擬座標 (台北信義區) 進行功能展示。</span>`);
-                            
-                            setTimeout(() => {
-                                openGpsMapModal(mockLat, mockLng, eventLat, eventLng, Math.round(dist));
-                                addChatMessage("system", `❌ <b>定位驗證失敗</b><br>模擬距離會場 <b>${Math.round(dist)} 公尺</b>，超過允許範圍。<br><span class="text-[10px] text-gray-500">※ 已自動彈出 LIFF 視窗顯示您的模擬座標。</span>`);
-                            }, 1500);
-                        }, { enableHighAccuracy: true });
-                    } else {
-                        showAlert('錯誤', '您的瀏覽器不支援定位功能。');
-                    }
-                } else {
-                    processScanSuccess();
-                }
-            } else {
-                processScanSuccess();
-            }
-        }
-
-        // --- NEW: 開啟防弊 Google Map LIFF 視窗 ---
-        function openGpsMapModal(userLat, userLng, eventLat, eventLng, dist) {
-            document.getElementById('gps-distance-text').innerText = dist;
-            // 串接 Google Maps Iframe (純座標顯示)
-            document.getElementById('gps-map-iframe').src = `https://maps.google.com/maps?q=${userLat},${userLng}&z=16&output=embed`;
-            openModal('modal-gps-map');
-        }
-
-        // Haversine 公式計算地球上兩點距離 (公尺)
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; 
-            const p1 = lat1 * Math.PI/180;
-            const p2 = lat2 * Math.PI/180;
-            const dp = (lat2-lat1) * Math.PI/180;
-            const dl = (lon2-lon1) * Math.PI/180;
-
-            const a = Math.sin(dp/2) * Math.sin(dp/2) +
-                      Math.cos(p1) * Math.cos(p2) *
-                      Math.sin(dl/2) * Math.sin(dl/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-            return R * c;
-        }
-
-        function processScanSuccess() {
-            const club = clubsData.find(c => c.id === currentUserClubId) || { name: "未知社" };
-            if(club && systemScope === 'district') {
-                club.attended += 1;
-                renderStatisticsTable();
-            }
-
-            if (isGolfEvent(currentActiveEvent)) {
-                isGolfCheckedIn = true;
-                let groupMsg = golfGroupAttendance.map(p => {
-                    let shortName = p.name.split(' ')[0];
-                    return ` ${shortName} ${p.arrived ? '<span class="text-emerald-600 font-bold">(已到)</span>' : '<span class="text-gray-400">(未到)</span>'}`;
-                }).join('<br>');
-
-                renderProfileMenu(); 
-                
-                // 取消高爾夫球賽的出席累加與寫入資料庫
-                addChatMessage("bot", `
-                    <div class="space-y-2">
-                        <p>✅ <b>【高爾夫球大會簽到成功】</b></p>
-                        <p>親愛的 <b>${club.name} 王大同 社友</b>：<br>您已成功簽到 <b>${currentActiveEvent.title}</b>！<br>· <b>專屬置物櫃：88 號</b><br>· <b>今日同組報到狀況：</b><br>${groupMsg}</p>
-                        <p class="text-[10px] text-emerald-600 font-bold mt-1">👉 下方選單右側「我要計分」功能已解鎖！</p>
-                    </div>
-                `);
-            } else if (systemScope === 'district') {
-                currentAttendanceStats.newMakeups.push({ date: "今日", event: currentActiveEvent.title });
-                currentAttendanceStats.rates.year = "92%"; 
-                currentAttendanceStats.rates.h1 = "96%"; 
-                
-                let wang = clubMembersAttendance.find(m => m.name.includes("王大同"));
-                if (wang) {
-                    wang.year = "92%";
-                    wang.h1 = "96%";
-                    wang.justUpdated = true; 
-                }
-                
-                addChatMessage("bot", `
-                    <div class="space-y-2">
-                        <p>✅ <b>【大會報到暨補出席成功】</b></p>
-                        <p>親愛的 <b>${club.name} 王大同 社友</b>：<br>您已成功簽到 <b>${currentActiveEvent.title}</b>！</p>
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs mt-2 shadow-sm">
-                            <div class="flex justify-between items-center mb-1 border-b border-blue-200 pb-1">
-                                <span class="font-bold text-blue-900"><i class="fa-solid fa-file-signature mr-1"></i> 電子補出席單 (Make-up)</span>
-                                <span class="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded shadow-sm">已自動回傳</span>
-                            </div>
-                            <div class="space-y-1 mt-1.5">
-                                <p class="text-gray-700"><b>主辦單位：</b>3523地區</p>
-                                <p class="text-gray-700"><b>活動名稱：</b>${currentActiveEvent.title}</p>
-                                <p class="text-gray-700"><b>報到時間：</b>剛剛</p>
-                            </div>
-                            <p class="text-emerald-700 font-bold mt-2 text-center bg-emerald-100/80 border border-emerald-200 py-1.5 rounded-md">
-                                <i class="fa-solid fa-paper-plane mr-1"></i> 憑證已同步累計至本社「出席累計」
-                            </p>
-                        </div>
-                        <p class="text-[10px] text-gray-500 mt-1">💡 提示：您可以切換至「本社專區」，於首頁「出席累計」或社長專區中查看最新連動數據。</p>
-                    </div>
-                `);
-            } else {
-                addChatMessage("bot", `✅ <b>【本社例會出席確認】</b><br>親愛的 <b>${club.name} 王大同 社友</b>：<br>您已成功掃描現場條碼完成 <b>${currentActiveEvent.title}</b> 的出席簽到！<br><br><i>感謝您的蒞臨與參與！</i>`);
+        function populateScanTargetDropdown() {
+            const select = document.getElementById('scan-target-select');
+            if (select) {
+                select.innerHTML = `
+                    <option value="王大同">王大同 社友 (台北松青社)</option>
+                    <option value="李志明">李志明 社友 (台北松青社)</option>
+                    <option value="陳俊宇">陳俊宇 總監 (台北逸仙社)</option>
+                `;
             }
         }
 
@@ -2581,23 +3307,73 @@
         
         function renderStatisticsTable() {
             const tbody = document.getElementById('statistics-table-body');
+            const thead = document.getElementById('statistics-table-head');
             if(!tbody) return;
             tbody.innerHTML = '';
             let tr=0, tp=0, tu=0, ta=0;
 
             const isAnnualEvent = currentActiveEvent && currentActiveEvent.id === 109;
+            const isGolf = isGolfEvent(currentActiveEvent);
             const subtitleEl = document.getElementById('stats-subtitle');
             
             if (subtitleEl) {
                 if (isAnnualEvent) {
                     subtitleEl.innerHTML = '<span class="text-yellow-300 font-bold">地區年會專屬檢視：</span>以社為單位批次繳費，欠費社已用紅色醒目提示。';
+                } else if (isGolf) {
+                    subtitleEl.innerHTML = '<span class="text-yellow-300 font-bold">高球賽專屬檢視：</span>松青社應繳總額已與「報名資料庫」即時連動精算。';
                 } else {
                     subtitleEl.innerText = '排序規則：優先依「分區編號」，分區內依「創社年份(授證先後)」';
                 }
             }
 
+            if (thead) {
+                if (isGolf) {
+                    thead.innerHTML = `
+                        <tr class="bg-gray-50 border-b border-gray-200 text-xxs font-bold text-gray-400 uppercase tracking-wider">
+                            <th class="py-3.5 px-4">分區</th>
+                            <th class="py-3.5 px-4">扶輪社名稱</th>
+                            <th class="py-3.5 px-4 text-center">報名人數</th>
+                            <th class="py-3.5 px-4 text-center text-rose-600 bg-rose-50/50">應繳總額</th>
+                            <th class="py-3.5 px-4 text-center">完成繳費</th>
+                            <th class="py-3.5 px-4 text-center">尚未完成</th>
+                            <th class="py-3.5 px-4 text-center">已報到</th>
+                            <th class="py-3.5 px-4 text-right">報到率</th>
+                        </tr>
+                    `;
+                } else {
+                    thead.innerHTML = `
+                        <tr class="bg-gray-50 border-b border-gray-200 text-xxs font-bold text-gray-400 uppercase tracking-wider">
+                            <th class="py-3.5 px-4">分區</th>
+                            <th class="py-3.5 px-4">扶輪社名稱</th>
+                            <th class="py-3.5 px-4 text-center">報名人數</th>
+                            <th class="py-3.5 px-4 text-center">完成繳費</th>
+                            <th class="py-3.5 px-4 text-center">尚未完成</th>
+                            <th class="py-3.5 px-4 text-center">已報到</th>
+                            <th class="py-3.5 px-4 text-right">報到率</th>
+                        </tr>
+                    `;
+                }
+            }
+
             clubsData.forEach(club => {
                 let reg = club.registered;
+
+                if (club.id === 6) {
+                    reg = 0;
+                    let accuratePaidCount = 0;
+                    if (currentActiveEvent && eventRegistrations[currentActiveEvent.id] && eventRegistrations[currentActiveEvent.id][club.id]) {
+                        const regs = eventRegistrations[currentActiveEvent.id][club.id];
+                        regs.forEach(r => {
+                            let heads = 1 + (parseInt(r.familyCount) || 0);
+                            reg += heads;
+                            if (r.isPaid) accuratePaidCount += heads; 
+                        });
+                    }
+                    club.registered = reg;
+                    club.paid = accuratePaidCount;
+                    if (club.paid > reg) club.paid = reg; 
+                }
+
                 let paid = club.paid;
                 let unpay = reg - paid;
                 let att = club.attended;
@@ -2620,6 +3396,37 @@
                         unpayDisplay = `0`;
                     }
                 }
+                
+                let amountTd = '';
+                if (isGolf) {
+                    let totalAmount = 0;
+                    
+                    if (club.id === 6) {
+                        if (eventRegistrations[currentActiveEvent.id] && eventRegistrations[currentActiveEvent.id][club.id]) {
+                            let clubRegs = eventRegistrations[currentActiveEvent.id][club.id];
+                            let accurateCount = 0;
+                            clubRegs.forEach(r => accurateCount += 1 + (parseInt(r.familyCount) || 0));
+                            
+                            let roleAmount = 0;
+                            if (clubRegs.golfRole === '主辦社') roleAmount = 20000;
+                            else if (clubRegs.golfRole === '協辦社') roleAmount = 10000;
+                            else if (clubRegs.golfRole === '贊助社') roleAmount = 5000;
+
+                            let psTotalMoney = 0;
+                            if (clubRegs.personalSponsors) {
+                                clubRegs.personalSponsors.forEach(ps => {
+                                    if (ps.money > 0) psTotalMoney += ps.money;
+                                });
+                            }
+                            totalAmount = roleAmount + (accurateCount * 1000) + psTotalMoney;
+                        }
+                    } else {
+                        totalAmount = club.registered * 1000;
+                    }
+                    
+                    let tdClass = club.id === 6 ? "text-center px-4 font-black text-rose-600 bg-yellow-100/60" : "text-center px-4 font-bold text-rose-600 bg-rose-50/30";
+                    amountTd = `<td class="${tdClass}">NT$ ${totalAmount.toLocaleString()}</td>`;
+                }
 
                 const rate = reg > 0 ? Math.round((att/reg)*100) : 0;
                 tr += reg; 
@@ -2627,11 +3434,14 @@
                 tu += unpay; 
                 ta += att;
 
+                let clubNameDisplay = club.id === 6 ? `<span class="text-blue-700">${club.name}</span> <i class="fa-solid fa-link text-[10px] text-blue-500 ml-0.5 animate-pulse" title="即時資料庫連動中"></i>` : club.name;
+
                 tbody.innerHTML += `
                     <tr class="${rowClass}">
                         <td class="py-3 px-4">${club.area}</td>
-                        <td class="font-bold px-4">${club.name}</td>
-                        <td class="text-center px-4">${reg}</td>
+                        <td class="font-bold px-4">${clubNameDisplay}</td>
+                        <td class="text-center px-4 ${club.id === 6 ? 'font-bold bg-yellow-50/50' : ''}">${reg}</td>
+                        ${amountTd}
                         <td class="text-center px-4">${paidDisplay}</td>
                         <td class="text-center px-4">${unpayDisplay}</td>
                         <td class="text-center text-blue-600 font-bold px-4">${att}</td>
@@ -2650,7 +3460,6 @@
             if(taEl) taEl.innerText = `${ta} 人`;
         }
 
-        // --- NEW: 開啟待繳費明細彈窗 ---
         function openUnpaidDetailsModal() {
             const container = document.getElementById('unpaid-details-list');
             if (!container) return;
@@ -2664,7 +3473,6 @@
                 let paid = club.paid;
                 let unpayCount = reg - paid;
 
-                // 若為地區年會，只要有人沒繳就視為全社未繳
                 if (isAnnualEvent && unpayCount > 0 && reg > 0) {
                     unpayCount = reg; 
                 }
@@ -2672,12 +3480,11 @@
                 if (unpayCount > 0) {
                     totalUnpaid += unpayCount;
                     
-                    // 嘗試從資料庫撈取未繳費的人名 (以模擬器來說抓有報名的人來示意)
                     let names = [];
                     if (!isAnnualEvent && eventRegistrations[currentActiveEvent.id] && eventRegistrations[currentActiveEvent.id][club.id]) {
                         const regs = eventRegistrations[currentActiveEvent.id][club.id];
-                        // 簡單示意：隨機抓取幾個名字來代表未繳費名單
-                        names = regs.slice(0, unpayCount).map(r => r.name);
+                        let unpaidRegs = regs.filter(r => !r.isPaid);
+                        names = unpaidRegs.slice(0, unpayCount).map(r => r.name);
                     }
                     
                     let namesStr = "";
@@ -2717,12 +3524,10 @@
             openModal('modal-unpaid-details');
         }
 
-        // --- NEW: 催繳通知發送模擬 ---
         function sendReminderPush(clubName) {
-            showAlert('催繳通知已發送', `系統已透過 LINE Messaging API，自動向 ${clubName} 的社長與執秘發送「未繳費提醒清單」與匯款資訊！`);
+            showAlert('催繳通知已發送', `系統已透過 LINE 自動向 ${clubName} 發送催繳提醒！`);
         }
 
-        // --- NEW: 貴賓唱名系統 (VIP LIST) ---
         function openVIPListModal() {
             const eventId = currentActiveEvent.id;
             const vips = vipDatabase[eventId] || [];
@@ -2738,8 +3543,7 @@
 
             let html = '';
 
-            // 1. 準時名單
-            html += `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            html += `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
                         <div class="px-4 py-2 bg-indigo-50 border-b border-indigo-100 flex justify-between items-center">
                             <span class="text-xs font-bold text-indigo-800"><i class="fa-solid fa-list-ol mr-1"></i> 正式名單 (10:30 前報到)</span>
                             <span class="bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">${onTimeVIPs.length} 人</span>
@@ -2749,8 +3553,7 @@
             onTimeVIPs.forEach(v => { html += generateVIPRow(v); });
             html += `</div></div>`;
 
-            // 2. 補介紹名單
-            html += `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            html += `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
                         <div class="px-4 py-2 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
                             <span class="text-xs font-bold text-amber-800"><i class="fa-solid fa-bell mr-1"></i> 補介紹名單 (10:30 後報到)</span>
                             <span class="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">${lateVIPs.length} 人</span>
@@ -2760,8 +3563,7 @@
             lateVIPs.forEach(v => { html += generateVIPRow(v); });
             html += `</div></div>`;
 
-            // 3. 尚未報到名單
-            html += `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden opacity-70 mt-2">
+            html += `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden opacity-70">
                         <div class="px-4 py-2 bg-gray-100 border-b border-gray-200 flex justify-between items-center">
                             <span class="text-xs font-bold text-gray-600"><i class="fa-solid fa-spinner mr-1"></i> 尚未報到 (供查核用)</span>
                             <span class="bg-gray-400 text-white text-[9px] px-1.5 py-0.5 rounded">${notArrivedVIPs.length} 人</span>
@@ -2812,11 +3614,10 @@
             const vip = vipDatabase[eventId].find(v => v.id === vipId);
             if (vip) {
                 vip.isCalled = !vip.isCalled;
-                openVIPListModal(); // Re-render instantly
+                openVIPListModal(); 
             }
         }
 
-        // --- 14. GOLF SCORECARD & LEADERBOARD LOGIC ---
         function openGolfScorecard() { renderGolfScorecard(); openModal('modal-golf-scorecard'); }
         
         function renderGolfScorecard() {
@@ -3001,7 +3802,6 @@
             openModal('modal-golf-leaderboard');
         }
 
-        // --- 15. ATTENDANCE TRACKING SYSTEM ---
         function openAttendanceModal() {
             let yearHtml = currentAttendanceStats.rates.year;
             let h1Html = currentAttendanceStats.rates.h1;
@@ -3076,16 +3876,161 @@
             openModal('modal-club-attendance');
         }
 
-        // --- NEW: CLUB DUES MANAGEMENT SYSTEM (社友社費) ---
+        // --- NEW: 初始化社費資料庫架構函式 ---
+        function initDuesDB(clubId, month, memberId) {
+            if (!duesDB[clubId]) duesDB[clubId] = {};
+            if (!duesDB[clubId][month]) duesDB[clubId][month] = {};
+            if (!duesDB[clubId][month][memberId]) {
+                duesDB[clubId][month][memberId] = { meal: 0, iou: 0, customs: [], isPaid: false };
+            }
+        }
+
+        // --- NEW: 社務對帳與請款單模組 (Club Finance) ---
+        function openClubFinanceModal() {
+            document.getElementById('finance-rent').value = 20000;
+            document.getElementById('finance-salary').value = 35000;
+            
+            // 清除先前手動新增的固定項目
+            document.querySelectorAll('.fixed-item-row').forEach(row => row.remove());
+
+            document.getElementById('finance-advances-container').innerHTML = `<div class="text-xs text-gray-400 italic text-center py-2" id="no-advance-msg">本月尚無任何社友代墊款</div>`;
+            calcFinanceTotal();
+            openModal('modal-club-finance');
+        }
+
+        function addFinanceFixedRow() {
+            const container = document.getElementById('finance-fixed-container');
+            const div = document.createElement('div');
+            div.className = "flex justify-between items-center gap-2 fixed-item-row mt-2 pt-2 border-t border-dashed border-gray-200";
+            div.innerHTML = `
+                <input type="text" class="fixed-item-name flex-1 bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 px-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="如: 水電費、郵資">
+                <div class="relative w-1/3 shrink-0">
+                    <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
+                    <input type="number" class="fixed-item-amount w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-5 pr-1 text-sm text-right font-bold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="0" oninput="calcFinanceTotal()" onfocus="this.select()">
+                </div>
+                <button onclick="this.parentElement.remove(); calcFinanceTotal();" class="text-red-400 hover:text-red-600 transition-colors p-1"><i class="fa-solid fa-trash-can"></i></button>
+            `;
+            container.appendChild(div);
+        }
+
+        function addFinanceAdvanceRow(memberId = null, eventName = '', amount = '') {
+            const noMsg = document.getElementById('no-advance-msg');
+            if (noMsg) noMsg.remove();
+            
+            const clubId = currentUserClubId;
+            let optionsHtml = `<option value="m_${clubId}_0" ${memberId === `m_${clubId}_0` ? 'selected' : ''}>王大同 (本人)</option>`;
+            for (let i = 1; i <= 9; i++) {
+                let currentOptionId = `m_${clubId}_${i}`;
+                optionsHtml += `<option value="${currentOptionId}" ${memberId === currentOptionId ? 'selected' : ''}>社友 ${i}</option>`;
+            }
+
+            const container = document.getElementById('finance-advances-container');
+            const div = document.createElement('div');
+            div.className = "advance-row flex flex-col gap-1.5 p-2 bg-emerald-50/50 border border-emerald-100 rounded-lg relative";
+            
+            // 若為 Gmail 抓取的資料，顯示一個小徽章與增加上方間距
+            const gmailBadge = memberId ? `<span class="absolute top-1 left-2 text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 font-bold"><i class="fa-brands fa-google mr-0.5"></i>Gmail 自動解析匯入</span>` : '';
+            const ptClass = memberId ? 'pt-5' : '';
+
+            div.innerHTML = `
+                ${gmailBadge}
+                <button onclick="this.parentElement.remove(); calcFinanceTotal();" class="absolute top-1 right-1.5 text-red-400 hover:text-red-600 p-0.5"><i class="fa-solid fa-xmark"></i></button>
+                <div class="flex items-center gap-2 pr-4 ${ptClass}">
+                    <span class="text-[10px] font-bold text-gray-500 w-10 shrink-0">代墊人</span>
+                    <select class="advance-member w-full bg-white border border-gray-300 text-gray-800 rounded py-1 px-1.5 text-xs font-bold focus:ring-1 focus:ring-green-500">${optionsHtml}</select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-gray-500 w-10 shrink-0">明細</span>
+                    <input type="text" class="advance-event flex-1 bg-white border border-gray-300 rounded py-1 px-1.5 text-xs focus:ring-1 focus:ring-green-500" placeholder="如: 跨社活動報名費" value="${eventName}">
+                    <div class="relative w-20 shrink-0">
+                        <span class="absolute left-1 top-1 text-[10px] text-gray-400">$</span>
+                        <input type="number" class="advance-amount w-full bg-white border border-gray-300 text-gray-900 rounded py-1 pl-4 pr-1 text-xs text-right font-bold focus:ring-1 focus:ring-green-500" placeholder="0" oninput="calcFinanceTotal()" value="${amount === 0 ? '' : amount}">
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            calcFinanceTotal();
+        }
+
+        // [新增] 模擬抓取 Gmail 資料
+        function fetchGmailAdvances() {
+            // 在背景對話框顯示讀取中
+            addChatMessage("system", "📧 <b>系統同步中：</b><br>正在連接信箱伺服器，運用 AI 解析近期的跨社活動繳費通知信...");
+            
+            setTimeout(() => {
+                const clubId = currentUserClubId;
+                // 觸發 addFinanceAdvanceRow 並帶入解析後的預設值
+                addFinanceAdvanceRow(`m_${clubId}_0`, "民生社35週年社慶活動餐費", 2000);
+                
+                // 提示抓取成功
+                addChatMessage("bot", `✅ <b>【信件解析完成】</b><br>已從友社報名確認函中成功解析出 1 筆代墊費用：<br><br><div class="bg-gray-100 p-2 rounded text-xs text-gray-700 border border-gray-200">👤 對象：王大同<br>📌 項目：民生社35週年社慶活動餐費<br>💰 金額：$2,000</div><br>👉 資料已自動為您匯入「社友代墊款」表單中，您可檢視確認或再手動修改！`);
+                
+                // 畫面閃動提示
+                const container = document.getElementById('finance-advances-container');
+                container.lastElementChild.classList.add('ring-2', 'ring-red-400', 'transition-all');
+                setTimeout(() => { container.lastElementChild.classList.remove('ring-2', 'ring-red-400'); }, 1500);
+
+            }, 1200);
+        }
+
+        function calcFinanceTotal() {
+            let total = 0;
+            total += parseInt(document.getElementById('finance-rent').value) || 0;
+            total += parseInt(document.getElementById('finance-salary').value) || 0;
+            
+            // 加上手動新增的固定項目
+            document.querySelectorAll('.fixed-item-amount').forEach(input => {
+                total += parseInt(input.value) || 0;
+            });
+
+            // 加上代墊款項目
+            document.querySelectorAll('.advance-amount').forEach(input => {
+                total += parseInt(input.value) || 0;
+            });
+            document.getElementById('finance-total-amount').innerText = total.toLocaleString();
+        }
+
+        function submitClubFinance() {
+            const clubId = currentUserClubId;
+            const month = "2026-07"; // 預設操作當月
+            let advanceCount = 0;
+
+            // 連動寫入社費系統
+            document.querySelectorAll('.advance-row').forEach(row => {
+                const memberId = row.querySelector('.advance-member').value;
+                const evtName = row.querySelector('.advance-event').value.trim();
+                const amt = parseInt(row.querySelector('.advance-amount').value) || 0;
+                
+                if (memberId && evtName && amt > 0) {
+                    initDuesDB(clubId, month, memberId);
+                    // 將代墊款寫入該社友的臨時變動費用 (Custom Dues)
+                    duesDB[clubId][month][memberId].customs.push({ 
+                        name: `${evtName} (代墊)`, 
+                        amount: amt 
+                    });
+                    advanceCount++;
+                }
+            });
+
+            const total = document.getElementById('finance-total-amount').innerText;
+            closeModal('modal-club-finance');
+
+            let msg = `✅ <b>【社務請款單已送出】</b><br>已向社長呈報本期固定支出與代墊款，請款總額：<b class="text-green-600">NT$ ${total}</b>。`;
+            if (advanceCount > 0) {
+                msg += `<br><br><span class="text-indigo-600 font-bold"><i class="fa-solid fa-link"></i> 系統智慧連動：</span><br><span class="text-[11px] text-gray-600">偵測到 ${advanceCount} 筆社友代墊款，已自動分發寫入對應社友的「${month} 社費帳單」中。</span>`;
+            }
+            
+            addChatMessage("system", msg);
+        }
+
         function openClubDuesModal() {
             const memberSelect = document.getElementById('dues-member');
             memberSelect.innerHTML = '';
             
-            // Populate members
             memberSelect.innerHTML += `<option value="m_${currentUserClubId}_0">王大同 (社長/本人)</option>`;
-            memberSelect.innerHTML += `<option value="m_${currentUserClubId}_1">李志明 社友</option>`;
-            memberSelect.innerHTML += `<option value="m_${currentUserClubId}_2">陳建國 社友</option>`;
-            memberSelect.innerHTML += `<option value="m_${currentUserClubId}_3">林永生 社友</option>`;
+            for (let i = 1; i <= 9; i++) {
+                memberSelect.innerHTML += `<option value="m_${currentUserClubId}_${i}">社友 ${i}</option>`;
+            }
             
             loadDuesData();
             openModal('modal-club-dues');
@@ -3096,16 +4041,11 @@
             const month = document.getElementById('dues-month').value;
             const memberId = document.getElementById('dues-member').value;
 
-            // Check if DB exists, if not initialize defaults
-            if (!duesDB[clubId]) duesDB[clubId] = {};
-            if (!duesDB[clubId][month]) duesDB[clubId][month] = {};
-            if (!duesDB[clubId][month][memberId]) {
-                duesDB[clubId][month][memberId] = { meal: 0, iou: 0, customs: [], isPaid: false };
-            }
+            // 使用共用函式初始化，避免 undefined
+            initDuesDB(clubId, month, memberId);
 
             const data = duesDB[clubId][month][memberId];
 
-            // Render Payment Status Badge
             const statusBadge = document.getElementById('dues-payment-status');
             if (data.isPaid) {
                 statusBadge.innerHTML = `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-black border border-emerald-200 shadow-sm"><i class="fa-solid fa-check"></i> 已收繳費</span>`;
@@ -3113,7 +4053,6 @@
                 statusBadge.innerHTML = `<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px] font-black border border-rose-200 shadow-sm"><i class="fa-solid fa-triangle-exclamation"></i> 尚未繳費</span>`;
             }
 
-            // Set values to empty string if 0, allows direct typing without deleting '0'
             document.getElementById('dues-meal').value = data.meal === 0 ? '' : data.meal;
             document.getElementById('dues-iou').value = data.iou === 0 ? '' : data.iou;
             
@@ -3124,7 +4063,9 @@
                 customContainer.innerHTML = `<div class="text-xs text-gray-400 italic text-center py-2" id="no-custom-msg">本月尚無臨時變動費用</div>`;
             } else {
                 data.customs.forEach((c, idx) => {
-                    appendCustomDuesRow(c.name, c.amount);
+                    // 若是代墊款 (帶有特殊後綴)，我們用藍色字體標示以資區別
+                    const isAdvance = c.name.includes('(代墊)');
+                    appendCustomDuesRow(c.name, c.amount, isAdvance);
                 });
             }
 
@@ -3134,19 +4075,25 @@
         function addCustomDuesField() {
             const noMsg = document.getElementById('no-custom-msg');
             if (noMsg) noMsg.remove();
-            appendCustomDuesRow('', 0);
+            appendCustomDuesRow('', 0, false);
             calculateTotalDues();
         }
 
-        function appendCustomDuesRow(name, amount) {
+        // 加入 isAdvance 參數，讓從對帳連動過來的代墊款呈現不同顏色
+        function appendCustomDuesRow(name, amount, isAdvance = false) {
             const container = document.getElementById('custom-dues-container');
             const div = document.createElement('div');
             div.className = "flex gap-2 items-center custom-dues-row";
+            
+            const textColorClass = isAdvance ? "text-indigo-700 bg-indigo-50 border-indigo-200" : "text-gray-900 bg-white border-gray-300";
+            const ringColorClass = isAdvance ? "focus:ring-indigo-500" : "focus:ring-pink-500";
+            const readonlyAttr = isAdvance ? "readonly title='此為對帳系統連動寫入，無法直接在此修改'" : "";
+
             div.innerHTML = `
-                <input type="text" placeholder="名目 (如:總監之夜)" value="${name}" class="custom-name w-1/2 bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 px-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all">
+                <input type="text" placeholder="名目 (如:總監之夜)" value="${name}" class="custom-name w-1/2 ${textColorClass} rounded-lg py-1.5 px-2 text-xs font-semibold focus:outline-none focus:ring-2 ${ringColorClass} transition-all" ${readonlyAttr}>
                 <div class="relative w-1/2">
                     <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
-                    <input type="number" placeholder="0" value="${amount === 0 ? '' : amount}" onfocus="this.select()" class="custom-amount w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-5 pr-1 text-xs text-right font-bold focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all" oninput="calculateTotalDues()">
+                    <input type="number" placeholder="0" value="${amount === 0 ? '' : amount}" onfocus="this.select()" class="custom-amount w-full ${textColorClass} rounded-lg py-1.5 pl-5 pr-1 text-xs text-right font-bold focus:outline-none focus:ring-2 ${ringColorClass} transition-all" oninput="calculateTotalDues()" ${readonlyAttr}>
                 </div>
                 <button onclick="this.parentElement.remove(); calculateTotalDues();" class="text-red-400 hover:text-red-600 p-1 transition-colors"><i class="fa-solid fa-trash-can"></i></button>
             `;
@@ -3154,7 +4101,7 @@
         }
 
         function calculateTotalDues() {
-            let total = 2100 + 125; // 固定費用
+            let total = 2100 + 125; 
             
             const mealStr = document.getElementById('dues-meal').value;
             const iouStr = document.getElementById('dues-iou').value;
@@ -3189,7 +4136,6 @@
                 }
             });
 
-            // 保留先前的 isPaid 狀態，更新費用
             const currentIsPaid = duesDB[clubId][month][memberId].isPaid;
             duesDB[clubId][month][memberId] = { meal: meal, iou: iou, customs: customs, isPaid: currentIsPaid };
             const total = document.getElementById('dues-total-amount').innerText;
@@ -3199,11 +4145,10 @@
             addChatMessage("system", `💰 <b>【帳單已產出並推播】</b><br>您已成功為 <b>${memberName}</b> 產出 ${month} 帳單。<br>每月總計應繳：<b class="text-pink-600">NT$ ${total}</b><br><br><span class="text-[10px] text-gray-500">※ 系統已同步透過 LINE 與 Email 發送電子繳費單給該社友。</span>`);
         }
 
-        // --- NEW: USER'S MY DUES MODAL LOGIC (個人本月社費與對帳) ---
         function openMyDuesModal() {
             const clubId = currentUserClubId;
-            const month = "2026-07"; // 以模擬器情境固定為 7 月
-            const memberId = `m_${clubId}_0`; // 本人
+            const month = "2026-07"; 
+            const memberId = `m_${clubId}_0`; 
             
             const db = duesDB[clubId] && duesDB[clubId][month] && duesDB[clubId][month][memberId];
             const container = document.getElementById('my-dues-content');
@@ -3221,7 +4166,6 @@
             } else {
                 let total = 2100 + 125 + db.meal + db.iou + db.customs.reduce((sum, c) => sum + c.amount, 0);
                 
-                // Build Breakdown HTML
                 let html = `
                     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
                         <div class="px-4 py-2 bg-gray-100 flex justify-between items-center border-b border-gray-200">
@@ -3246,7 +4190,6 @@
                 `;
                 
                 if (db.isPaid) {
-                    // 已繳費狀態
                     html += `
                         <div class="bg-emerald-50 border-2 border-emerald-200 p-4 rounded-2xl text-center shadow-sm relative overflow-hidden">
                             <div class="absolute -right-4 -top-4 text-emerald-500/10"><i class="fa-solid fa-stamp text-6xl"></i></div>
@@ -3255,7 +4198,6 @@
                     paymentSection.classList.add('hidden');
                     footer.classList.add('hidden');
                 } else {
-                    // 尚未繳費狀態
                     paymentSection.classList.remove('hidden');
                     footer.classList.remove('hidden');
                     
@@ -3263,7 +4205,7 @@
                     const hintEl = document.getElementById('my-dues-history-hints');
                     const inputEl = document.getElementById('my-dues-digits');
                     
-                    inputEl.value = ''; // Reset input
+                    inputEl.value = ''; 
                     
                     if (history.length > 0) {
                         hintEl.innerHTML = `系統已記憶您曾用的帳戶：<b class="text-pink-600">${history.join(', ')}</b><br>若此次使用相同帳戶，可直接留白送出。`;
@@ -3280,82 +4222,101 @@
 
         function submitMyDues() {
             const digits = document.getElementById('my-dues-digits').value.trim();
-            const memberId = `m_${currentUserClubId}_0`;
+            const clubId = currentUserClubId;
+            const month = "2026-07"; 
+            const memberId = `m_${clubId}_0`; 
+            
             const history = userBankAccounts[memberId] || [];
             
-            if (!digits && history.length === 0) {
-                showAlert("資料不完整", "您是首次繳款，請務必輸入匯款帳號後 5 碼供對帳！");
+            if (digits === '' && history.length === 0) {
+                showAlert('格式錯誤', '首次回報請務必輸入匯出帳號後 5 碼！');
                 return;
             }
             
             let finalDigits = digits;
-            if (!digits) {
-                finalDigits = history[history.length - 1]; // 取最後一次使用的帳戶
+            if (digits === '' && history.length > 0) {
+                finalDigits = history[history.length - 1]; 
+            } else if (digits.length !== 5) {
+                showAlert('格式錯誤', '請輸入完整的後 5 碼！');
+                return;
             } else {
-                if (digits.length !== 5) {
-                    showAlert("格式錯誤", "請輸入完整的後 5 碼數字！");
-                    return;
-                }
-                if (!userBankAccounts[memberId]) userBankAccounts[memberId] = [];
-                if (!userBankAccounts[memberId].includes(digits)) {
-                    userBankAccounts[memberId].push(digits); // 記憶新帳號，不覆蓋舊的
+                if (!history.includes(digits)) {
+                    history.push(digits);
+                    userBankAccounts[memberId] = history;
                 }
             }
             
             closeModal('modal-my-dues');
-            addChatMessage("user", `回報 7月 社費，匯出帳號後 5 碼：${finalDigits}`);
-            
+            addChatMessage("user", "回報本月社費對帳");
             setTimeout(() => {
-                addChatMessage("system", `🔄 <b>【自動對帳系統啟動】</b><br>系統正在讀取秘書處 Gmail，與銀行 API 進行入帳通知自動比對...`);
+                addChatMessage("bot", `✅ <b>【匯款資訊已登錄】</b><br>您已送出對帳帳號：<b class="text-pink-600">${finalDigits}</b><br>系統將自動與銀行明細比對，對帳成功後將發送電子收據給您。`);
                 
                 setTimeout(() => {
-                    // Update Database to Paid
-                    duesDB[currentUserClubId]["2026-07"][memberId].isPaid = true;
+                    if (duesDB[clubId] && duesDB[clubId][month] && duesDB[clubId][month][memberId]) {
+                        duesDB[clubId][month][memberId].isPaid = true; 
+                    }
                     
-                    addChatMessage("bot", `✅ <b>【帳款核銷成功】</b><br>已確認收到您的社費！<br>執秘後台狀態已同步更新為「已收繳費」。<br><br><span class="text-[10px] text-gray-500">👉 您可以再次點擊「本月社費」查看您的專屬電子收據。</span>`);
-                }, 2000);
-            }, 600);
+                    addChatMessage("system", `💰 <b>【社務帳務連動成功】</b><br>系統已接收虛擬銀行 API 入帳通知！<br><b>王大同</b> 社友的 7 月份社費已自動核銷為「已繳費」，並即時同步至社長/執秘的社費管理後台。`);
+                }, 2000); 
+
+            }, 500);
         }
 
-        // --- MISC / AUX LOGIC ---
-        function openSwapGroupModal(e) { if(e) e.stopPropagation(); openModal('modal-swap-group'); }
-        function executeGroupSwap() { closeModal('modal-swap-group'); addChatMessage("bot", "✅ <b>即時調組成功</b>"); }
         function simulateNewRegistration() {
-            const randomIndex = Math.floor(Math.random() * clubsData.length);
-            const club = clubsData[randomIndex];
-            club.registered += 1;
+            addChatMessage("system", "🧑‍💻 <b>模擬觸發：</b> 隨機社友剛完成了線上報名。 (總報名數 +1)");
+            const targetClub = clubsData.find(c => c.id === currentUserClubId) || clubsData[0];
+            
+            if (targetClub.id === 6 && currentActiveEvent) {
+                if (!eventRegistrations[currentActiveEvent.id]) eventRegistrations[currentActiveEvent.id] = {};
+                if (!eventRegistrations[currentActiveEvent.id][6]) eventRegistrations[currentActiveEvent.id][6] = [];
+                
+                let count = eventRegistrations[currentActiveEvent.id][6].length + 1;
+                eventRegistrations[currentActiveEvent.id][6].push({
+                    id: `m_sim_${Date.now()}`,
+                    name: `測試社友 ${count}`,
+                    type: 'self',
+                    handicap: 18,
+                    familyCount: 0,
+                    isPaid: false
+                });
+            } else {
+                targetClub.registered += 1;
+            }
             renderStatisticsTable();
-            addChatMessage("system", `⚡️ 模擬：【${club.area}】<b>${club.name}</b> 新增 1 筆活動報名登記。`);
-        }
-        function simulatePaymentApproval() {
-            const potentialClubs = clubsData.filter(c => (c.registered - c.paid) > 0);
-            if(potentialClubs.length === 0) {
-                showAlert('訊息', '目前所有報名皆已完成繳費！');
-                return;
-            }
-            const club = potentialClubs[Math.floor(Math.random() * potentialClubs.length)];
-            club.paid += 1;
-            renderStatisticsTable();
-            addChatMessage("system", `💰 秘書處：已核准【${club.name}】社友繳費收據，已更新為 "繳費成功"。`);
-        }
-        function simulateGolfGroupComplete() {
-            if (!isGolfEvent(currentActiveEvent)) {
-                showAlert('操作無效', '請先從行事曆選擇並切換至「高爾夫球比賽」！');
-                return;
-            }
-            if (!isGolfCheckedIn) {
-                showAlert('尚未報到', '請您先至【個人中心】完成您自己的大會報到，再來體驗同組到齊推播！');
-                return;
-            }
-            golfGroupAttendance.forEach(p => p.arrived = true);
-            renderProfileMenu(); 
-            addChatMessage("bot", `📢 <b>【大會系統自動推播】</b><br>⛳️ <b>第 18 組全員到齊通知</b><br>您好！與您同組的球友：<br>· 李志明 社友<br>· 陳建國 社友<br>· 林永生 社友<br>皆已完成報到手續。<br><br>👉 <b>請移步至 OUT 區第 1 洞發球台準備開球！</b>`);
-        }
-        function populateScanTargetDropdown() { 
-            const el = document.getElementById('scan-target-select');
-            if(el) el.innerHTML = clubsData.map(c => `<option value="${c.id}">${c.name}</option>`).join(''); 
         }
 
+        function simulatePaymentApproval() {
+            addChatMessage("system", "💰 <b>模擬觸發：</b> 秘書處剛核對完一筆款項。 (完成繳費 +1)");
+            const targetClub = clubsData.find(c => c.id === currentUserClubId) || clubsData[0];
+            
+            if (targetClub.id === 6 && currentActiveEvent && eventRegistrations[currentActiveEvent.id] && eventRegistrations[currentActiveEvent.id][6]) {
+                let clubRegs = eventRegistrations[currentActiveEvent.id][6];
+                let hasUnpaid = clubRegs.some(r => !r.isPaid);
+                
+                if (hasUnpaid) {
+                    clubRegs.forEach(r => r.isPaid = true);
+                    addChatMessage("system", "💡 <b>提示：</b> 模擬大會核對到松青社的統一匯款，全社名單已轉為「已繳費」！");
+                    renderStatisticsTable();
+                } else {
+                    addChatMessage("system", "💡 <b>提示：</b> 該社目前無待繳費帳單，無法再增加繳費數。");
+                }
+            } else {
+                if (targetClub.paid < targetClub.registered) {
+                    targetClub.paid += 1;
+                    renderStatisticsTable();
+                } else {
+                    addChatMessage("system", "💡 <b>提示：</b> 該社已全數繳清，無法再增加繳費數。");
+                }
+            }
+        }
+
+        function simulateGolfGroupComplete() {
+            addChatMessage("system", "⛳ <b>模擬觸發：</b> 高爾夫球第 18 組全員到齊！");
+            golfGroupAttendance.forEach(p => p.arrived = true);
+            if (activeTab === 'profile' && isGolfEvent(currentActiveEvent) && isGolfCheckedIn) {
+                renderProfileMenu();
+            }
+        }
     </script>
 </body>
 </html>

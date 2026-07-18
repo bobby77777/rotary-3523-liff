@@ -30,15 +30,7 @@ async def lifespan(app: FastAPI):
     db.ensure_user_roles_table()
     db.ensure_event_guests_table()
     db.ensure_golf_scores_table()
-    for (scope, tab), alias in _TAB_ALIASES.items():
-        menu_id = line_api.get_menu_id_by_alias(alias)
-        if menu_id:
-            _TAB_MENU_IDS[(scope, tab)] = menu_id
-            logger.info("Cached tab menu: %s → %s", alias, menu_id)
-        elif scope == "district":
-            logger.warning("Could not resolve district alias at startup: %s", alias)
-        else:
-            logger.info("Club-scope menu not deployed yet: %s (will fall back to district)", alias)
+    db.ensure_club_dues_table()
     yield
 
 
@@ -76,8 +68,6 @@ _EVENT_SCHEDULE = [
     {"id": 110, "date": "2026-09-20", "weekday": "星期日", "title": "社際聯合例會暨餐敘",            "location": "君品酒店",                "chair": "輪值主委",            "time": "11:30-14:00", "type": "聯合活動", "fee": "NT$600"},
 ]
 
-# Physical rich menus, keyed by (scope, tab). Club-scope menus are optional —
-# when their alias isn't deployed yet, _switch_menu falls back to district.
 # ── Golf (新貝利亞 / New Peoria) ──────────────────────────────────────────────
 GOLF_PARS = [4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4]  # par 72
 # New Peoria: 6 visible holes, the other 12 are "hidden" and drive the handicap.
@@ -97,19 +87,6 @@ def _new_peoria(scores: list[int]) -> dict:
         "net": round(gross - handicap, 1),
         "par": par_total,
     }
-
-
-_TAB_ALIASES = {
-    ("district", "tab=home"):    "richmenu-3523-home",
-    ("district", "tab=profile"): "richmenu-3523-profile",
-    ("district", "tab=ebooks"):  "richmenu-3523-ebooks",
-    ("district", "tab=admin"):   "richmenu-3523-admin",
-    ("club", "tab=home"):        "richmenu-3523c-home",
-    ("club", "tab=profile"):     "richmenu-3523c-profile",
-    ("club", "tab=ebooks"):      "richmenu-3523c-ebooks",
-    ("club", "tab=admin"):       "richmenu-3523c-admin",
-}
-_TAB_MENU_IDS: dict[tuple[str, str], str] = {}
 
 
 # ── Roles & viewpoint scope ───────────────────────────────────────────────────
@@ -739,74 +716,21 @@ def _build_award_result(rows: list[dict]) -> dict:
     return {"type": "carousel", "contents": bubbles}
 
 
-# ── Tab handlers ──────────────────────────────────────────────────────────────
+# ── Profile handler ───────────────────────────────────────────────────────────
 
-def _switch_menu(user_id: str, tab_key: str) -> None:
-    scope = db.get_user_scope(user_id)
-    menu_id = _TAB_MENU_IDS.get((scope, tab_key)) or _TAB_MENU_IDS.get(("district", tab_key))
-    if menu_id:
-        line_api.link_rich_menu(user_id, menu_id)
-
-
-def _handle_tab_home(reply_token: str, user_id: str) -> None:
-    _switch_menu(user_id, "tab=home")
-    scope = db.get_user_scope(user_id)
-    events = _events_for_scope(scope, db.get_user_club(user_id))
-    carousel = _build_event_list_carousel(events)
-    alt = "🏠 本社近期活動" if scope == "club" else "📅 地區近期活動"
-    line_api.reply_flex(reply_token, alt, carousel)
-
-
-def _handle_tab_profile(reply_token: str, user_id: str) -> None:
-    _switch_menu(user_id, "tab=profile")
+def _handle_profile(reply_token: str, user_id: str) -> None:
     user_infos = db.get_personal_info(user_id)
     user_info  = user_infos[0] if user_infos else None
     reg_count  = len(db.get_registrations(user_id))
     card = _build_profile_card(user_info, reg_count)
     if user_info:
         card["header"]["contents"][0]["text"] = f"👤 {user_info['full_name']}"
-    scope = db.get_user_scope(user_id)
-    other = "本社專區" if scope == "district" else "地區總部"
     qr_items = [
         {"type": "action", "action": {"type": "postback", "label": "📋 報名紀錄", "data": "action=registrations"}},
         {"type": "action", "action": {"type": "postback", "label": "💰 繳費狀態", "data": "action=payments"}},
         {"type": "action", "action": {"type": "uri",      "label": "🔑 我的QR碼", "uri": f"{LIFF_URL}?tab=profile&action=qrcode"}},
-        {"type": "action", "action": {"type": "postback", "label": f"🔄 切換到{other}", "data": "action=switch_scope"}},
     ]
     line_api.reply_flex(reply_token, "👤 個人中心", card, quick_replies=qr_items)
-
-
-def _handle_tab_ebooks(reply_token: str, user_id: str) -> None:
-    _switch_menu(user_id, "tab=ebooks")
-    scope = db.get_user_scope(user_id)
-    if scope == "club":
-        club = db.get_user_club(user_id) or "本社"
-        items = [
-            {"type": "action", "action": {"type": "uri", "label": "📖 社刊 / 週報",   "uri": f"{LIFF_URL}?tab=ebooks&scope=club&doc=bulletin"}},
-            {"type": "action", "action": {"type": "uri", "label": "📸 活動花絮相簿", "uri": f"{LIFF_URL}?tab=ebooks&scope=club&doc=album"}},
-            {"type": "action", "action": {"type": "uri", "label": "📋 理監事會議紀錄", "uri": f"{LIFF_URL}?tab=ebooks&scope=club&doc=minutes"}},
-            {"type": "action", "action": {"type": "postback", "label": "🏆 得獎查詢", "data": "action=award_search"}},
-        ]
-        line_api.reply_text_with_quick_reply(reply_token, f"📚 {club} 社內刊物：", items)
-        return
-    items = [
-        {"type": "action", "action": {"type": "uri", "label": "📖 活動手冊",  "uri": f"{LIFF_URL}?tab=ebooks&doc=handbook"}},
-        {"type": "action", "action": {"type": "uri", "label": "🏅 年度成果冊", "uri": f"{LIFF_URL}?tab=ebooks&doc=yearbook"}},
-        {"type": "action", "action": {"type": "uri", "label": "❤️ 捐贈報告",  "uri": f"{LIFF_URL}?tab=ebooks&doc=donation"}},
-        {"type": "action", "action": {"type": "postback", "label": "🏆 得獎查詢", "data": "action=award_search"}},
-    ]
-    line_api.reply_text_with_quick_reply(reply_token, "📚 請選擇要查閱的地區刊物：", items)
-
-
-def _handle_tab_admin(reply_token: str, user_id: str) -> None:
-    _switch_menu(user_id, "tab=admin")
-    role  = db.get_user_role(user_id)
-    scope = db.get_user_scope(user_id)
-    ev    = _current_event(user_id)
-    if not _admin_has_permission(role, scope, ev):
-        line_api.reply_flex(reply_token, "🔒 權限不符", _build_admin_unauthorized(role, ev))
-        return
-    line_api.reply_flex(reply_token, "⚙️ 管理後台", _build_admin_menu(role, scope, ev))
 
 
 # ── Postback router ───────────────────────────────────────────────────────────
@@ -817,20 +741,6 @@ def _parse_data(data: str) -> dict[str, str]:
 
 def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
     logger.info("Postback: user=%s data=%s", user_id, data)
-
-    # Tab switches
-    if data == "tab=home":
-        _handle_tab_home(reply_token, user_id)
-        return
-    if data == "tab=profile":
-        _handle_tab_profile(reply_token, user_id)
-        return
-    if data == "tab=ebooks":
-        _handle_tab_ebooks(reply_token, user_id)
-        return
-    if data == "tab=admin":
-        _handle_tab_admin(reply_token, user_id)
-        return
 
     p = _parse_data(data)
     action = p.get("action", "")
@@ -877,7 +787,7 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
 
     # ── Profile flows ──────────────────────────────────────────────────────────
     elif action == "my_profile":
-        _handle_tab_profile(reply_token, user_id)
+        _handle_profile(reply_token, user_id)
 
     elif action == "registrations":
         regs = db.get_registrations(user_id)
@@ -900,17 +810,6 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
                     lines.append(f"• {ev['title']}　{ev['fee']}")
             items = [{"type": "action", "action": {"type": "uri", "label": "📤 上傳匯款截圖", "uri": f"{LIFF_URL}?tab=profile&action=payment"}}]
             line_api.reply_text_with_quick_reply(reply_token, "\n".join(lines), items)
-
-    # ── Viewpoint scope switch ─────────────────────────────────────────────────
-    elif action == "switch_scope":
-        new_scope = "club" if db.get_user_scope(user_id) == "district" else "district"
-        db.set_user_scope(user_id, new_scope)
-        _switch_menu(user_id, "tab=home")
-        if new_scope == "club":
-            club = db.get_user_club(user_id) or "本社"
-            line_api.reply_text(reply_token, f"🔄 已切換至【{club} 社內專區】\n（資料已隔離，選單顯示社內活動與刊物）")
-        else:
-            line_api.reply_text(reply_token, "🔄 已切換至【3523 地區總部】\n（顯示地區活動、刊物與後台）")
 
     # ── Admin flows ────────────────────────────────────────────────────────────
     elif action == "admin_menu":
@@ -1021,19 +920,13 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
 
 def _handle_text(reply_token: str, user_id: str, text: str) -> None:
     stripped = text.strip()
-    if stripped in ("切換視角", "視角", "切換"):
-        _handle_postback(reply_token, user_id, "action=switch_scope")
-        return
     if stripped in ("得獎查詢", "得獎", "查獎", "獎項", "查詢得獎"):
         _handle_postback(reply_token, user_id, "action=award_search")
         return
 
     state = db.get_user_state(user_id)
     if not state:
-        scope = db.get_user_scope(user_id)
-        other = "本社專區" if scope == "district" else "地區總部"
-        items = [{"type": "action", "action": {"type": "postback", "label": f"🔄 切換到{other}", "data": "action=switch_scope"}}]
-        line_api.reply_text_with_quick_reply(reply_token, "請使用下方選單按鈕操作 🙏", items)
+        line_api.reply_text(reply_token, "請使用下方選單按鈕操作 🙏")
         return
 
     if state["state"] == "awaiting_search":
@@ -1231,6 +1124,146 @@ async def golf_leaderboard(request: Request, event: int | None = None):
     return {"status": "ok", "event_title": ev["title"], "players": players}
 
 
+# ── Club dues (社友社費) ───────────────────────────────────────────────────────
+DUES_BASE = 2100      # 長年月費
+DUES_DISTRICT = 125   # 地區分攤金
+
+
+def _dues_total(meal: int, iou: int, customs: list) -> int:
+    return DUES_BASE + DUES_DISTRICT + (meal or 0) + (iou or 0) + sum(int(c.get("amount", 0) or 0) for c in customs)
+
+
+def _dues_payload(row: dict | None) -> dict:
+    meal = row["meal"] if row else 0
+    iou = row["iou"] if row else 0
+    customs = row["customs"] if row and isinstance(row.get("customs"), list) else []
+    return {
+        "meal": meal, "iou": iou, "customs": customs,
+        "is_paid": bool(row["is_paid"]) if row else False,
+        "base": DUES_BASE, "district": DUES_DISTRICT,
+        "total": _dues_total(meal, iou, customs),
+        "has_bill": bool(row and (meal or iou or customs)),
+    }
+
+
+@app.get("/dues/member")
+async def dues_member(request: Request, club: str = "", month: str = "", uid: str = ""):
+    """Secretary loads one member's dues for a month (admin only)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden"}
+    if not club:
+        club = db.get_user_club(admin_uid)
+    row = db.get_dues(club, month, uid) if (month and uid) else None
+    return {"status": "ok", **_dues_payload(row)}
+
+
+@app.post("/dues/save")
+async def dues_save(request: Request):
+    """Secretary saves a member's fee items (produces the bill)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無社費記帳權限"}
+    body = await request.json()
+    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    month = str(body.get("month", "")).strip()
+    uid = str(body.get("uid", "")).strip()
+    if not (club and month and uid):
+        return {"status": "invalid", "message": "缺少社別 / 月份 / 社友"}
+    meal = int(body.get("meal", 0) or 0)
+    iou = int(body.get("iou", 0) or 0)
+    customs = [{"name": str(c.get("name", "")), "amount": int(c.get("amount", 0) or 0)}
+               for c in body.get("customs", []) if str(c.get("name", "")).strip()]
+    db.upsert_dues(club, month, uid, meal, iou, customs)
+    total = _dues_total(meal, iou, customs)
+    try:
+        line_api.push_text(uid, f"💰 {month} 社費帳單已產出，本月應繳 NT${total:,}。可於「個人中心 → 我的社費」查看並回報繳款。")
+    except Exception:
+        logger.exception("dues bill push failed for %s", uid)
+    return {"status": "ok", "total": total}
+
+
+@app.get("/dues/me")
+async def dues_me(request: Request, month: str = ""):
+    """A member views their own dues for a month."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user"}
+    month = month or date.today().strftime("%Y-%m")
+    club = db.get_user_club(uid)
+    row = db.get_dues(club, month, uid)
+    return {"status": "ok", "month": month, **_dues_payload(row)}
+
+
+@app.post("/dues/pay")
+async def dues_pay(request: Request):
+    """A member reports payment of their own dues."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user"}
+    body = await request.json()
+    month = str(body.get("month", "")).strip() or date.today().strftime("%Y-%m")
+    digits = str(body.get("bank_digits", "")).strip()
+    if digits and (len(digits) != 5 or not digits.isdigit()):
+        return {"status": "invalid", "message": "請輸入正確的匯款帳號末 5 碼"}
+    club = db.get_user_club(uid)
+    db.pay_dues(club, month, uid, digits)
+    return {"status": "ok", "month": month}
+
+
+@app.get("/events")
+async def events(request: Request, scope: str = ""):
+    """Single source of truth for the LIFF's event list (district or club scope)."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if scope not in ("district", "club"):
+        scope = db.get_user_scope(uid) if uid else "district"
+    club = db.get_user_club(uid) if uid else ""
+    evs = _events_for_scope(scope, club)
+    return {"status": "ok", "scope": scope, "events": evs}
+
+
+@app.get("/me")
+async def me(request: Request):
+    """The caller's role / scope / club — LIFF uses this to gate the admin tab."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user", "is_admin": False, "role": "member"}
+    return {
+        "status": "ok",
+        "role": db.get_user_role(uid),
+        "scope": db.get_user_scope(uid),
+        "club": db.get_user_club(uid),
+        "is_admin": db.is_admin(uid),
+        "name": _member_name(uid),
+    }
+
+
+@app.post("/payment/report")
+async def payment_report(request: Request):
+    """Self-register and/or report transfer digits. Stores into registrations.bank_digits."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user", "message": "尚未登入"}
+    body = await request.json()
+    digits = str(body.get("bank_digits", "")).strip()
+    if digits and (len(digits) != 5 or not digits.isdigit()):
+        return {"status": "invalid", "message": "請輸入正確的匯款帳號末 5 碼"}
+
+    event_id = body.get("event_id")
+    ev = (_lookup_event(uid, int(event_id)) if event_id else None) or _current_event(uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+
+    res = db.report_payment(uid, ev["id"], digits)
+    return {
+        "status": "ok",
+        "event_id": ev["id"],
+        "event_title": ev["title"],
+        "was_registered": res["was_registered"],
+        "bank_digits": digits,
+    }
+
+
 @app.get("/attendance/me")
 async def attendance_me(request: Request):
     """A member's own attendance record (which events they checked in to)."""
@@ -1254,6 +1287,30 @@ async def attendance_me(request: Request):
         "rate": round(attended / len(events) * 100) if events else 0,
         "events": events,
     }
+
+
+@app.get("/admin/registrants")
+async def admin_registrants(request: Request, event: int | None = None, club: str = ""):
+    """Registration name list for an event (admin only); optionally filtered to a club."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "registrants": []}
+    ev = (_lookup_event(admin_uid, int(event)) if event else None) or _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "registrants": []}
+    rows = db.get_event_registrants(ev["id"], club)
+    registrants = [
+        {
+            "name": r["full_name"] + (f"（{r['nickname']}）" if r.get("nickname") else ""),
+            "club": r.get("club_name", ""),
+            "checked_in": bool(r["checked_in"]),
+            "paid": r["payment_status"] == "confirmed",
+            "uploaded": r["payment_status"] == "uploaded",
+            "by_secretary": bool(r.get("registered_by")),
+        }
+        for r in rows
+    ]
+    return {"status": "ok", "event_title": ev["title"], "count": len(registrants), "registrants": registrants}
 
 
 @app.get("/admin/club_attendance")

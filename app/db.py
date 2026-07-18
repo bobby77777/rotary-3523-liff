@@ -244,6 +244,64 @@ def ensure_registrations_table() -> None:
     execute("ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registered_by TEXT")
 
 
+def ensure_club_dues_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS club_dues (
+            id SERIAL PRIMARY KEY,
+            club_name    TEXT NOT NULL,
+            month        TEXT NOT NULL,
+            line_user_id TEXT NOT NULL,
+            meal         INTEGER NOT NULL DEFAULT 0,
+            iou          INTEGER NOT NULL DEFAULT 0,
+            customs      JSONB   NOT NULL DEFAULT '[]',
+            is_paid      BOOLEAN NOT NULL DEFAULT FALSE,
+            bank_digits  TEXT,
+            updated_at   TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(club_name, month, line_user_id)
+        )
+    """)
+
+
+def get_dues(club_name: str, month: str, line_user_id: str) -> dict | None:
+    rows = query(
+        "SELECT meal, iou, customs, is_paid, bank_digits FROM club_dues "
+        "WHERE club_name = %s AND month = %s AND line_user_id = %s",
+        (club_name, month, line_user_id),
+    )
+    return rows[0] if rows else None
+
+
+def upsert_dues(club_name: str, month: str, line_user_id: str,
+                meal: int, iou: int, customs: list) -> None:
+    """Secretary sets the fee items; existing is_paid / bank_digits are preserved."""
+    execute(
+        """
+        INSERT INTO club_dues (club_name, month, line_user_id, meal, iou, customs, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (club_name, month, line_user_id) DO UPDATE SET
+            meal = EXCLUDED.meal,
+            iou = EXCLUDED.iou,
+            customs = EXCLUDED.customs,
+            updated_at = NOW()
+        """,
+        (club_name, month, line_user_id, meal, iou, json.dumps(customs)),
+    )
+
+
+def pay_dues(club_name: str, month: str, line_user_id: str, bank_digits: str) -> None:
+    execute(
+        """
+        INSERT INTO club_dues (club_name, month, line_user_id, is_paid, bank_digits, updated_at)
+        VALUES (%s, %s, %s, TRUE, %s, NOW())
+        ON CONFLICT (club_name, month, line_user_id) DO UPDATE SET
+            is_paid = TRUE,
+            bank_digits = COALESCE(NULLIF(EXCLUDED.bank_digits, ''), club_dues.bank_digits),
+            updated_at = NOW()
+        """,
+        (club_name, month, line_user_id, bank_digits or None),
+    )
+
+
 def ensure_golf_scores_table() -> None:
     execute("""
         CREATE TABLE IF NOT EXISTS golf_scores (
@@ -350,6 +408,28 @@ def register_event(line_user_id: str, event_id: int) -> bool:
         _release_conn(conn)
 
 
+def report_payment(line_user_id: str, event_id: int, bank_digits: str = "") -> dict:
+    """Ensure the member is registered and record their transfer digits.
+    With digits -> payment_status 'uploaded'; without -> keep/register as unpaid.
+    Returns {'was_registered': bool}."""
+    existing = get_registration(line_user_id, event_id)
+    if bank_digits:
+        status = "uploaded"
+    else:
+        status = existing["payment_status"] if existing else "unpaid"
+    execute(
+        """
+        INSERT INTO registrations (line_user_id, event_id, payment_status, bank_digits)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (line_user_id, event_id) DO UPDATE SET
+            payment_status = EXCLUDED.payment_status,
+            bank_digits = COALESCE(NULLIF(EXCLUDED.bank_digits, ''), registrations.bank_digits)
+        """,
+        (line_user_id, event_id, status, bank_digits or None),
+    )
+    return {"was_registered": existing is not None}
+
+
 def cancel_registration(line_user_id: str, event_id: int) -> None:
     execute(
         "DELETE FROM registrations WHERE line_user_id = %s AND event_id = %s",
@@ -378,6 +458,27 @@ def get_event_registration_count(event_id: int) -> int:
         (event_id,),
     )
     return rows[0]["cnt"] if rows else 0
+
+
+def get_event_registrants(event_id: int, club_name: str = "") -> list[dict]:
+    """Members registered for an event (optionally limited to one club)."""
+    sql = """
+        SELECT COALESCE(pi.full_name, '(未綁定)') AS full_name,
+               pi.nickname,
+               COALESCE(pi.club_name, '') AS club_name,
+               r.checked_in,
+               r.payment_status,
+               r.registered_by
+        FROM registrations r
+        LEFT JOIN personal_information pi ON pi.line_user_id = r.line_user_id
+        WHERE r.event_id = %s
+    """
+    params: tuple = (event_id,)
+    if club_name:
+        sql += " AND pi.club_name = %s"
+        params = (event_id, club_name)
+    sql += " ORDER BY pi.club_name, pi.full_name"
+    return query(sql, params)
 
 
 def get_event_checkin_count(event_id: int) -> int:
@@ -508,19 +609,6 @@ def set_user_role(line_user_id: str, role: str, club_name: str = "") -> None:
 def get_user_scope(line_user_id: str) -> str:
     rows = query("SELECT scope FROM user_roles WHERE line_user_id = %s", (line_user_id,))
     return rows[0]["scope"] if rows else "district"
-
-
-def set_user_scope(line_user_id: str, scope: str) -> None:
-    execute(
-        """
-        INSERT INTO user_roles (line_user_id, scope, updated_at)
-        VALUES (%s, %s, NOW())
-        ON CONFLICT (line_user_id) DO UPDATE SET
-            scope = EXCLUDED.scope,
-            updated_at = NOW()
-        """,
-        (line_user_id, scope),
-    )
 
 
 def get_user_club(line_user_id: str) -> str:
