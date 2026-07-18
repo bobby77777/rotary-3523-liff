@@ -566,6 +566,213 @@
     </div>
 </div>
 
+<!-- ===== Ported from simulator: AI 產業媒合 ===== -->
+<div id="modal-matchmaking" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl transform scale-95 transition-all">
+        <div class="px-6 py-4 bg-gradient-to-r from-indigo-800 to-blue-700 flex justify-between items-center">
+            <div class="flex items-center gap-2 text-white">
+                <i class="fa-solid fa-robot text-yellow-300"></i>
+                <h3 class="font-bold text-base">AI 產業媒合助理</h3>
+            </div>
+            <button onclick="closeModal('modal-matchmaking')" class="text-white/70 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div class="p-6 flex flex-col space-y-4 bg-slate-50">
+            <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-xs text-indigo-800 leading-relaxed shadow-sm">
+                <i class="fa-solid fa-circle-info mr-1"></i>
+                請描述您需要的產業、產品或服務，AI 將自地區 80 社的 LIFF 資料庫中，為您找出最精準的社友與專屬優惠！
+            </div>
+            <div>
+                <textarea id="matchmaking-query" rows="3" class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="例如：公司要搬家，需要找辦公室裝潢與水電工程..."></textarea>
+            </div>
+            <div class="flex gap-2 w-full pt-2">
+                <button onclick="closeModal('modal-matchmaking')" class="w-1/2 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-600 text-sm bg-white hover:bg-gray-50 transition-colors btn-3d btn-3d-white mb-1">取消</button>
+                <button onclick="submitMatchmakingQuery()" class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1 transition-all btn-3d btn-3d-indigo mb-1"><i class="fa-solid fa-magnifying-glass"></i> AI 尋找</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Ported from simulator: 社務對帳與請款系統 (finance + Gmail) ===== -->
+<div id="modal-club-finance" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transform scale-95 transition-all">
+        <div class="bg-gradient-to-r from-green-700 via-emerald-600 to-green-700 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-file-invoice-dollar text-green-100"></i></div>
+                <div>
+                    <h3 class="font-extrabold text-base">社務對帳與請款系統</h3>
+                    <p class="text-[10px] text-green-100">執秘向社長請款與代墊款連動</p>
+                </div>
+            </div>
+            <button onclick="closeModal('modal-club-finance')" class="text-green-200 hover:text-white active:translate-y-1 transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+
+        <div class="overflow-y-auto p-5 space-y-4 flex-1 bg-gray-50 no-scrollbar">
+            <!-- 1. 固定請款區 -->
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="px-4 py-2 bg-gray-100/50 flex items-center justify-between border-b border-gray-100">
+                    <span class="text-xs font-bold text-gray-700"><i class="fa-solid fa-lock text-gray-400 mr-1"></i> 固定請款項目</span>
+                    <button onclick="addFinanceFixedRow()" class="text-[10px] bg-white border border-gray-300 text-gray-700 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-gray-200 transition-colors flex items-center gap-1"><i class="fa-solid fa-plus"></i> 手動新增</button>
+                </div>
+                <div class="p-3 space-y-2" id="finance-fixed-container">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-semibold text-gray-700">社辦租金</span>
+                        <div class="relative w-1/2">
+                            <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
+                            <input type="number" id="finance-rent" value="20000" class="w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-6 pr-2 text-sm text-right font-bold focus:outline-none focus:ring-2 focus:ring-green-500 transition-all" oninput="calcFinanceTotal()" onfocus="this.select()">
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-semibold text-gray-700">社秘薪資</span>
+                        <div class="relative w-1/2">
+                            <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
+                            <input type="number" id="finance-salary" value="35000" class="w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-6 pr-2 text-sm text-right font-bold focus:outline-none focus:ring-2 focus:ring-green-500 transition-all" oninput="calcFinanceTotal()" onfocus="this.select()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 社友代墊款區 -->
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="px-4 py-2 bg-emerald-50 flex items-center justify-between border-b border-emerald-100">
+                    <span class="text-xs font-bold text-emerald-800"><i class="fa-solid fa-people-arrows text-emerald-500 mr-1"></i> 社友代墊款 (自動連動社費)</span>
+                    <div class="flex gap-1">
+                        <button onclick="fetchGmailAdvances()" class="text-[10px] bg-white border border-red-200 text-red-600 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-red-50 transition-colors flex items-center gap-1"><i class="fa-brands fa-google"></i> 抓取信件</button>
+                        <button onclick="addFinanceAdvanceRow()" class="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-emerald-100 transition-colors"><i class="fa-solid fa-plus"></i> 手動新增</button>
+                    </div>
+                </div>
+                <div class="p-3 space-y-3" id="finance-advances-container">
+                    <div class="text-xs text-gray-400 italic text-center py-2" id="no-advance-msg">本月尚無任何社友代墊款</div>
+                </div>
+            </div>
+
+            <!-- 總計區塊 -->
+            <div class="bg-gray-900 rounded-2xl p-4 shadow-lg flex justify-between items-center border border-gray-800 btn-3d btn-3d-dark mt-2">
+                <span class="text-gray-300 font-bold text-sm">本期請款總計</span>
+                <div class="flex items-baseline gap-1">
+                    <span class="text-green-400 font-bold text-xs">NT$</span>
+                    <span class="text-white font-black text-2xl tracking-wide" id="finance-total-amount">55,000</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white border-t border-gray-200 p-4 flex gap-2 shrink-0">
+            <button onclick="closeModal('modal-club-finance')" class="w-1/3 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-xl text-sm border border-gray-200 btn-3d btn-3d-white mb-1">取消</button>
+            <button onclick="submitClubFinance()" class="w-2/3 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1 btn-3d mb-1 transition-all" style="box-shadow: 0 4px 0 #14532d;"><i class="fa-solid fa-paper-plane"></i> 呈報社長並連動帳單</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Ported from simulator: 報名專區 (survey + report to president) ===== -->
+<div id="modal-club-reg-admin" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[95vh] transform scale-95 transition-all">
+        <div class="bg-gradient-to-r from-amber-600 to-yellow-500 px-6 py-4 text-white flex justify-between items-center shrink-0 shadow-sm">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-clipboard-list text-yellow-100"></i></div>
+                <div>
+                    <h3 class="font-extrabold text-base tracking-wide text-white">報名專區</h3>
+                    <p class="text-[10px] text-yellow-100">社內與地區活動調查及追蹤</p>
+                </div>
+            </div>
+            <button onclick="closeModal('modal-club-reg-admin')" class="text-yellow-100 hover:text-white transition-colors active:scale-90"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 bg-gray-50 no-scrollbar p-5 space-y-5">
+
+            <!-- 1. 活動選擇區 (整合地區與社內) -->
+            <div class="space-y-1.5">
+                <label class="block text-xs font-black text-gray-700"><i class="fa-solid fa-calendar-day mr-1 text-amber-600"></i> 1. 選擇要調查的活動</label>
+                <select id="club-reg-event-select" onchange="loadEventSurveyData()" class="w-full bg-white border border-gray-300 text-gray-900 rounded-xl py-2.5 px-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm cursor-pointer transition-all">
+                </select>
+            </div>
+
+            <!-- 2. 發送通知區 -->
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" id="club-reg-notice-section">
+                <div class="px-4 py-2.5 bg-gray-100 border-b border-gray-200 flex justify-between items-center">
+                    <span class="text-xs font-bold text-gray-700"><i class="fa-solid fa-paper-plane mr-1 text-blue-500"></i> 2. 選擇發送對象</span>
+                    <button onclick="toggleAllSurveyMembers()" class="text-[10px] text-blue-600 font-bold hover:text-blue-800 flex items-center gap-1 bg-white px-2 py-0.5 rounded shadow-sm border border-gray-200 active:scale-95 transition-all"><i class="fa-solid fa-check-double"></i>全選/全不選</button>
+                </div>
+                <div class="p-3">
+                    <div id="club-reg-member-list" class="max-h-36 overflow-y-auto no-scrollbar space-y-1 bg-gray-50 p-2 rounded-xl border border-gray-200 shadow-inner">
+                    </div>
+                    <button onclick="sendClubSurvey()" class="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-[12px] flex items-center justify-center gap-1.5 btn-3d btn-3d-primary mb-1 transition-all">
+                        <i class="fa-regular fa-paper-plane"></i> 發送活動報名通知 (LINE 推播)
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. 即時統計與追蹤區 (發送後顯示) -->
+            <div id="club-reg-stats-section" class="hidden space-y-3">
+                <label class="block text-xs font-black text-gray-700"><i class="fa-solid fa-chart-pie mr-1 text-indigo-500"></i> 3. 即時報名狀態追蹤</label>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-2 text-center shadow-sm">
+                        <span class="block text-[10px] text-emerald-700 font-bold mb-0.5">🟢 已參加</span>
+                        <span class="block text-xl font-black text-emerald-600" id="survey-stat-attending">0</span>
+                    </div>
+                    <div class="bg-rose-50 border border-rose-200 rounded-xl p-2 text-center shadow-sm">
+                        <span class="block text-[10px] text-rose-700 font-bold mb-0.5">🔴 已請假</span>
+                        <span class="block text-xl font-black text-rose-600" id="survey-stat-leave">0</span>
+                    </div>
+                    <div class="bg-gray-100 border border-gray-300 rounded-xl p-2 text-center shadow-sm relative overflow-hidden">
+                        <span class="block text-[10px] text-gray-600 font-bold mb-0.5">⚪ 未回覆</span>
+                        <span class="block text-xl font-black text-gray-700" id="survey-stat-pending">0</span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden text-xs">
+                    <div class="max-h-40 overflow-y-auto no-scrollbar p-2 space-y-1.5" id="survey-detail-list">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200">
+                    <button onclick="simulateMemberReply()" class="col-span-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 font-bold py-2 rounded-xl text-[11px] transition-colors mb-2">
+                        <i class="fa-solid fa-users-viewfinder"></i> [模擬] 社友陸續點擊回覆...
+                    </button>
+
+                    <button onclick="remindPendingMembers()" class="bg-amber-500 hover:bg-amber-600 text-yellow-950 font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 btn-3d btn-3d-warning mb-1 transition-all">
+                        <i class="fa-solid fa-bell"></i> 三天後自動跟催
+                    </button>
+                    <button onclick="reportToPresident()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 btn-3d btn-3d-dark mb-1 transition-all">
+                        <i class="fa-solid fa-file-export"></i> 呈報未回覆名單
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ===== Ported from simulator: LBS 定位防弊地圖 ===== -->
+<div id="modal-gps-map" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex flex-col justify-end hidden transition-all">
+    <div class="bg-white w-full h-[80vh] rounded-t-[2rem] shadow-2xl flex flex-col overflow-hidden animate-slideUp">
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-rose-100 text-rose-500 flex items-center justify-center shadow-inner"><i class="fa-solid fa-location-crosshairs text-lg"></i></div>
+                <div>
+                    <h3 class="font-bold text-gray-800 text-sm">定位驗證失敗</h3>
+                    <p class="text-[10px] text-gray-500">LBS 防弊查核系統</p>
+                </div>
+            </div>
+            <button onclick="closeModal('modal-gps-map')" class="text-gray-400 hover:text-gray-600 transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="flex-1 flex flex-col p-5 space-y-4 overflow-y-auto bg-gray-50/50">
+            <div class="bg-white border-l-4 border-rose-500 p-3.5 rounded-r-xl shadow-sm text-xs text-gray-700 leading-relaxed">
+                <p class="font-bold text-rose-600 mb-1.5 text-sm"><i class="fa-solid fa-circle-xmark mr-1"></i> 距離會場過遠 (<span id="gps-distance-text"></span> 公尺)</p>
+                您目前所在位置超出了大會允許的 <b class="text-rose-600">100 公尺</b> 報到範圍。系統已擷取您的實際座標並駁回報到請求，請確認您已抵達現場後再行重試。
+            </div>
+            <div class="flex-1 rounded-2xl overflow-hidden border-4 border-white shadow-md relative bg-gray-200 flex items-center justify-center">
+                <iframe id="gps-map-iframe" width="100%" height="100%" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer"></iframe>
+            </div>
+            <p class="text-[10px] text-gray-400 text-center font-bold tracking-wide">📍 上圖為系統擷取您裝置的真實 GPS 位置</p>
+        </div>
+        <div class="p-5 border-t border-gray-200 bg-white shrink-0">
+            <button onclick="closeModal('modal-gps-map')" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 rounded-xl text-sm transition-colors shadow-lg shadow-gray-800/30 btn-3d btn-3d-dark mb-1">
+                我知道了，返回聊天室
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Alert Modal -->
 <div id="modal-alert" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-2xl max-w-xs w-full p-6 text-center space-y-4 shadow-2xl">
@@ -955,12 +1162,15 @@ function renderProfileMenu() {
                     <i class="fa-solid fa-qrcode text-xl opacity-80"></i>
                 </div>
             </div>
-            <div class="grid grid-rows-2 gap-2">
+            <div class="grid grid-rows-3 gap-2">
                 <div onclick="clickMenuItem('查詢紀錄','profile-history')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
                     <i class="fa-solid fa-clock-rotate-left text-lg text-indigo-500"></i><span class="text-[10px] font-bold text-slate-700">報名紀錄</span>
                 </div>
                 <div onclick="openModal('modal-payment-info')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
                     <i class="fa-solid fa-money-check-dollar text-lg text-teal-600"></i><span class="text-[10px] font-bold text-slate-700">回報匯款</span>
+                </div>
+                <div onclick="openMatchmakingModal()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
+                    <i class="fa-solid fa-robot text-lg text-blue-500"></i><span class="text-[10px] font-bold text-slate-700">產業媒合</span>
                 </div>
             </div>`;
     }
@@ -970,6 +1180,355 @@ function renderProfileMenu() {
 }
 
 function adminStub(name) { showAlert(name, '此功能建置中，敬請期待。'); }
+
+// ============================================================
+//  PORTED FROM SIMULATOR  (mock-style, self-contained)
+// ============================================================
+
+// In-memory survey store: { [eventId]: { [memberId]: {name, status} } }
+let clubSurveyDB = {};
+
+// Combined district + club events, tagged with a scope label for the survey picker.
+function getAllCombinedEvents() {
+    const dist = (typeof districtEvents !== 'undefined' ? districtEvents : []).map(e => ({ ...e, scope: '地區' }));
+    const clubRaw = (typeof eventsCache !== 'undefined' && eventsCache.club) ? eventsCache.club : [];
+    const club = clubRaw.map(e => ({ ...e, scope: '社內' }));
+    return [...dist, ...club];
+}
+
+// ---- AI 產業媒合 ----
+function openMatchmakingModal() {
+    document.getElementById('matchmaking-query').value = '';
+    openModal('modal-matchmaking');
+}
+
+function submitMatchmakingQuery() {
+    const query = document.getElementById('matchmaking-query').value.trim();
+    if (!query) {
+        showAlert('請輸入需求', '請告訴 AI 助理您需要尋找什麼產業或服務喔！');
+        return;
+    }
+    closeModal('modal-matchmaking');
+    addChatMessage("user", `AI 產業媒合：${query}`);
+    setTimeout(() => {
+        addChatMessage("bot", `🤖 <b>AI 助理分析中...</b><br>正在檢索地區內 80 社社友的 LIFF 職業資料庫，尋找符合「${query}」的專業社友...`);
+        setTimeout(() => {
+            let response = `✅ <b>【AI 產業媒合結果】</b><br>`;
+            response += `為您找到高度相關的社友資訊：<br><br>`;
+            response += `<div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg mb-2 shadow-sm">`;
+            response += `<p class="font-bold text-indigo-900 text-sm mb-1"><i class="fa-solid fa-building text-indigo-500"></i> 綠境室內裝修設計</p>`;
+            response += `<p class="text-xs text-gray-700">👤 <b>林建國 社友</b> (台北松青社)</p>`;
+            response += `<p class="text-xs text-gray-700">💼 <b>職業分類：</b>室內裝潢設計</p>`;
+            response += `<p class="text-xs text-gray-700 mt-1">📝 <b>公司簡介：</b><br>20年商辦與住宅設計經驗，自有專業工班，專攻企業總部與高階住宅，品質保證。</p>`;
+            response += `<div class="mt-2 bg-yellow-100 border border-yellow-300 p-1.5 rounded text-yellow-800 text-[10px] font-bold">`;
+            response += `🎁 <b>社友專屬優惠：</b><br>出示 LIFF 數位社友卡，享免初步提案費，總工程款 95 折！`;
+            response += `</div>`;
+            response += `<a href="#" class="mt-2 block text-center bg-white border border-indigo-200 text-indigo-600 py-1.5 rounded-lg shadow-sm text-xs font-bold hover:bg-indigo-100 transition-colors mt-2">瀏覽數位名片</a>`;
+            response += `</div>`;
+            addChatMessage("bot", response);
+        }, 1500);
+    }, 500);
+}
+
+// ---- LBS 定位防弊地圖 ----
+function openGpsMapModal(userLat, userLng, eventLat, eventLng, dist) {
+    document.getElementById('gps-distance-text').innerText = dist;
+    document.getElementById('gps-map-iframe').src = `https://maps.google.com/maps?q=${userLat},${userLng}&z=16&output=embed`;
+    openModal('modal-gps-map');
+}
+
+// Haversine 公式計算地球上兩點距離 (公尺)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const p1 = lat1 * Math.PI/180;
+    const p2 = lat2 * Math.PI/180;
+    const dp = (lat2-lat1) * Math.PI/180;
+    const dl = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dp/2) * Math.sin(dp/2) +
+              Math.cos(p1) * Math.cos(p2) *
+              Math.sin(dl/2) * Math.sin(dl/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// 地區年會報到前的 LBS 距離驗證；通過才執行 onPass()
+function runAnnualLbsGate(onPass) {
+    const ev = currentActiveEvent || {};
+    const eventLat = ev.lat || 25.0785;
+    const eventLng = ev.lng || 121.5262;
+    addChatMessage("system", `📍 <b>【LBS 定位驗證中】</b><br>正在獲取您的實際 GPS 定位，以核對是否在「${ev.location || '會場'}」活動現場 (允許誤差 100 公尺)...`);
+    const runCheck = (userLat, userLng) => {
+        const dist = calculateDistance(userLat, userLng, eventLat, eventLng);
+        setTimeout(() => {
+            if (dist <= 100) {
+                addChatMessage("system", `✅ <b>定位驗證通過</b><br>距離會場：${Math.round(dist)} 公尺。`);
+                onPass();
+            } else {
+                openGpsMapModal(userLat, userLng, eventLat, eventLng, Math.round(dist));
+                addChatMessage("system", `❌ <b>定位驗證失敗</b><br>距離會場 <b>${Math.round(dist)} 公尺</b>，超過允許範圍。`);
+            }
+        }, 800);
+    };
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => runCheck(pos.coords.latitude, pos.coords.longitude),
+            () => {
+                addChatMessage("system", `❌ <b>未獲取真實定位授權</b><br>因瀏覽器安全性限制，已改用模擬座標 (台北信義區) 進行示範。`);
+                setTimeout(() => runCheck(25.0339, 121.5644), 800);
+            },
+            { enableHighAccuracy: true }
+        );
+    } else {
+        showAlert('錯誤', '您的裝置不支援定位功能。');
+    }
+}
+
+// ---- 社務對帳與請款系統 (finance + Gmail) ----
+function openClubFinanceModal() {
+    document.getElementById('finance-rent').value = 20000;
+    document.getElementById('finance-salary').value = 35000;
+    document.querySelectorAll('.fixed-item-row').forEach(row => row.remove());
+    document.getElementById('finance-advances-container').innerHTML = `<div class="text-xs text-gray-400 italic text-center py-2" id="no-advance-msg">本月尚無任何社友代墊款</div>`;
+    calcFinanceTotal();
+    openModal('modal-club-finance');
+}
+
+function addFinanceFixedRow() {
+    const container = document.getElementById('finance-fixed-container');
+    const div = document.createElement('div');
+    div.className = "flex justify-between items-center gap-2 fixed-item-row mt-2 pt-2 border-t border-dashed border-gray-200";
+    div.innerHTML = `
+        <input type="text" class="fixed-item-name flex-1 bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 px-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="如: 水電費、郵資">
+        <div class="relative w-1/3 shrink-0">
+            <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
+            <input type="number" class="fixed-item-amount w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-5 pr-1 text-sm text-right font-bold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="0" oninput="calcFinanceTotal()" onfocus="this.select()">
+        </div>
+        <button onclick="this.parentElement.remove(); calcFinanceTotal();" class="text-red-400 hover:text-red-600 transition-colors p-1"><i class="fa-solid fa-trash-can"></i></button>
+    `;
+    container.appendChild(div);
+}
+
+function addFinanceAdvanceRow(memberId = null, eventName = '', amount = '') {
+    const noMsg = document.getElementById('no-advance-msg');
+    if (noMsg) noMsg.remove();
+    const clubId = currentUserClubId;
+    let optionsHtml = `<option value="m_${clubId}_0" ${memberId === `m_${clubId}_0` ? 'selected' : ''}>王大同 (本人)</option>`;
+    for (let i = 1; i <= 9; i++) {
+        let currentOptionId = `m_${clubId}_${i}`;
+        optionsHtml += `<option value="${currentOptionId}" ${memberId === currentOptionId ? 'selected' : ''}>社友 ${i}</option>`;
+    }
+    const container = document.getElementById('finance-advances-container');
+    const div = document.createElement('div');
+    div.className = "advance-row flex flex-col gap-1.5 p-2 bg-emerald-50/50 border border-emerald-100 rounded-lg relative";
+    const gmailBadge = memberId ? `<span class="absolute top-1 left-2 text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 font-bold"><i class="fa-brands fa-google mr-0.5"></i>Gmail 自動解析匯入</span>` : '';
+    const ptClass = memberId ? 'pt-5' : '';
+    div.innerHTML = `
+        ${gmailBadge}
+        <button onclick="this.parentElement.remove(); calcFinanceTotal();" class="absolute top-1 right-1.5 text-red-400 hover:text-red-600 p-0.5"><i class="fa-solid fa-xmark"></i></button>
+        <div class="flex items-center gap-2 pr-4 ${ptClass}">
+            <span class="text-[10px] font-bold text-gray-500 w-10 shrink-0">代墊人</span>
+            <select class="advance-member w-full bg-white border border-gray-300 text-gray-800 rounded py-1 px-1.5 text-xs font-bold focus:ring-1 focus:ring-green-500">${optionsHtml}</select>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-[10px] font-bold text-gray-500 w-10 shrink-0">明細</span>
+            <input type="text" class="advance-event flex-1 bg-white border border-gray-300 rounded py-1 px-1.5 text-xs focus:ring-1 focus:ring-green-500" placeholder="如: 跨社活動報名費" value="${eventName}">
+            <div class="relative w-20 shrink-0">
+                <span class="absolute left-1 top-1 text-[10px] text-gray-400">$</span>
+                <input type="number" class="advance-amount w-full bg-white border border-gray-300 text-gray-900 rounded py-1 pl-4 pr-1 text-xs text-right font-bold focus:ring-1 focus:ring-green-500" placeholder="0" oninput="calcFinanceTotal()" value="${amount === 0 ? '' : amount}">
+            </div>
+        </div>
+    `;
+    container.appendChild(div);
+    calcFinanceTotal();
+}
+
+function fetchGmailAdvances() {
+    addChatMessage("system", "📧 <b>系統同步中：</b><br>正在連接信箱伺服器，運用 AI 解析近期的跨社活動繳費通知信...");
+    setTimeout(() => {
+        const clubId = currentUserClubId;
+        addFinanceAdvanceRow(`m_${clubId}_0`, "民生社35週年社慶活動餐費", 2000);
+        addChatMessage("bot", `✅ <b>【信件解析完成】</b><br>已從友社報名確認函中成功解析出 1 筆代墊費用：<br><br><div class="bg-gray-100 p-2 rounded text-xs text-gray-700 border border-gray-200">👤 對象：王大同<br>📌 項目：民生社35週年社慶活動餐費<br>💰 金額：$2,000</div><br>👉 資料已自動為您匯入「社友代墊款」表單中，您可檢視確認或再手動修改！`);
+        const container = document.getElementById('finance-advances-container');
+        container.lastElementChild.classList.add('ring-2', 'ring-red-400', 'transition-all');
+        setTimeout(() => { container.lastElementChild.classList.remove('ring-2', 'ring-red-400'); }, 1500);
+    }, 1200);
+}
+
+function calcFinanceTotal() {
+    let total = 0;
+    total += parseInt(document.getElementById('finance-rent').value) || 0;
+    total += parseInt(document.getElementById('finance-salary').value) || 0;
+    document.querySelectorAll('.fixed-item-amount').forEach(input => { total += parseInt(input.value) || 0; });
+    document.querySelectorAll('.advance-amount').forEach(input => { total += parseInt(input.value) || 0; });
+    document.getElementById('finance-total-amount').innerText = total.toLocaleString();
+}
+
+function submitClubFinance() {
+    let advanceCount = 0;
+    document.querySelectorAll('.advance-row').forEach(row => {
+        const memberId = row.querySelector('.advance-member').value;
+        const evtName = row.querySelector('.advance-event').value.trim();
+        const amt = parseInt(row.querySelector('.advance-amount').value) || 0;
+        if (memberId && evtName && amt > 0) advanceCount++;
+    });
+    const total = document.getElementById('finance-total-amount').innerText;
+    closeModal('modal-club-finance');
+    let msg = `✅ <b>【社務請款單已送出】</b><br>已向社長呈報本期固定支出與代墊款，請款總額：<b class="text-green-600">NT$ ${total}</b>。`;
+    if (advanceCount > 0) {
+        msg += `<br><br><span class="text-indigo-600 font-bold"><i class="fa-solid fa-link"></i> 系統智慧連動：</span><br><span class="text-[11px] text-gray-600">偵測到 ${advanceCount} 筆社友代墊款，已自動分發寫入對應社友的「社費帳單」中。</span>`;
+    }
+    addChatMessage("system", msg);
+}
+
+// ---- 報名專區 (survey + report to president) ----
+function openClubRegAdminModal() {
+    const allEvents = getAllCombinedEvents();
+    const selectEl = document.getElementById('club-reg-event-select');
+    selectEl.innerHTML = '<option value="">請選擇要發送/追蹤的活動...</option>';
+    allEvents.forEach(e => {
+        const prefix = e.scope === '地區' ? '🌐 ' : '🏠 ';
+        selectEl.innerHTML += `<option value="${e.id}">${prefix}[${e.scope}] ${e.displayDate || e.date || ''} - ${e.title}</option>`;
+    });
+    document.getElementById('club-reg-notice-section').classList.add('hidden');
+    document.getElementById('club-reg-stats-section').classList.add('hidden');
+    openModal('modal-club-reg-admin');
+}
+
+function loadEventSurveyData() {
+    const eventId = document.getElementById('club-reg-event-select').value;
+    if (!eventId) {
+        document.getElementById('club-reg-notice-section').classList.add('hidden');
+        document.getElementById('club-reg-stats-section').classList.add('hidden');
+        return;
+    }
+    document.getElementById('club-reg-notice-section').classList.remove('hidden');
+    const listContainer = document.getElementById('club-reg-member-list');
+    const clubId = currentUserClubId;
+    const members = [
+        { id: `m_${clubId}_1`, name: `李志明 社友` },
+        { id: `m_${clubId}_2`, name: `陳建國 社友` },
+        { id: `m_${clubId}_3`, name: `林永生 社友` },
+        { id: `m_${clubId}_4`, name: `張三明 社友` },
+        { id: `m_${clubId}_5`, name: `劉德華 社友` }
+    ];
+    listContainer.innerHTML = members.map(m => `
+        <label class="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors border border-transparent">
+            <input type="checkbox" value="${m.id}" data-name="${m.name}" class="survey-member-checkbox w-4 h-4 text-amber-500 rounded focus:ring-amber-500" checked>
+            <span class="text-sm text-gray-800 font-bold">${m.name}</span>
+        </label>`).join('');
+    if (clubSurveyDB[eventId] && Object.keys(clubSurveyDB[eventId]).length > 0) {
+        document.getElementById('club-reg-stats-section').classList.remove('hidden');
+        renderSurveyStats(eventId);
+    } else {
+        document.getElementById('club-reg-stats-section').classList.add('hidden');
+    }
+}
+
+function toggleAllSurveyMembers() {
+    const checkboxes = document.querySelectorAll('.survey-member-checkbox');
+    let allSelected = Array.from(checkboxes).every(cb => cb.checked);
+    checkboxes.forEach(cb => cb.checked = !allSelected);
+}
+
+function sendClubSurvey() {
+    const eventId = document.getElementById('club-reg-event-select').value;
+    if (!eventId) return showAlert('錯誤', '請先選擇活動');
+    const checkboxes = document.querySelectorAll('.survey-member-checkbox:checked');
+    if (checkboxes.length === 0) return showAlert('錯誤', '請至少勾選一位發送對象');
+    if (!clubSurveyDB[eventId]) clubSurveyDB[eventId] = {};
+    checkboxes.forEach(cb => {
+        if (!clubSurveyDB[eventId][cb.value]) {
+            clubSurveyDB[eventId][cb.value] = { name: cb.getAttribute('data-name'), status: 'pending' };
+        }
+    });
+    const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
+    addChatMessage("system", `📩 <b>【系統廣播】</b><br>執秘已向 ${checkboxes.length} 位社友發送了 <b>${eventObj ? eventObj.title : '活動'}</b> 的參加意願調查表 (Flex Message)。`);
+    document.getElementById('club-reg-stats-section').classList.remove('hidden');
+    renderSurveyStats(eventId);
+    showAlert('發送成功', `已成功推播報名調查表給 ${checkboxes.length} 位社友！`);
+}
+
+function renderSurveyStats(eventId) {
+    const data = clubSurveyDB[eventId];
+    let attending = [], leave = [], pending = [], reminded = [];
+    for (const [id, info] of Object.entries(data)) {
+        if (info.status === 'attending') attending.push(info.name);
+        else if (info.status === 'leave') leave.push(info.name);
+        else if (info.status === 'pending') pending.push(info.name);
+        else if (info.status === 'reminded') reminded.push(info.name);
+    }
+    document.getElementById('survey-stat-attending').innerText = attending.length;
+    document.getElementById('survey-stat-leave').innerText = leave.length;
+    document.getElementById('survey-stat-pending').innerText = pending.length + reminded.length;
+    let html = '';
+    if (attending.length > 0) {
+        html += `<div class="flex items-start gap-2"><span class="bg-emerald-100 text-emerald-700 px-1.5 rounded font-bold shrink-0">參加</span> <span class="text-gray-600">${attending.join(', ')}</span></div>`;
+    }
+    if (leave.length > 0) {
+        html += `<div class="flex items-start gap-2"><span class="bg-rose-100 text-rose-700 px-1.5 rounded font-bold shrink-0">請假</span> <span class="text-gray-600">${leave.join(', ')}</span></div>`;
+    }
+    if (pending.length > 0 || reminded.length > 0) {
+        let pendingNames = [...pending];
+        let remindedHtml = reminded.length > 0 ? `<span class="text-[10px] text-amber-600 ml-1">(已跟催: ${reminded.join(', ')})</span>` : '';
+        html += `<div class="flex items-start gap-2 border-t border-gray-100 pt-1.5 mt-1.5"><span class="bg-gray-200 text-gray-700 px-1.5 rounded font-bold shrink-0">未回</span> <span class="text-gray-600">${pendingNames.join(', ')} ${remindedHtml}</span></div>`;
+    }
+    if (html === '') html = '<div class="text-gray-400 italic text-center">尚無資料</div>';
+    document.getElementById('survey-detail-list').innerHTML = html;
+}
+
+function simulateMemberReply() {
+    const eventId = document.getElementById('club-reg-event-select').value;
+    if (!eventId || !clubSurveyDB[eventId]) return;
+    const data = clubSurveyDB[eventId];
+    let changed = false;
+    for (const [id, info] of Object.entries(data)) {
+        if (info.status === 'pending' || info.status === 'reminded') {
+            info.status = Math.random() > 0.2 ? 'attending' : 'leave';
+            changed = true;
+            addChatMessage("system", `📱 <b>【社友回覆】</b><br>${info.name} 剛剛在 LINE 點擊了「${info.status === 'attending' ? '✅ 參加' : '❌ 請假'}」。`);
+            break;
+        }
+    }
+    if (changed) {
+        renderSurveyStats(eventId);
+    } else {
+        showAlert('模擬完畢', '所有收到通知的社友都已經回覆完畢囉！');
+    }
+}
+
+function remindPendingMembers() {
+    const eventId = document.getElementById('club-reg-event-select').value;
+    if (!eventId || !clubSurveyDB[eventId]) return;
+    const data = clubSurveyDB[eventId];
+    let remindCount = 0;
+    for (const [id, info] of Object.entries(data)) {
+        if (info.status === 'pending') { info.status = 'reminded'; remindCount++; }
+    }
+    if (remindCount > 0) {
+        renderSurveyStats(eventId);
+        addChatMessage("system", `⚠️ <b>【系統自動化】</b><br>系統已自動抓出過期 3 天未回覆的 ${remindCount} 位社友，並發送了「二次意願確認」推播通知！`);
+        showAlert('跟催發送成功', `已向 ${remindCount} 位尚未回覆的社友發送二次推播。`);
+    } else {
+        showAlert('無須跟催', '目前沒有尚未回覆的社友喔！');
+    }
+}
+
+function reportToPresident() {
+    const eventId = document.getElementById('club-reg-event-select').value;
+    if (!eventId || !clubSurveyDB[eventId]) return;
+    const data = clubSurveyDB[eventId];
+    const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
+    let pendingNames = [];
+    for (const [id, info] of Object.entries(data)) {
+        if (info.status === 'pending' || info.status === 'reminded') pendingNames.push(info.name);
+    }
+    if (pendingNames.length > 0) {
+        closeModal('modal-club-reg-admin');
+        addChatMessage("system", `📄 <b>【未回覆名單呈報】</b><br>已將 <b>${eventObj ? eventObj.title : '活動'}</b> 尚未回覆的 ${pendingNames.length} 位社友名單：<br><span class="text-gray-500">${pendingNames.join('、')}</span><br><br>👉 統整完畢並傳送給 <b>社長</b> 進行後續關心。`);
+    } else {
+        showAlert('無未回覆者', '太棒了！所有社友皆已明確回覆意願，無須呈報。');
+    }
+}
 
 // ============================================================
 //  VIP ROLL-CALL (貴賓唱名介紹) — keyed by event id
@@ -1227,8 +1786,8 @@ function renderAdminMenu() {
     if (isClub) {
         c.innerHTML = `<div class="col-span-3 grid grid-cols-2 grid-rows-2 gap-2 h-full">
             ${_adminTile("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率')}
-            ${_adminTile("adminStub('社務對帳')", 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')}
-            ${_adminTile("adminStub('理監事專區')", 'fa-users-gear', 'bg-amber-100 text-amber-600', '理監事專區')}
+            ${_adminTile('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')}
+            ${_adminTile('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區')}
             ${_adminTile('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費')}
         </div>`;
         return;
@@ -1302,8 +1861,15 @@ function openMyQrModal() {
 }
 
 function launchScannerModal() {
-    document.getElementById('scanner-title').textContent = '讀取報到 QR';
-    openModal('modal-scanner');
+    // Ported LBS 定位防弊: 地區年會需先通過 GPS 距離驗證才可開啟掃描報到
+    const ev = currentActiveEvent;
+    const isAnnual = ev && (ev.id === 109 || ev.type === '地區年會');
+    const openScanner = () => {
+        document.getElementById('scanner-title').textContent = '讀取報到 QR';
+        openModal('modal-scanner');
+    };
+    if (isAnnual) { runAnnualLbsGate(openScanner); return; }
+    openScanner();
 }
 
 function openAdminScanner() {
