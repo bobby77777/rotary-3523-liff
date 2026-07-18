@@ -340,9 +340,9 @@
                     <div class="w-9 h-9 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center"><i class="fa-solid fa-wallet"></i></div>
                     <div><span class="text-[10px] text-gray-400 block font-bold">完成繳費</span><span class="text-lg font-black text-teal-600" id="kpi-total-pay">0 筆</span></div>
                 </div>
-                <div class="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-2">
+                <div onclick="openUnpaidDetailsModal()" class="bg-white p-3 rounded-2xl border border-rose-100 shadow-sm flex items-center gap-2 cursor-pointer hover:bg-rose-50 active:bg-rose-100 transition-colors relative">
                     <div class="w-9 h-9 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center"><i class="fa-solid fa-hourglass-half"></i></div>
-                    <div><span class="text-[10px] text-gray-400 block font-bold">待繳費</span><span class="text-lg font-black text-rose-600" id="kpi-total-unpay">0 筆</span></div>
+                    <div><span class="text-[10px] text-gray-400 block font-bold">待繳費 <i class="fa-solid fa-chevron-right text-[8px] text-rose-300"></i></span><span class="text-lg font-black text-rose-600" id="kpi-total-unpay">0 筆</span></div>
                 </div>
             </div>
             <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -364,6 +364,26 @@
         </div>
         <div class="bg-gray-100 px-6 py-3 shrink-0">
             <button onclick="closeModal('modal-statistics')" class="bg-blue-900 text-white font-bold py-2 px-5 rounded-xl text-xs w-full btn-3d btn-3d-dark mb-1">關閉</button>
+        </div>
+    </div>
+</div>
+
+<!-- Unpaid Dues Detail Modal (待繳費明細 drill-down from stats board) -->
+<div id="modal-unpaid-details" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <div class="bg-gradient-to-r from-rose-800 to-red-700 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-file-invoice-dollar text-rose-100"></i></div>
+                <div>
+                    <h3 class="font-extrabold text-base">待繳費明細清單</h3>
+                    <p class="text-[10px] text-rose-200" id="unpaid-modal-subtitle">依各社欠費狀況列出</p>
+                </div>
+            </div>
+            <button onclick="closeModal('modal-unpaid-details')" class="text-rose-200 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="overflow-y-auto p-5 space-y-3 flex-1 bg-gray-50 no-scrollbar" id="unpaid-details-list"></div>
+        <div class="bg-gray-100 px-6 py-4 shrink-0 border-t border-gray-200">
+            <button onclick="closeModal('modal-unpaid-details')" class="bg-gray-800 text-white font-bold py-2.5 px-5 rounded-xl text-xs w-full btn-3d btn-3d-dark mb-1">返回統計看板</button>
         </div>
     </div>
 </div>
@@ -543,6 +563,32 @@
         </div>
         <div class="bg-gray-100 px-6 py-3 shrink-0">
             <button onclick="closeModal('modal-golf-leaderboard')" class="bg-emerald-800 text-white font-bold py-2 px-5 rounded-xl text-xs w-full btn-3d btn-3d-success mb-1">關閉排行榜</button>
+        </div>
+    </div>
+</div>
+
+<!-- Draw Hidden Holes Modal (新新貝利亞抽洞系統) -->
+<div id="modal-draw-holes" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+        <div class="px-6 py-4 bg-gradient-to-r from-emerald-900 to-teal-800 flex justify-between items-center">
+            <div class="flex items-center gap-2 text-white">
+                <i class="fa-solid fa-dice text-yellow-400"></i>
+                <h3 class="font-bold text-base">新新貝利亞抽洞系統</h3>
+            </div>
+            <button onclick="closeModal('modal-draw-holes')" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div class="p-6 flex flex-col items-center justify-center text-center space-y-4 bg-slate-50">
+            <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 shadow-inner mb-2">
+                <i class="fa-solid fa-shuffle text-3xl"></i>
+            </div>
+            <p class="text-xs text-gray-600 font-bold leading-relaxed">
+                點擊下方按鈕，系統將自動隨機抽出 6 個隱藏洞<br>(前9洞抽出3個，後9洞抽出3個)。<br>
+                <span class="text-[10px] text-gray-400 font-normal mt-1 block">抽洞完成後，將依據新新貝利亞公式自動結算全體球員的差點與淨桿成績。</span>
+            </p>
+            <div class="flex gap-2 w-full pt-3 border-t border-gray-200">
+                <button onclick="closeModal('modal-draw-holes')" class="w-1/2 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-600 text-sm bg-white btn-3d btn-3d-white mb-1">取消</button>
+                <button onclick="executeDrawHoles()" class="w-1/2 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1.5 btn-3d btn-3d-success mb-1"><i class="fa-solid fa-wand-magic-sparkles"></i> 抽出隱藏洞</button>
+            </div>
         </div>
     </div>
 </div>
@@ -834,6 +880,8 @@ let systemScope = 'district'; // 'district' | 'club'
 let currentUserClubId = 6;
 let currentActiveEvent = null;
 let isGolfCheckedIn = false;
+let isNewNewPeoriaDrawn = false;   // 新新貝利亞抽洞 state (mock, self-contained)
+let drawnHiddenHoles = [];
 let myRegisteredEvents = [];
 let isRichMenuOpen = true;
 
@@ -1797,7 +1845,9 @@ function renderAdminMenu() {
     if (isGolf) {
         left = box('高爾夫主委', '賽事即時總看板',
             miniRow(mini("openModal('modal-swap-group')", 'fa-people-arrows', '即時調組'),
-                    mini('openGolfLeaderboard()', 'fa-flag', '賽事成績')) + statsBtn);
+                    mini('openGolfLeaderboard()', 'fa-flag', '賽事成績')) +
+            miniRow(mini('openDrawHolesModal()', 'fa-dice', '新貝抽洞'),
+                    mini('openGolfLeaderboard()', 'fa-ranking-star', '總桿排行')) + statsBtn);
         rightTop = scanner('報到相機');
     } else if (isRye) {
         left = box('RYE 主委', 'RYE 報名與審核看板',
@@ -2430,6 +2480,76 @@ function renderGolfLeaderboard(players) {
 function executeGroupSwap() {
     closeModal('modal-swap-group');
     addChatMessage("bot", `✅ <b>即時調組成功</b><br>${document.getElementById('swap-player-a').value} ↔ ${document.getElementById('swap-player-b').value} 已完成調換。`);
+}
+
+// 新新貝利亞抽洞：主委隨機抽出 6 個隱藏洞（前9/後9 各 3 個）。Mock，尚未串接後端淨桿重算。
+function openDrawHolesModal() {
+    if (isNewNewPeoriaDrawn) {
+        showAlert('已完成抽洞', `系統已抽出隱藏洞：\nH${drawnHiddenHoles.map(h => h + 1).join('、H')}`);
+        return;
+    }
+    openModal('modal-draw-holes');
+}
+
+function executeDrawHoles() {
+    const pick = (base) => {
+        const out = [];
+        while (out.length < 3) {
+            const r = Math.floor(Math.random() * 9) + base;
+            if (!out.includes(r)) out.push(r);
+        }
+        return out;
+    };
+    drawnHiddenHoles = [...pick(0), ...pick(9)].sort((a, b) => a - b);
+    isNewNewPeoriaDrawn = true;
+    closeModal('modal-draw-holes');
+    const holes = drawnHiddenHoles.map(h => h + 1).join('、H');
+    addChatMessage('bot', `🎲 <b>【新新貝利亞抽洞完成】</b><br><br>系統已隨機抽出 6 個隱藏洞：<br><b class="text-emerald-600">H${holes}</b><br><br>👉 隱藏洞已歸檔，主委可於賽事成績看板檢視淨桿排行。`);
+    sendLineMessage(`🎲 新新貝利亞抽洞完成，隱藏洞：H${holes}`);
+}
+
+// 待繳費明細：從統計看板的「待繳費」KPI 點入，列出各社欠費筆數並可一鍵催繳。
+function openUnpaidDetailsModal() {
+    const container = document.getElementById('unpaid-details-list');
+    if (!container) return;
+    const isAnnual = currentActiveEvent && (currentActiveEvent.id === 109 || currentActiveEvent.type === '地區年會');
+    let html = '';
+    let totalUnpaid = 0;
+
+    clubsData.forEach(club => {
+        let unpay = club.registered - club.paid;
+        if (isAnnual && unpay > 0 && club.registered > 0) unpay = club.registered; // 年會採執秘批次匯款，未匯前全社視為欠費
+        if (unpay <= 0) return;
+        totalUnpaid += unpay;
+        const note = isAnnual
+            ? `<div class="text-[10px] text-rose-500 mt-1.5 pl-2 border-l-2 border-rose-300 font-bold">⚠️ 執秘尚未批次匯款，目前為全社欠費狀態</div>`
+            : `<div class="text-[10px] text-gray-400 mt-1.5 pl-2 border-l-2 border-gray-200">※ 系統尚未登錄個別名單，目前共 ${unpay} 筆待繳</div>`;
+        html += `<div class="bg-white border border-rose-100 rounded-xl p-3 shadow-sm">
+            <div class="flex justify-between items-center">
+                <span class="font-bold text-gray-800 text-sm"><i class="fa-solid fa-house-flag text-blue-800 mr-1.5"></i>${club.name}</span>
+                <span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-xs font-black border border-rose-200">${unpay} 筆欠費</span>
+            </div>
+            ${note}
+            <button onclick="sendReminderPush('${club.name.replace(/'/g, "\\'")}')" class="mt-3 w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-[0.98]">
+                <i class="fa-regular fa-bell"></i> 一鍵發送催繳通知
+            </button>
+        </div>`;
+    });
+
+    if (totalUnpaid === 0) {
+        html = `<div class="text-center py-10">
+            <i class="fa-solid fa-circle-check text-5xl text-emerald-400 mb-3"></i>
+            <p class="text-gray-600 font-bold text-sm">太棒了！<br>目前全區皆已完成繳費！</p>
+        </div>`;
+    }
+    container.innerHTML = html;
+    document.getElementById('unpaid-modal-subtitle').innerText = `目前累計共 ${totalUnpaid} 筆欠款`;
+    openModal('modal-unpaid-details');
+}
+
+function sendReminderPush(clubName) {
+    showAlert('催繳通知已送出', `已透過 LINE 官方帳號向「${clubName}」的欠費社友推送繳費提醒。`);
+    sendLineMessage(`🔔 已向 ${clubName} 發送繳費催繳通知。`);
 }
 
 // ============================================================
