@@ -1001,7 +1001,7 @@ async function toggleSystemScope() {
     currentActiveEvent = findClosestUpcomingEvent();
     updateBanner();
     renderEbooksMenu();
-    switchTab('home');
+    switchTab(activeTab);   // stay on the current tab instead of jumping back to 首頁
     addChatMessage("system", `🔄 已切換至：<b>${systemScope === 'district' ? '地區總部' : '社內專區'}</b>`);
 }
 
