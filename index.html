@@ -1210,16 +1210,20 @@ function renderProfileMenu() {
                     <i class="fa-solid fa-qrcode text-xl opacity-80"></i>
                 </div>
             </div>
-            <div class="grid grid-rows-3 gap-2">
-                <div onclick="clickMenuItem('查詢紀錄','profile-history')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-clock-rotate-left text-lg text-indigo-500"></i><span class="text-[10px] font-bold text-slate-700">報名紀錄</span>
-                </div>
-                <div onclick="openModal('modal-payment-info')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-money-check-dollar text-lg text-teal-600"></i><span class="text-[10px] font-bold text-slate-700">回報匯款</span>
-                </div>
+            <div class="grid grid-rows-2 gap-2">
+                ${systemScope === 'district' ? `
                 <div onclick="openMatchmakingModal()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
                     <i class="fa-solid fa-robot text-lg text-blue-500"></i><span class="text-[10px] font-bold text-slate-700">產業媒合</span>
                 </div>
+                <div onclick="openModal('modal-payment-info')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
+                    <i class="fa-solid fa-money-check-dollar text-lg text-teal-600"></i><span class="text-[10px] font-bold text-slate-700">回報匯款</span>
+                </div>` : `
+                <div onclick="openAttendanceModal('me')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
+                    <i class="fa-solid fa-id-card-clip text-lg text-emerald-600"></i><span class="text-[10px] font-bold text-slate-700">出席累計</span>
+                </div>
+                <div onclick="openMyDuesModal()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
+                    <i class="fa-solid fa-file-invoice-dollar text-lg text-rose-500"></i><span class="text-[10px] font-bold text-slate-700">本月社費</span>
+                </div>`}
             </div>`;
     }
 
