@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>扶輪社刊 Canva 專屬模板編輯器 - 全螢幕版</title>
+    <title>扶輪社刊</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
     
     <style>
@@ -393,6 +393,12 @@
         <!-- 上傳面板 -->
         <div class="sub-panel" id="panel-upload">
             <div class="control-group">
+                <label>我的照片</label>
+                <div class="btn-row">
+                    <button class="btn" onclick="uploadMainImage()">📷 從相簿選一張換主圖</button>
+                </div>
+            </div>
+            <div class="control-group">
                 <label>雲端圖庫 (點擊圖片自動替換畫布主圖)</label>
                 <div class="btn-row">
                     <button class="gallery-btn" onclick="replaceMainImage('https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=80')"><img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&q=80"></button>
@@ -401,7 +407,7 @@
                     <button class="gallery-btn" onclick="replaceMainImage('https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=800&q=80')"><img src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=200&q=80"></button>
                 </div>
             </div>
-            <div class="tip-box">點擊畫布上的小照片，系統會模擬上傳替換該圖。</div>
+            <div class="tip-box">想換單張相片：直接點畫布上那張照片；拼貼模式請按相片右上角的 📷。</div>
         </div>
 
         <!-- 文字面板 -->
@@ -543,11 +549,25 @@
         }
 
         // --- 3. 頁面與樣式渲染 ---
+        // 離開頁面時把當下的 DOM 原封收起來，回來時再放回去。
+        // 沒有這層快取，換過頁的頁面在匯出時會被範本重新生成一次，
+        // 使用者上傳的照片和改過的文字全部會被打回預設值。
+        const pageCache = {};
+        const pageKey = (page, layout) => page + ':' + layout;
+
+        function stashCurrentPage() {
+            const container = document.getElementById('page-content');
+            if (container && container.innerHTML.trim()) {
+                pageCache[pageKey(state.page, state.layouts[state.page])] = container.innerHTML;
+            }
+        }
+
         function changePage(page, btnElement) {
             if (btnElement) {
                 btnElement.closest('.btn-row').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
                 btnElement.classList.add('active');
             }
+            stashCurrentPage();
             state.page = page;
             document.getElementById('page-number').innerText = `PAGE 0${page}`;
             renderLayoutSelector();
@@ -583,6 +603,7 @@
         }
 
         function changeP3Layout(style, count) {
+            stashCurrentPage();
             state.layouts[3] = style + count;
             renderLayoutSelector();
             renderCanvas();
@@ -591,6 +612,7 @@
         function changeLayout(layoutId, btnElement, layoutName) {
             document.querySelectorAll('#layout-selector .btn').forEach(b => b.classList.remove('active'));
             if(btnElement) btnElement.classList.add('active');
+            stashCurrentPage();
             state.layouts[state.page] = layoutId;
             renderCanvas();
         }
@@ -608,14 +630,14 @@
                             <div class="p1a-bio resize-both" contenteditable="true">在科技快速迭代的時代，半導體不僅是硬體的核心，更是推動整體社會數位轉型的基礎地基。本週榮幸邀請先進巨擘為我們深入探討產業領導者該如何培育新世代人才並掌握關鍵機會。</div>
                         </div>
                         <div class="img-area">
-                            <img class="editable-image" onclick="simulateRandomUpload(this)" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=80">
+                            <img class="editable-image" onclick="uploadImage(this)" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=80">
                         </div>
                     </div>`;
             } else if (page === 1 && layout === 'B') {
                 return `
                     <div class="layout-p1b">
                         <div class="p1b-left">
-                            <img class="editable-image" onclick="simulateRandomUpload(this)" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80">
+                            <img class="editable-image" onclick="uploadImage(this)" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80">
                             <div class="name resize-x" contenteditable="true">張忠謀 博士</div>
                             <div class="title resize-x" contenteditable="true">台積電創辦人</div>
                         </div>
@@ -706,10 +728,11 @@
                         itemsHtml += `
                             <div class="collage-item resize-both" style="left: ${pos.x}%; top: ${pos.y}%; width: ${pos.w}px; transform: rotate(${pos.r}deg); z-index: ${globalZIndex + i};" data-rotation="${pos.r}">
                                 <div class="photo-tools" contenteditable="false">
+                                    <button onclick="uploadCollageImage(this)" title="換成自己的照片">📷</button>
                                     <button class="rotate-handle" onpointerdown="startRotate(event, this)" title="按住並拖曳來自由旋轉">↻</button>
                                     <button onclick="bringToFront(this)" title="移至最前">⬆️</button>
                                 </div>
-                                <img class="editable-image" onclick="simulateRandomUpload(this)" src="${mockGallery[i]}">
+                                <img class="editable-image" onclick="uploadImage(this)" src="${mockGallery[i]}">
                                 <div class="polaroid-caption resize-x" contenteditable="true">${captions[i]}</div>
                             </div>`;
                     }
@@ -723,7 +746,7 @@
                 } else {
                     let itemsHtml = '';
                     for(let i = 0; i < photoCount; i++) {
-                        itemsHtml += `<div class="item"><img class="editable-image" onclick="simulateRandomUpload(this)" src="${mockGallery[i]}"><div class="caption resize-x" contenteditable="true">${captions[i]}</div></div>`;
+                        itemsHtml += `<div class="item"><img class="editable-image" onclick="uploadImage(this)" src="${mockGallery[i]}"><div class="caption resize-x" contenteditable="true">${captions[i]}</div></div>`;
                     }
                     return `
                         <div class="layout-p3">
@@ -825,8 +848,8 @@
             }
             document.getElementById('canvas-label').innerText = `Page ${page}: ${layoutName}`;
 
-            // 將 HTML 寫入畫面
-            container.innerHTML = getPageContentHTML(page, layout);
+            // 將 HTML 寫入畫面 (回到編輯過的頁面時用快取，保住上傳的照片與改過的字)
+            container.innerHTML = pageCache[pageKey(page, layout)] || getPageContentHTML(page, layout);
             addTouchHandles();
 
             // 重新綁定 P3 動態拼接的拖曳事件
@@ -846,18 +869,74 @@
             }
         }
 
-        function simulateRandomUpload(imgElement) {
-            const mockImages = [
-                "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=800&q=80",
-                "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=800&q=80",
-                "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=800&q=80"
-            ];
-            imgElement.style.opacity = '0.5';
-            setTimeout(() => {
-                imgElement.src = mockImages[Math.floor(Math.random() * mockImages.length)];
-                imgElement.style.opacity = '1';
-                showToast('✅ 圖片已重新套用！');
-            }, 300);
+        // --- 5.1 從手機相簿 / 電腦挑照片 ---
+        // 手機拍的照片動輒 3~5MB，九張貼進來頁面會重到跑不動，列印也會卡住。
+        // 長邊壓到 1600px：A4 上最寬的相片印出來仍有 300dpi 以上，檔案卻小一個量級。
+        const MAX_IMAGE_EDGE = 1600;
+        const IMAGE_QUALITY = 0.85;
+
+        let pendingImageTarget = null;
+        const imagePicker = document.createElement('input');
+        imagePicker.type = 'file';
+        imagePicker.accept = 'image/*';
+        imagePicker.style.display = 'none';
+        document.body.appendChild(imagePicker);
+
+        imagePicker.addEventListener('change', function () {
+            const file = this.files && this.files[0];
+            this.value = '';   // 清掉才能連續挑同一張照片
+            const target = pendingImageTarget;
+            pendingImageTarget = null;
+            if (!file || !target) return;
+
+            target.style.opacity = '0.5';
+            shrinkImage(file, function (dataUrl) {
+                target.src = dataUrl;
+                target.style.opacity = '1';
+                showToast('✅ 照片已更新！');
+            }, function () {
+                target.style.opacity = '1';
+                showToast('⚠️ 這個檔案讀不出來，請換一張照片試試。');
+            });
+        });
+
+        function uploadImage(imgElement) {
+            if (!imgElement) { showToast('⚠️ 本頁沒有相片區塊喔！'); return; }
+            pendingImageTarget = imgElement;
+            imagePicker.click();
+        }
+
+        // 拼貼模式的相片本身是 pointer-events:none (才不會擋住拖曳)，
+        // 所以改由工具列的相機鈕代為指定要換哪一張。
+        function uploadCollageImage(btn) {
+            const item = btn.closest('.collage-item');
+            uploadImage(item && item.querySelector('img'));
+        }
+
+        function uploadMainImage() {
+            uploadImage(document.querySelector('.editable-image'));
+        }
+
+        function shrinkImage(file, onDone, onError) {
+            const reader = new FileReader();
+            reader.onerror = onError;
+            reader.onload = function () {
+                const img = new Image();
+                img.onerror = onError;
+                img.onload = function () {
+                    const longest = Math.max(img.width, img.height);
+                    // 本來就夠小就直接用原檔，不必再編碼一次而損失畫質
+                    if (longest <= MAX_IMAGE_EDGE) { onDone(reader.result); return; }
+                    const ratio = MAX_IMAGE_EDGE / longest;
+                    const c = document.createElement('canvas');
+                    c.width = Math.round(img.width * ratio);
+                    c.height = Math.round(img.height * ratio);
+                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                    onDone(c.toDataURL('image/jpeg', IMAGE_QUALITY));
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
         }
 
         function startRotate(e, btn) {
@@ -1145,11 +1224,13 @@
                     // 如果是目前正在編輯的頁面，直接複製它的 DOM，這樣執秘的所有修改都會被完美保留！
                     pageWrapper.innerHTML = document.getElementById('canvas').innerHTML;
                 } else {
-                    // 如果是沒有在畫面上顯示的頁面，我們利用前面的模組化函數自動生成
+                    // 沒顯示在畫面上的頁面：優先用快取 (才不會把編輯過的內容洗掉)，
+                    // 從沒開過的頁面才用模組化函數生成預設版型
+                    const cached = pageCache[pageKey(pageNum, state.layouts[pageNum])];
                     pageWrapper.innerHTML = `
                         ${headerHTML}
                         <div class="page-content">
-                            ${getPageContentHTML(pageNum, state.layouts[pageNum])}
+                            ${cached || getPageContentHTML(pageNum, state.layouts[pageNum])}
                         </div>
                         <div class="page-footer" contenteditable="false">
                             <span contenteditable="true">${footerTitle}</span>
