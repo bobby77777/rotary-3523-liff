@@ -2243,8 +2243,18 @@ function clickMenuItem(itemName, key) {
     }, 400);
 }
 
+// E-books that are already online, mapped to their page (relative to this file).
+const EBOOK_PAGES = { '本社社刊': '社刊.html' };
+
 function clickEbook(name) {
     addChatMessage("user", name);
+    const page = EBOOK_PAGES[name];
+    if (page) {
+        const url = new URL(page, location.href).href;
+        if (liff.isInClient()) liff.openWindow({ url, external: false });
+        else window.open(url, '_blank');
+        return;
+    }
     setTimeout(() => addChatMessage("bot", `📖 《${name}》電子書建置中，上線後即可於此線上翻閱。`), 400);
 }
 

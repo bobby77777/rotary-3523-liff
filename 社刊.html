@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>扶輪社刊 Canva 專屬模板編輯器 - 全螢幕版</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --c-primary: #00246B;
+            --c-secondary: #D4AF37;
+            --c-bg: #F8F9FA;
+            --c-text: #333333;
+            --c-text-light: #6c757d;
+            --font-head: 'Noto Serif TC', serif;
+            --font-body: 'Noto Sans TC', sans-serif;
+            --canva-ui-bg: #18191B;
+            --canva-ui-panel: #252627;
+            --canva-ui-text: #FFFFFF;
+            --canva-accent: #8B3DFF;
+        }
+
+        body { margin: 0; padding: 0; font-family: 'Noto Sans TC', sans-serif; background-color: #E6E7E9; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+        /* --- 頂部主導覽列 --- */
+        .top-nav { background-color: var(--canva-ui-bg); display: flex; padding: 0 20px; align-items: center; z-index: 20; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .nav-logo { color: #fff; font-weight: bold; font-size: 16px; margin-right: 30px; display: flex; align-items: center; gap: 8px; }
+        .nav-logo span { background: var(--canva-accent); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .tool-tab { color: #A6A7A9; display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; padding: 15px 20px; border-bottom: 3px solid transparent; font-weight: bold; }
+        .tool-tab:hover { color: var(--canva-ui-text); background-color: rgba(255,255,255,0.05); }
+        .tool-tab.active { color: var(--canva-ui-text); border-bottom-color: var(--canva-accent); }
+        .tool-tab svg { width: 18px; height: 18px; fill: currentColor; }
+
+        /* --- 第二層功能控制列 --- */
+        .sub-panel-container { background-color: var(--canva-ui-panel); color: var(--canva-ui-text); z-index: 19; box-shadow: 0 4px 10px rgba(0,0,0,0.1); flex-shrink: 0; }
+        .sub-panel { padding: 15px 30px; display: none; gap: 30px; align-items: center; flex-wrap: wrap; }
+        .sub-panel.active { display: flex; }
+
+        /* 控制項樣式 */
+        .control-group { display: flex; flex-direction: column; gap: 8px; }
+        .control-group label { font-size: 11px; color: #A6A7A9; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: 500px; }
+        .btn { background: #3F4042; color: #fff; border: 1px solid transparent; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: 0.2s; display: flex; align-items: center; gap: 6px; }
+        .btn:hover { background: #4F5052; }
+        .btn.active { border-color: var(--canva-accent); background: rgba(139, 61, 255, 0.2); box-shadow: 0 0 0 1px var(--canva-accent); }
+        
+        .color-dots { display: flex; gap: 4px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); }
+
+        .element-btn { font-size: 20px; padding: 5px 12px; }
+        .gallery-btn { padding: 2px; background: transparent; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
+        .gallery-btn img { width: 60px; height: 40px; object-fit: cover; border-radius: 4px; display: block; }
+        .gallery-btn:hover { border-color: var(--canva-accent); }
+
+        .tip-box { margin-left: auto; background: rgba(139,61,255,0.1); border: 1px dashed var(--canva-accent); padding: 8px 15px; border-radius: 6px; font-size: 12px; color: #ddd; }
+
+        /* --- 中央編輯區 --- */
+        .workspace { flex: 1; display: flex; justify-content: center; align-items: flex-start; position: relative; background-image: radial-gradient(#d1d1d1 1px, transparent 1px); background-size: 20px 20px; padding: 50px 40px; overflow: auto; }
+        .canvas-wrapper { position: relative; flex-shrink: 0; margin: auto; }
+        .canvas-label { position: absolute; top: -30px; left: 0; background: var(--canva-accent); color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .canvas { width: 595px; height: 842px; background-color: var(--c-bg); box-shadow: 0 15px 40px rgba(0,0,0,0.15); position: relative; display: flex; flex-direction: column; overflow: hidden; transition: background-color 0.3s ease; }
+
+        /* --- 編輯與互動 --- */
+        [contenteditable="true"] { outline: none; transition: outline 0.2s; }
+        [contenteditable="true"]:hover { outline: 2px dashed rgba(139, 61, 255, 0.5); cursor: text; }
+        [contenteditable="true"]:focus { outline: 2px solid var(--canva-accent); }
+        
+        .resize-x { resize: horizontal; overflow: hidden; padding-right: 15px; }
+        .resize-both { resize: both; overflow: hidden; padding-right: 15px; padding-bottom: 10px; }
+        .resize-x::-webkit-scrollbar, .resize-both::-webkit-scrollbar { display: none; }
+
+        .editable-image { cursor: pointer; transition: opacity 0.2s, outline 0.2s; }
+        .editable-image:hover { opacity: 0.9; outline: 2px dashed var(--canva-accent); }
+
+        .floating-item { position: absolute; cursor: move; z-index: 100; padding: 5px; border: 1px dashed transparent; transition: border 0.2s; }
+        .floating-item:hover, .floating-item:focus-within { border-color: var(--canva-accent); }
+        .floating-item .delete-btn { position: absolute; top: -15px; right: -15px; background: #ff4757; color: white; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; border: none; }
+        .floating-item:hover .delete-btn { opacity: 1; }
+
+        /* --- 刊頭 & 頁尾 --- */
+        .page-header { background-color: var(--c-primary); color: #fff; padding: 20px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 5px solid var(--c-secondary); transition: background-color 0.3s, border-color 0.3s; z-index: 10; }
+        .page-header h2 { margin: 0; font-family: var(--font-body); font-size: 18px; letter-spacing: 2px; }
+        .page-header .meta { font-size: 12px; text-align: right; opacity: 0.9; font-family: var(--font-body); }
+        .page-footer { padding: 15px 30px; background-color: rgba(0,0,0,0.05); font-size: 11px; color: var(--c-text-light); display: flex; justify-content: space-between; margin-top: auto; font-family: var(--font-body); z-index: 10; }
+        .page-content { flex: 1; position: relative; width: 100%; height: 100%; box-sizing: border-box; }
+
+        /* --- P1 --- */
+        .layout-p1a { display: flex; height: 100%; }
+        .layout-p1a .text-area { width: 50%; padding: 50px 40px; display: flex; flex-direction: column; justify-content: center; z-index: 2; }
+        .layout-p1a .img-area { width: 50%; height: 100%; position: relative; }
+        .layout-p1a .img-area img { width: 100%; height: 100%; object-fit: cover; clip-path: polygon(15% 0, 100% 0, 100% 100%, 0 100%); }
+        .layout-p1a .p1a-tag { font-family: var(--font-body); font-size: 12px; font-weight: bold; background: var(--c-secondary); color: #000; padding: 4px 12px; display: inline-block; margin-bottom: 20px; align-self: flex-start; }
+        .p1a-name { font-family: var(--font-head); font-size: 48px; color: var(--c-primary); margin: 0 0 5px 0; line-height: 1.1; font-weight: 900; }
+        .p1a-title { font-family: var(--font-body); font-size: 16px; color: var(--c-text-light); margin-bottom: 30px; }
+        .p1a-topic { font-family: var(--font-head); font-size: 24px; color: var(--c-text); margin-bottom: 20px; font-weight: bold; line-height: 1.3; text-wrap: balance; }
+        .p1a-bio { font-family: var(--font-body); font-size: 13px; color: var(--c-text-light); line-height: 1.8; text-align: justify; text-justify: inter-ideograph; text-wrap: pretty; }
+
+        .layout-p1b { display: flex; height: 100%; padding: 40px; box-sizing: border-box; gap: 30px; }
+        .p1b-left { width: 35%; background: var(--c-primary); border-radius: 12px; padding: 30px; display: flex; flex-direction: column; align-items: center; text-align: center; color: white; }
+        .p1b-left img { width: 140px; height: 140px; border-radius: 50%; border: 4px solid var(--c-secondary); margin-bottom: 20px; object-fit: cover; }
+        .p1b-left .name { font-family: var(--font-head); font-size: 28px; font-weight: bold; margin-bottom: 10px; }
+        .p1b-left .title { font-family: var(--font-body); font-size: 14px; opacity: 0.9; }
+        .p1b-right { width: 65%; display: flex; flex-direction: column; justify-content: center; }
+        .p1b-right .box { border-left: 4px solid var(--c-secondary); padding-left: 20px; margin-bottom: 30px; }
+        .p1b-right .topic { font-family: var(--font-head); font-size: 26px; color: var(--c-primary); font-weight: bold; margin-bottom: 15px; text-wrap: balance; }
+        .p1b-right .bio { font-family: var(--font-body); font-size: 14px; color: var(--c-text); line-height: 1.8; text-align: justify; text-justify: inter-ideograph; text-wrap: pretty; }
+
+        /* --- P2 --- */
+        .layout-p2 { padding: 40px 60px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+        .p2-title { font-family: var(--font-head); font-size: 32px; color: var(--c-primary); margin-bottom: 20px; text-align: center; font-weight: bold; border-bottom: 2px solid var(--c-secondary); padding-bottom: 15px; flex-shrink: 0; }
+        .timeline-container { flex: 1; overflow-y: auto; padding-right: 10px; margin-bottom: 5px; }
+        .timeline-container::-webkit-scrollbar { width: 5px; }
+        .timeline-container::-webkit-scrollbar-track { background: transparent; }
+        .timeline-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+        .timeline { position: relative; max-width: 420px; margin: 0 auto; padding-bottom: 10px; }
+        .timeline::before { content: ''; position: absolute; left: 80px; top: 0; bottom: 0; width: 2px; background: var(--c-secondary); }
+        .timeline-item { position: relative; margin-bottom: 25px; display: flex; align-items: flex-start; }
+        .time-col { width: 60px; padding-right: 20px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+        .time { font-family: var(--font-body); font-weight: bold; color: var(--c-primary); font-size: 16px; line-height: 1; }
+        .duration { font-family: var(--font-body); font-size: 11px; font-weight: bold; background: rgba(0,0,0,0.06); color: var(--c-text-light); padding: 3px 6px; border-radius: 4px; line-height: 1; white-space: nowrap; }
+        .event-dot { position: absolute; left: 74px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--c-secondary); border: 2px solid var(--c-bg); }
+        .event-detail { padding-left: 35px; flex: 1; padding-right: 50px; }
+        .item-controls { position: absolute; right: -15px; top: 0; display: flex; gap: 5px; opacity: 0; transition: 0.2s; z-index: 10; }
+        .timeline-item:hover .item-controls { opacity: 1; }
+        .item-controls button { background: #fff; border: 1px solid var(--c-secondary); color: var(--c-primary); width: 24px; height: 24px; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; font-size: 16px; padding: 0; }
+        .item-controls button:hover { background: var(--c-secondary); color: #000; }
+        .timeline-add-btn { margin: 10px auto 10px; display: block; background: var(--c-secondary); color: #000; font-weight: bold; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-family: var(--font-body); transition: 0.2s; }
+        .timeline-add-btn:hover { background: #E5BE45; transform: translateY(-2px); }
+        .event-name { font-family: var(--font-head); font-size: 18px; color: var(--c-text); font-weight: bold; margin-bottom: 4px; line-height: 1.2; }
+        .event-person { font-family: var(--font-body); font-size: 13px; color: var(--c-text-light); }
+
+        .rotary-creed-footer { padding-top: 15px; margin-top: 5px; border-top: 1px solid #DEE2E6; flex-shrink: 0; position: relative; }
+        .rotary-creed-footer::before { content: ''; position: absolute; top: -1px; left: 0; width: 80px; height: 3px; background: var(--c-secondary); }
+        .creed-item { margin-bottom: 8px; }
+        .creed-item:last-child { margin-bottom: 0; }
+        .creed-label { font-family: var(--font-head); font-weight: 900; color: var(--c-primary); font-size: 14px; margin-bottom: 2px; }
+        .creed-content { font-size: 12px; color: var(--c-text); line-height: 1.5; text-align: justify; padding-left: 2px; }
+        .creed-content strong { color: #C62828; font-weight: bold; }
+
+        /* --- P3 --- */
+        .layout-p3 { padding: 40px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+        .p3-title { font-family: var(--font-head); font-size: 28px; color: var(--c-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; font-weight: bold; z-index: 10; position: relative;}
+        .p3-title::after { content: ''; flex: 1; height: 1px; background: var(--c-secondary); }
+        .collage-board { flex: 1; position: relative; width: 100%; height: 100%; }
+        .collage-item { position: absolute; background: #ffffff; padding: 6px 6px 40px 6px; box-shadow: 2px 5px 15px rgba(0,0,0,0.2); border: 1px solid #e0e0e0; transition: box-shadow 0.2s; min-width: 120px; min-height: 120px; cursor: move; }
+        .collage-item:hover { box-shadow: 5px 12px 25px rgba(0,0,0,0.3); }
+        .collage-item::after { content: ''; position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; background: repeating-linear-gradient(135deg, transparent, transparent 2px, #ccc 2px, #ccc 4px); pointer-events: none; border-bottom-right-radius: 2px; opacity: 0; transition: opacity 0.2s; }
+        .collage-item:hover::after { opacity: 1; background: repeating-linear-gradient(135deg, transparent, transparent 2px, var(--canva-accent) 2px, var(--canva-accent) 4px); }
+        .collage-item img { width: 100%; height: 100%; object-fit: cover; border-radius: 2px; pointer-events: none; }
+        .polaroid-caption { position: absolute; bottom: 10px; left: 8px; right: 8px; text-align: center; font-size: 14px; font-family: var(--font-body); color: #333; font-weight: 700; border-bottom: 1px dashed transparent; }
+        .polaroid-caption:hover { border-bottom-color: #999; }
+        .photo-tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; opacity: 0; transition: 0.2s; z-index: 20; }
+        .collage-item:hover .photo-tools { opacity: 1; }
+        .photo-tools button { background: #fff; border: 1px solid var(--canva-accent); color: var(--canva-accent); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 6px rgba(0,0,0,0.2); transition: 0.2s; }
+        .photo-tools button:hover { background: var(--canva-accent); color: #fff; transform: scale(1.1); }
+        .rotate-handle { cursor: grab !important; }
+        .rotate-handle:active { cursor: grabbing !important; }
+        .photo-grid { flex: 1; display: grid; gap: 15px; min-height: 0; margin-top: 15px; }
+        .photo-grid .item { border-radius: 8px; overflow: hidden; background: #ddd; position: relative; }
+        .photo-grid .item img { width: 100%; height: 100%; object-fit: cover; }
+        .grid-5 { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 1fr); }
+        .grid-5 .item:nth-child(1) { grid-column: 1 / span 2; grid-row: 1 / span 2; }
+        .grid-6 { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); }
+        .grid-7 { grid-template-columns: repeat(3, 1fr); grid-template-rows: 2fr 1fr 1fr; }
+        .grid-7 .item:nth-child(1) { grid-column: 1 / -1; }
+        .grid-8 { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 1fr); }
+        .grid-9 { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+        .photo-grid .caption { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); color: white; padding: 8px; font-size: 13px; font-family: var(--font-body); font-weight: bold; text-align: center; }
+
+        /* --- P4 --- */
+        .layout-p4 { padding: 40px 50px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+        .p4-main-title { font-family: var(--font-head); font-size: 32px; color: var(--c-primary); margin-bottom: 20px; text-align: center; font-weight: bold; border-bottom: 2px solid var(--c-secondary); padding-bottom: 15px; flex-shrink: 0; }
+        .p4-dual-headers { display: flex; gap: 30px; flex-shrink: 0; padding-right: 15px; margin-bottom: 15px; }
+        .p4-col-title { flex: 1; font-size: 20px; color: #fff; background: var(--c-primary); padding: 8px 15px; border-radius: 4px; font-weight: bold; display: flex; align-items: center; justify-content: space-between; border-left: 6px solid var(--c-secondary); margin: 0; }
+        .p4-scroll-area { flex: 1; overflow-y: auto; padding-right: 10px; padding-bottom: 20px; }
+        .p4-scroll-area::-webkit-scrollbar { width: 5px; }
+        .p4-scroll-area::-webkit-scrollbar-track { background: transparent; }
+        .p4-scroll-area::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+        .p4-scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+        .p4-dual-columns-body { display: flex; gap: 30px; }
+        .p4-col-body { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        .p4-card { background: #fff; border: 1px solid #E6E7E9; border-left: 4px solid var(--c-primary); padding: 15px; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); transition: box-shadow 0.2s; position: relative; }
+        .p4-card:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.08); border-left-color: var(--c-secondary); }
+        .p4-card-title { font-size: 15px; font-weight: bold; color: var(--c-primary); margin-bottom: 10px; line-height: 1.3; }
+        .p4-meta { display: flex; font-size: 13px; margin-bottom: 6px; line-height: 1.4; color: var(--c-text); }
+        .p4-meta-label { width: 50px; flex-shrink: 0; color: var(--c-text-light); font-weight: bold; }
+        .p4-meta-val { flex: 1; }
+        .p4-list-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .p4-list-scroll { flex: 1; overflow-y: auto; padding-right: 10px; padding-bottom: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .p4-list-scroll::-webkit-scrollbar { width: 5px; }
+        .p4-list-scroll::-webkit-scrollbar-track { background: transparent; }
+        .p4-list-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+        .p4-list-group-title { font-size: 18px; color: var(--c-primary); font-weight: bold; border-bottom: 1px solid var(--c-secondary); padding-bottom: 8px; margin-bottom: 5px; flex-shrink: 0; }
+        .p4-list-item { display: flex; padding: 12px 15px; background: #fff; border-radius: 6px; align-items: center; gap: 20px; position: relative; border-left: 3px solid transparent; transition: 0.2s; flex-shrink: 0; }
+        .p4-list-item:hover { border-left-color: var(--c-secondary); background: #F8F9FA; }
+        .p4-list-date { width: 110px; flex-shrink: 0; text-align: center; border-right: 2px dashed #E6E7E9; padding-right: 15px; }
+        .p4-list-month { font-size: 12px; color: var(--c-text-light); font-weight: bold; text-transform: uppercase; }
+        .p4-list-day { font-size: 24px; color: var(--c-primary); font-family: var(--font-head); font-weight: 900; line-height: 1; margin: 4px 0; }
+        .p4-list-time { font-size: 11px; color: var(--c-text-light); background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; display: inline-block;}
+        .p4-list-content { flex: 1; }
+        .p4-list-title { font-size: 16px; font-weight: bold; color: var(--c-text); margin-bottom: 5px; }
+        .p4-list-detail { font-size: 13px; color: var(--c-text-light); display: flex; flex-direction: column; gap: 3px; }
+        .item-add-del { position: absolute; right: -15px; top: 10px; display: flex; flex-direction: column; gap: 4px; opacity: 0; transition: 0.2s; }
+        .p4-card:hover .item-add-del, .p4-list-item:hover .item-add-del { opacity: 1; }
+        .item-add-del button { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--c-primary); background: #fff; color: var(--c-primary); font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; padding: 0; }
+        .item-add-del button:hover { background: var(--c-primary); color: #fff; }
+
+        /* 提示框 */
+        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--canva-accent); color: white; padding: 12px 24px; border-radius: 8px; font-weight: bold; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transform: translateY(100px); opacity: 0; transition: 0.3s; z-index: 100; }
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        /* 匯出功能彈出視窗 */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 999; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: 0.2s; }
+        .modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .modal-content { background: var(--canva-ui-panel); color: white; width: 340px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; transform: translateY(-20px); transition: 0.3s; }
+        .modal-overlay.show .modal-content { transform: translateY(0); }
+        .modal-header { background: var(--canva-accent); padding: 15px 20px; font-size: 16px; font-weight: bold; }
+        .modal-body { padding: 20px; }
+        .export-option { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; cursor: pointer; font-size: 14px; }
+        .export-option input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--canva-accent); }
+        .modal-footer { padding: 15px 20px; border-top: 1px solid #3F4042; display: flex; justify-content: flex-end; gap: 10px; }
+        .modal-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: var(--font-body); font-size: 13px; }
+        .modal-btn-cancel { background: #3F4042; color: white; }
+        .modal-btn-cancel:hover { background: #4F5052; }
+        .modal-btn-confirm { background: var(--canva-accent); color: white; }
+        .modal-btn-confirm:hover { background: #7A33E6; }
+
+        /* 🔥🔥🔥 真正的向量 PDF 輸出核心：瀏覽器原生列印 CSS 引擎 🔥🔥🔥 */
+        #print-zone { display: none; }
+        
+        @media print {
+            /* 1. 隱藏所有編輯器操作介面 */
+            .top-nav, .sub-panel-container, .workspace, .toast, .modal-overlay { display: none !important; }
+            
+            /* 2. 重設頁面基礎，強制啟動背景圖形列印 (-webkit-print-color-adjust) */
+            body { background: var(--c-bg); margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            
+            /* 3. 顯示我們在背景偷偷生成的「列印專用排版區」 */
+            #print-zone { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
+            
+            /* 4. 精準定義 A4 實體尺寸 (210x297mm) 與分頁邏輯 */
+            .print-canvas {
+                width: 210mm !important;
+                height: 297mm !important;
+                page-break-after: always;
+                box-shadow: none !important;
+                margin: 0 !important;
+                border: none !important;
+                transform: none !important;
+                background-color: var(--c-bg) !important;
+            }
+            .print-canvas:last-child { page-break-after: auto; }
+            @page { size: A4 portrait; margin: 0; }
+            
+            /* 5. 清除所有編輯用的提示框線、捲動軸與小按鈕，確保 PDF 版面極度乾淨 */
+            [contenteditable] { outline: none !important; resize: none !important; }
+            .resize-x, .resize-both { resize: none !important; }
+            .item-add-del, .photo-tools, .delete-btn, .timeline-add-btn { display: none !important; }
+            .collage-item::after { display: none !important; }
+            ::-webkit-scrollbar { display: none !important; }
+            .timeline-container, .p4-scroll-area, .p4-list-scroll { overflow: visible !important; height: auto !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部主導覽列 -->
+    <div class="top-nav">
+        <div class="nav-logo"><span>PRO</span> 扶輪社刊編輯器</div>
+        <div class="tool-tab active" onclick="switchPanel('design', this)">
+            <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg> 設計與版面
+        </div>
+        <div class="tool-tab" onclick="switchPanel('elements', this)">
+            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/></svg> 貼紙元素
+        </div>
+        <div class="tool-tab" onclick="switchPanel('upload', this)">
+            <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg> 媒體圖庫
+        </div>
+        <div class="tool-tab" onclick="switchPanel('text', this)">
+            <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg> 自由文字
+        </div>
+
+        <div class="tool-tab" style="margin-left: auto; background: var(--canva-accent); color: white; border-radius: 6px; padding: 8px 16px; height: 34px; border: none; transition: 0.2s;" onclick="showExportModal()" onmouseover="this.style.background='#7A33E6'" onmouseout="this.style.background='var(--canva-accent)'">
+            <svg viewBox="0 0 24 24" style="fill: white; width: 16px; height: 16px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> 匯出 PDF
+        </div>
+    </div>
+
+    <!-- 第二層功能控制列 -->
+    <div class="sub-panel-container">
+        <!-- 設計面板 -->
+        <div class="sub-panel active" id="panel-design">
+            <div class="control-group">
+                <label>品牌色調</label>
+                <div class="btn-row">
+                    <div class="btn active" onclick="changeTheme('A', this)">極簡藍金 <div class="color-dots"><div class="dot" style="background:#00246B"></div><div class="dot" style="background:#D4AF37"></div></div></div>
+                    <div class="btn" onclick="changeTheme('B', this)">活力人文 <div class="color-dots"><div class="dot" style="background:#0F4C81"></div><div class="dot" style="background:#F7A81B"></div></div></div>
+                    <div class="btn" onclick="changeTheme('C', this)">雜誌編輯 <div class="color-dots"><div class="dot" style="background:#222222"></div><div class="dot" style="background:#E05A47"></div></div></div>
+                </div>
+            </div>
+            <div class="control-group">
+                <label>頁面切換</label>
+                <div class="btn-row">
+                    <div class="btn active" onclick="changePage(1, this)">P.1 主講人</div>
+                    <div class="btn" onclick="changePage(2, this)">P.2 會議流程</div>
+                    <div class="btn" onclick="changePage(3, this)">P.3 本週花絮</div>
+                    <div class="btn" onclick="changePage(4, this)">P.4 預告事項</div>
+                </div>
+            </div>
+            <div class="control-group">
+                <label>數量與樣式</label>
+                <div class="btn-row" id="layout-selector">
+                    <!-- 動態生成 -->
+                </div>
+            </div>
+            <div class="tip-box">💡 <b>手機端優化：</b>花絮採用黃金層疊佈局，文字框與相片均可拖曳右下角縮放。</div>
+        </div>
+
+        <!-- 元素面板 -->
+        <div class="sub-panel" id="panel-elements">
+            <div class="control-group">
+                <label>點擊加入畫布 (支援拖曳)</label>
+                <div class="btn-row">
+                    <button class="btn element-btn" onclick="addFloatingElement('🏆')">🏆</button>
+                    <button class="btn element-btn" onclick="addFloatingElement('⭐')">⭐</button>
+                    <button class="btn element-btn" onclick="addFloatingElement('💬')">💬</button>
+                    <button class="btn element-btn" onclick="addFloatingElement('⚙️')">⚙️</button>
+                    <button class="btn element-btn" onclick="addFloatingElement('📍')">📍</button>
+                </div>
+            </div>
+            <div class="tip-box">可將徽章拖曳至標題旁做為點綴。</div>
+        </div>
+
+        <!-- 上傳面板 -->
+        <div class="sub-panel" id="panel-upload">
+            <div class="control-group">
+                <label>雲端圖庫 (點擊圖片自動替換畫布主圖)</label>
+                <div class="btn-row">
+                    <button class="gallery-btn" onclick="replaceMainImage('https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=80')"><img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&q=80"></button>
+                    <button class="gallery-btn" onclick="replaceMainImage('https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&w=800&q=80')"><img src="https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&w=200&q=80"></button>
+                    <button class="gallery-btn" onclick="replaceMainImage('https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=800&q=80')"><img src="https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=200&q=80"></button>
+                    <button class="gallery-btn" onclick="replaceMainImage('https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=800&q=80')"><img src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=200&q=80"></button>
+                </div>
+            </div>
+            <div class="tip-box">點擊畫布上的小照片，系統會模擬上傳替換該圖。</div>
+        </div>
+
+        <!-- 文字面板 -->
+        <div class="sub-panel" id="panel-text">
+            <div class="control-group">
+                <label>新增浮動文字方塊</label>
+                <div class="btn-row">
+                    <button class="btn" style="font-weight:bold; font-size: 16px;" onclick="addFloatingText('h1')">新增大標題</button>
+                    <button class="btn" style="font-weight:bold;" onclick="addFloatingText('h2')">新增小標題</button>
+                    <button class="btn" style="background:transparent; border: 1px solid #666;" onclick="addFloatingText('p')">新增內文</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 編輯區 -->
+    <div class="workspace">
+        <div class="canvas-wrapper">
+            <div class="canvas-label" id="canvas-label">Page 1: 雜誌封面型</div>
+            <div class="canvas" id="canvas">
+                <!-- 刊頭 -->
+                <div class="page-header" contenteditable="false">
+                    <h2>台北信義扶輪社</h2>
+                    <div class="meta" contenteditable="true">第 2489 期例會社刊<br>2026-07-04</div>
+                </div>
+
+                <!-- 內容動態渲染區 -->
+                <div class="page-content" id="page-content">
+                    <!-- JS 渲染內容 -->
+                </div>
+
+                <!-- 頁尾 -->
+                <div class="page-footer" contenteditable="false">
+                    <span contenteditable="true">Service Above Self 超我服務</span>
+                    <span id="page-number">PAGE 01</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">✅ 執行成功！</div>
+
+    <!-- 匯出選單 Modal 介面 -->
+    <div class="modal-overlay" id="export-modal">
+        <div class="modal-content">
+            <div class="modal-header">匯出真正的向量 PDF</div>
+            <div class="modal-body">
+                <div style="font-size: 12px; color: #A6A7A9; margin-bottom: 20px;">
+                    我們將喚醒系統原生的列印引擎，為您製作文字可選取、可無限放大的真正 PDF。<br><br>請勾選您要包含的頁面：
+                </div>
+                <label class="export-option"><input type="checkbox" id="export-p1" checked> P.1 主講人與美照</label>
+                <label class="export-option"><input type="checkbox" id="export-p2" checked> P.2 本週會議流程</label>
+                <label class="export-option"><input type="checkbox" id="export-p3" checked> P.3 精彩花絮拼貼</label>
+                <label class="export-option"><input type="checkbox" id="export-p4" checked> P.4 近期活動預告</label>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-cancel" onclick="hideExportModal()">取消</button>
+                <button class="modal-btn modal-btn-confirm" onclick="startPDFExport()">產生 PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔥 隱藏的列印與 PDF 輸出專用區塊 -->
+    <div id="print-zone"></div>
+
+    <script>
+        // --- 核心資料狀態 ---
+        let state = {
+            theme: 'A',
+            page: 1,
+            layouts: { 1: 'A', 2: 'A', 3: 'C5', 4: 'A' }
+        };
+
+        const templatesData = {
+            1: { variants: [{ id: 'A', name: '雜誌封面型' }, { id: 'B', name: '權威雙欄型' }] },
+            2: { variants: [{ id: 'A', name: '時間軸型' }] },
+            3: { variants: [] },
+            4: { variants: [{ id: 'A', name: '雙欄資訊卡 (正式菁英感)' }, { id: 'B', name: '現代行事曆 (清晰俐落)' }] }
+        };
+
+        let globalZIndex = 100;
+
+        // --- 全局共用函數 ---
+        window.cloneItem = function(btn) {
+            const item = btn.closest('.p4-card') || btn.closest('.p4-list-item');
+            const clone = item.cloneNode(true);
+            item.parentNode.insertBefore(clone, item.nextSibling);
+            showToast('✅ 已新增一筆預告事項！');
+        };
+        window.delItem = function(btn) {
+            const item = btn.closest('.p4-card') || btn.closest('.p4-list-item');
+            item.remove();
+            showToast('🗑️ 已刪除該項目。');
+        };
+
+        // --- 1. 面板切換 ---
+        function switchPanel(panelId, btnElement) {
+            document.querySelectorAll('.tool-tab').forEach(btn => btn.classList.remove('active'));
+            btnElement.classList.add('active');
+            document.querySelectorAll('.sub-panel').forEach(panel => panel.classList.remove('active'));
+            document.getElementById(`panel-${panelId}`).classList.add('active');
+        }
+
+        // --- 2. 品牌色調 ---
+        function changeTheme(theme, btnElement) {
+            if (btnElement) {
+                btnElement.closest('.btn-row').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+                btnElement.classList.add('active');
+            }
+            const root = document.documentElement;
+            if (theme === 'A') {
+                root.style.setProperty('--c-primary', '#00246B'); root.style.setProperty('--c-secondary', '#D4AF37'); root.style.setProperty('--c-bg', '#F8F9FA');
+            } else if (theme === 'B') {
+                root.style.setProperty('--c-primary', '#0F4C81'); root.style.setProperty('--c-secondary', '#F7A81B'); root.style.setProperty('--c-bg', '#FFFFFF');
+            } else if (theme === 'C') {
+                root.style.setProperty('--c-primary', '#222222'); root.style.setProperty('--c-secondary', '#E05A47'); root.style.setProperty('--c-bg', '#F4F1EA');
+            }
+        }
+
+        // --- 3. 頁面與樣式渲染 ---
+        function changePage(page, btnElement) {
+            if (btnElement) {
+                btnElement.closest('.btn-row').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+                btnElement.classList.add('active');
+            }
+            state.page = page;
+            document.getElementById('page-number').innerText = `PAGE 0${page}`;
+            renderLayoutSelector();
+            renderCanvas();
+        }
+
+        function renderLayoutSelector() {
+            const container = document.getElementById('layout-selector');
+            let html = '';
+            if (state.page === 3) {
+                const currentStyle = state.layouts[3].charAt(0);
+                const currentCount = state.layouts[3].charAt(1);
+                html += `
+                    <div style="display:flex; flex-direction:column; gap:10px; width: 100%;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:11px; color:#A6A7A9; font-weight:bold;">1. 風格：</span>
+                            <div class="btn ${currentStyle === 'C' ? 'active' : ''}" onclick="changeP3Layout('C', '${currentCount}')">動態拼接 (手機最佳化)</div>
+                            <div class="btn ${currentStyle === 'G' ? 'active' : ''}" onclick="changeP3Layout('G', '${currentCount}')">整齊網格 (傳統對齊)</div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-size:11px; color:#A6A7A9; font-weight:bold;">2. 張數：</span>
+                            ${[5,6,7,8,9].map(n => `<div class="btn ${currentCount == n ? 'active' : ''}" onclick="changeP3Layout('${currentStyle}', '${n}')">${n} 張</div>`).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                templatesData[state.page].variants.forEach(v => {
+                    const active = state.layouts[state.page] === v.id ? 'active' : '';
+                    html += `<div class="btn ${active}" onclick="changeLayout('${v.id}', this, '${v.name}')">${v.name}</div>`;
+                });
+            }
+            container.innerHTML = html;
+        }
+
+        function changeP3Layout(style, count) {
+            state.layouts[3] = style + count;
+            renderLayoutSelector();
+            renderCanvas();
+        }
+
+        function changeLayout(layoutId, btnElement, layoutName) {
+            document.querySelectorAll('#layout-selector .btn').forEach(b => b.classList.remove('active'));
+            if(btnElement) btnElement.classList.add('active');
+            state.layouts[state.page] = layoutId;
+            renderCanvas();
+        }
+
+        // --- 🔥 將頁面 HTML 產生器獨立模組化，方便主畫面與 PDF 輸出共同呼叫 ---
+        function getPageContentHTML(page, layout) {
+            if (page === 1 && layout === 'A') {
+                return `
+                    <div class="layout-p1a">
+                        <div class="text-area">
+                            <div class="p1a-tag resize-x" contenteditable="true">KEYNOTE SPEAKER</div>
+                            <h1 class="p1a-name resize-x" contenteditable="true">張忠謀 博士</h1>
+                            <div class="p1a-title resize-x" contenteditable="true">台灣積體電路製造 創辦人</div>
+                            <div class="p1a-topic resize-x" contenteditable="true">全球經濟變局與人工智慧的半導體未來</div>
+                            <div class="p1a-bio resize-both" contenteditable="true">在科技快速迭代的時代，半導體不僅是硬體的核心，更是推動整體社會數位轉型的基礎地基。本週榮幸邀請先進巨擘為我們深入探討產業領導者該如何培育新世代人才並掌握關鍵機會。</div>
+                        </div>
+                        <div class="img-area">
+                            <img class="editable-image" onclick="simulateRandomUpload(this)" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=800&q=80">
+                        </div>
+                    </div>`;
+            } else if (page === 1 && layout === 'B') {
+                return `
+                    <div class="layout-p1b">
+                        <div class="p1b-left">
+                            <img class="editable-image" onclick="simulateRandomUpload(this)" src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80">
+                            <div class="name resize-x" contenteditable="true">張忠謀 博士</div>
+                            <div class="title resize-x" contenteditable="true">台積電創辦人</div>
+                        </div>
+                        <div class="p1b-right">
+                            <div class="box">
+                                <div class="topic resize-x" contenteditable="true">全球經濟變局與人工智慧的未來</div>
+                            </div>
+                            <div class="bio resize-both" contenteditable="true">在科技快速迭代的時代，半導體不僅是硬體的核心，更是推動整體社會數位轉型的基礎地基。<br><br>這場演講將從宏觀的經濟學角度出發，結合產業第一線的實戰經驗，為各位社友解析未來十年的科技脈絡與投資趨勢。</div>
+                        </div>
+                    </div>`;
+            } else if (page === 2 && layout === 'A') {
+                const makeItem = (time, duration, name, person) => `
+                    <div class="timeline-item">
+                        <div class="time-col">
+                            <div class="time" contenteditable="true" oninput="recalculateTimeline()">${time}</div>
+                            <div class="duration" contenteditable="true" oninput="recalculateTimeline()">${duration}</div>
+                        </div>
+                        <div class="event-dot"></div>
+                        <div class="event-detail">
+                            <div class="event-name resize-x" contenteditable="true">${name}</div>
+                            <div class="event-person resize-x" contenteditable="true">${person}</div>
+                        </div>
+                        <div class="item-controls" contenteditable="false">
+                            <button onclick="addTimelineItem(this)" title="在下方新增一項">＋</button>
+                            <button onclick="removeTimelineItem(this)" title="刪除此項">－</button>
+                        </div>
+                    </div>`;
+
+                return `
+                    <div class="layout-p2">
+                        <div class="p2-title resize-x" contenteditable="true">本週例會流程 Agenda</div>
+                        <div class="timeline-container">
+                            <div class="timeline" id="agenda-timeline">
+                                ${makeItem('12:00', '30 分鐘', '聯誼與用餐', '全體社友及來賓')}
+                                ${makeItem('12:30', '05 分鐘', '鳴鐘宣佈開會', '社長 President')}
+                                ${makeItem('12:35', '05 分鐘', '來賓介紹', '糾察長')}
+                                ${makeItem('12:40', '40 分鐘', '主講人演講', '節目主委')}
+                                ${makeItem('13:20', '10 分鐘', '致贈紀念品', '社長 President')}
+                                ${makeItem('13:30', '禮成', '鳴鐘閉會', '全體合影留念')}
+                            </div>
+                            <button class="timeline-add-btn" contenteditable="false" onclick="addTimelineItemBottom()">+ 增加新流程</button>
+                        </div>
+                        <div class="rotary-creed-footer">
+                            <div class="creed-item">
+                                <div class="creed-label resize-x" contenteditable="true">【扶輪四大考驗】</div>
+                                <div class="creed-content resize-both" contenteditable="true">
+                                    我們所想、所說、所做的事 應事先捫心自問：<br>
+                                    <strong>是否一切屬於真實？ 是否各方得到公平？ 能否促進親善友誼？ 能否兼顧彼此利益？</strong>
+                                </div>
+                            </div>
+                            <div class="creed-item">
+                                <div class="creed-label resize-x" contenteditable="true">【扶輪宗旨】</div>
+                                <div class="creed-content resize-both" contenteditable="true">
+                                    扶輪之宗旨在於鼓勵並培養以服務精神為可貴事業之基礎，尤其著重於鼓勵與培養。
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            } else if (page === 3) {
+                const mockGallery = [
+                    "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=400&q=80",
+                    "https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&w=400&q=80"
+                ];
+                const captions = ['點擊照片換圖', '熱絡的社友交流', '授證與頒獎儀式', '本週歡樂大合照', '精采的專題討論', '來賓專注聆聽', '餐敘聯誼時光', '致贈感謝錦旗', '活動圓滿落幕'];
+                
+                let style = layout.charAt(0);
+                let photoCount = parseInt(layout.charAt(1));
+
+                if (style === 'C') {
+                    const collageConfigs = {
+                        5: [ {x: 5, y: 5, r: -4, w: 220}, {x: 55, y: 15, r: 8, w: 200}, {x: 10, y: 65, r: 5, w: 220}, {x: 55, y: 58, r: -3, w: 210}, {x: 18, y: 25, r: 2, w: 320} ],
+                        6: [ {x: 5, y: 5, r: -3, w: 250}, {x: 50, y: 8, r: 5, w: 220}, {x: 10, y: 35, r: -5, w: 230}, {x: 55, y: 45, r: 4, w: 240}, {x: 5, y: 68, r: -2, w: 220}, {x: 50, y: 72, r: 3, w: 240} ],
+                        7: [ {x: 35, y: 2, r: 2, w: 280}, {x: 5, y: 15, r: -5, w: 190}, {x: 60, y: 30, r: 6, w: 210}, {x: 12, y: 40, r: -4, w: 290}, {x: 58, y: 58, r: -5, w: 200}, {x: 5, y: 68, r: 5, w: 220}, {x: 42, y: 75, r: -3, w: 250} ],
+                        8: [ {x: 5, y: 5, r: -4, w: 200}, {x: 50, y: 5, r: 4, w: 260}, {x: 15, y: 30, r: -6, w: 210}, {x: 55, y: 38, r: 3, w: 190}, {x: 5, y: 50, r: -3, w: 270}, {x: 60, y: 60, r: 5, w: 210}, {x: 12, y: 75, r: -4, w: 200}, {x: 50, y: 78, r: 2, w: 230} ],
+                        9: [ {x: 5, y: 5, r: -5, w: 190}, {x: 40, y: 2, r: 3, w: 180}, {x: 62, y: 15, r: -4, w: 210}, {x: 10, y: 28, r: 6, w: 250}, {x: 55, y: 35, r: -5, w: 200}, {x: 5, y: 55, r: -3, w: 190}, {x: 45, y: 50, r: 4, w: 260}, {x: 12, y: 75, r: -6, w: 220}, {x: 60, y: 72, r: 5, w: 190} ]
+                    };
+                    let itemsHtml = '';
+                    const config = collageConfigs[photoCount];
+                    for(let i = 0; i < photoCount; i++) {
+                        let pos = config[i];
+                        itemsHtml += `
+                            <div class="collage-item resize-both" style="left: ${pos.x}%; top: ${pos.y}%; width: ${pos.w}px; transform: rotate(${pos.r}deg); z-index: ${globalZIndex + i};" data-rotation="${pos.r}">
+                                <div class="photo-tools" contenteditable="false">
+                                    <button class="rotate-handle" onmousedown="startRotate(event, this)" title="按住並拖曳來自由旋轉">↻</button>
+                                    <button onclick="bringToFront(this)" title="移至最前">⬆️</button>
+                                </div>
+                                <img class="editable-image" onclick="simulateRandomUpload(this)" src="${mockGallery[i]}">
+                                <div class="polaroid-caption resize-x" contenteditable="true">${captions[i]}</div>
+                            </div>`;
+                    }
+                    return `
+                        <div class="layout-p3">
+                            <div class="p3-title resize-x" contenteditable="true">本週精彩花絮 Highlights</div>
+                            <div class="collage-board" id="collage-board">
+                                ${itemsHtml}
+                            </div>
+                        </div>`;
+                } else {
+                    let itemsHtml = '';
+                    for(let i = 0; i < photoCount; i++) {
+                        itemsHtml += `<div class="item"><img class="editable-image" onclick="simulateRandomUpload(this)" src="${mockGallery[i]}"><div class="caption resize-x" contenteditable="true">${captions[i]}</div></div>`;
+                    }
+                    return `
+                        <div class="layout-p3">
+                            <div class="p3-title resize-x" contenteditable="true">本週精彩花絮 Highlights</div>
+                            <div class="photo-grid grid-${photoCount}">
+                                ${itemsHtml}
+                            </div>
+                        </div>`;
+                }
+            } else if (page === 4) {
+                if (layout === 'A') {
+                    const makeCard = (title, date, loc, extraLabel, extraVal) => `
+                        <div class="p4-card">
+                            <div class="p4-card-title resize-both" contenteditable="true">${title}</div>
+                            <div class="p4-meta"><span class="p4-meta-label">日期：</span><span class="p4-meta-val resize-x" contenteditable="true">${date}</span></div>
+                            <div class="p4-meta"><span class="p4-meta-label">地點：</span><span class="p4-meta-val resize-x" contenteditable="true">${loc}</span></div>
+                            ${extraLabel ? `<div class="p4-meta"><span class="p4-meta-label">${extraLabel}：</span><span class="p4-meta-val resize-both" contenteditable="true">${extraVal}</span></div>` : ''}
+                            <div class="item-add-del" contenteditable="false">
+                                <button onclick="cloneItem(this)" title="新增一筆">＋</button>
+                                <button onclick="delItem(this)" title="刪除">－</button>
+                            </div>
+                        </div>`;
+
+                    return `
+                        <div class="layout-p4">
+                            <div class="p4-main-title resize-x" contenteditable="true">近期例會與活動預告</div>
+                            <div class="p4-dual-headers">
+                                <div class="p4-col-title resize-x" contenteditable="false">例會預告 <span>Meeting</span></div>
+                                <div class="p4-col-title resize-x" contenteditable="false">活動預告 <span>Events</span></div>
+                            </div>
+                            <div class="p4-scroll-area">
+                                <div class="p4-dual-columns-body">
+                                    <div class="p4-col-body">
+                                        ${makeCard('【第 383 次例會】第四分區總監公式訪問', '2025/08/15 (五) 12:00', '台北喜來登飯店 B2 壽喜廳', '主講', 'Jenny 總監 - 無可阻擋的她')}
+                                        ${makeCard('【第 384 次例會】社務行政會議', '2025/09/04 (四) 18:00', '地點將另行通知', '', '')}
+                                        ${makeCard('【第 385 次例會】一四五分區聯合例會', '2025/09/26 (五) 11:30', '大直典華 三樓湖泊廳', '', '')}
+                                    </div>
+                                    <div class="p4-col-body">
+                                        ${makeCard('【2025-26 年度扶輪基金研討會】', '2025/08/09 (六) 13:00', '圓山大飯店 10樓國際會議廳', '對象', '全體理監事')}
+                                        ${makeCard('【社長聯合展演】生命的黃金之吻', '2025/08/28 (四) 18:30 入場', '台北市政府親子劇場 (市府路1號)', '備註', '敬請著正式服裝出席')}
+                                        ${makeCard('【3523地區 暨 3521地區淨灘活動】', '2025/09/20 (六) 08:30', '八里挖子尾自然保護區海灘', '集合', '八里文化公園停車場')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                } else if (layout === 'B') {
+                    const makeListItem = (month, day, time, title, detail1, detail2) => `
+                        <div class="p4-list-item">
+                            <div class="p4-list-date">
+                                <div class="p4-list-month" contenteditable="true">${month}</div>
+                                <div class="p4-list-day" contenteditable="true">${day}</div>
+                                <div class="p4-list-time" contenteditable="true">${time}</div>
+                            </div>
+                            <div class="p4-list-content">
+                                <div class="p4-list-title resize-x" contenteditable="true">${title}</div>
+                                <div class="p4-list-detail">
+                                    <span class="resize-x" contenteditable="true">📍 ${detail1}</span>
+                                    <span class="resize-x" contenteditable="true">📝 ${detail2}</span>
+                                </div>
+                            </div>
+                            <div class="item-add-del" contenteditable="false">
+                                <button onclick="cloneItem(this)">＋</button>
+                                <button onclick="delItem(this)">－</button>
+                            </div>
+                        </div>`;
+
+                    return `
+                        <div class="layout-p4">
+                            <div class="p4-main-title resize-x" contenteditable="true">近期例會與活動預告</div>
+                            <div class="p4-list-view">
+                                <div class="p4-list-scroll">
+                                    <div class="p4-list-group-title resize-x" contenteditable="true">本月重大行程</div>
+                                    ${makeListItem('2025 Aug', '09', '13:00', '2025-26 年度扶輪基金研討會 (DRFS)', '圓山大飯店 10樓國際會議廳', '請提早於 12:45 前完成報到手續')}
+                                    ${makeListItem('2025 Aug', '15', '12:00', '【第 383 次例會】第四分區總監公式訪問', '台北喜來登飯店 B2 壽喜廳', '主講：Jenny 總監 - 無可阻擋的她 Unstoppable Jenny')}
+                                    ${makeListItem('2025 Aug', '28', '18:30', '社長聯合展演-「生命的黃金之吻」', '台北市政府親子劇場', '準時 19:30 演出，請社友攜眷參加')}
+                                    
+                                    <div class="p4-list-group-title resize-x" contenteditable="true" style="margin-top: 15px;">次月行程預覽</div>
+                                    ${makeListItem('2025 Sep', '04', '18:00', '【第 384 次例會】社務行政會議', '地點將另行通知 (預計於信義區)', '探討年度服務計畫與預算編列')}
+                                </div>
+                            </div>
+                        </div>`;
+                }
+            }
+            return '';
+        }
+
+        // --- 4. 畫布內容生成與渲染 ---
+        function renderCanvas() {
+            const container = document.getElementById('page-content');
+            const page = state.page;
+            const layout = state.layouts[page];
+            
+            let layoutName = '';
+            if (page === 3) {
+                const styleName = layout.charAt(0) === 'C' ? '動態拼接' : '整齊網格';
+                layoutName = `${styleName} (${layout.charAt(1)}張)`;
+            } else {
+                layoutName = templatesData[page].variants.find(v => v.id === layout).name;
+            }
+            document.getElementById('canvas-label').innerText = `Page ${page}: ${layoutName}`;
+
+            // 將 HTML 寫入畫面
+            container.innerHTML = getPageContentHTML(page, layout);
+
+            // 重新綁定 P3 動態拼接的拖曳事件
+            if (page === 3 && layout.charAt(0) === 'C') {
+                setTimeout(() => { document.querySelectorAll('.collage-item').forEach(el => makeDraggable(el)); }, 50);
+            }
+        }
+
+        // --- 5. 圖片替換與旋轉工具 ---
+        function replaceMainImage(newSrc) {
+            const mainImg = document.querySelector('.editable-image');
+            if (mainImg) {
+                mainImg.style.opacity = '0.5';
+                setTimeout(() => { mainImg.src = newSrc; mainImg.style.opacity = '1'; showToast('📸 圖片已成功替換！'); }, 200);
+            } else {
+                showToast('⚠️ 本頁沒有相片區塊喔！');
+            }
+        }
+
+        function simulateRandomUpload(imgElement) {
+            const mockImages = [
+                "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=800&q=80",
+                "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=800&q=80"
+            ];
+            imgElement.style.opacity = '0.5';
+            setTimeout(() => {
+                imgElement.src = mockImages[Math.floor(Math.random() * mockImages.length)];
+                imgElement.style.opacity = '1';
+                showToast('✅ 圖片已重新套用！');
+            }, 300);
+        }
+
+        function startRotate(e, btn) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const el = btn.closest('.collage-item');
+            bringToFront(btn);
+
+            const rect = el.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startAngle = Math.atan2(startY - centerY, startX - centerX) * (180 / Math.PI);
+            
+            const currentRot = parseFloat(el.getAttribute('data-rotation')) || 0;
+
+            function onMouseMove(moveEvent) {
+                const currentX = moveEvent.clientX;
+                const currentY = moveEvent.clientY;
+                const currentAngle = Math.atan2(currentY - centerY, currentX - centerX) * (180 / Math.PI);
+
+                const rotDiff = currentAngle - startAngle;
+                const newRot = currentRot + rotDiff;
+
+                el.setAttribute('data-rotation', newRot);
+                el.style.transform = `rotate(${newRot}deg)`;
+            }
+
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        }
+
+        function bringToFront(btn) {
+            const el = btn.closest('.collage-item') || btn.closest('.floating-item');
+            if(el) el.style.zIndex = ++globalZIndex;
+        }
+
+        // --- 6. 浮動元件與共用拖曳邏輯 ---
+        function addFloatingText(type) {
+            const canvas = document.getElementById('canvas');
+            const el = document.createElement('div');
+            el.className = 'floating-item';
+            const textDiv = document.createElement('div');
+            textDiv.contentEditable = "true";
+            textDiv.className = 'resize-both';
+            
+            if (type === 'h1') { textDiv.innerText = '新增大標題'; textDiv.style.fontFamily = 'var(--font-head)'; textDiv.style.fontSize = '36px'; textDiv.style.fontWeight = 'bold'; textDiv.style.color = 'var(--c-primary)'; }
+            else if (type === 'h2') { textDiv.innerText = '新增小標題'; textDiv.style.fontFamily = 'var(--font-body)'; textDiv.style.fontSize = '20px'; textDiv.style.fontWeight = 'bold'; textDiv.style.color = 'var(--c-secondary)'; }
+            else { textDiv.innerText = '請在此輸入您的內文...'; textDiv.style.fontFamily = 'var(--font-body)'; textDiv.style.fontSize = '13px'; textDiv.style.color = 'var(--c-text)'; }
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn'; deleteBtn.innerText = '✕'; deleteBtn.onclick = () => el.remove();
+
+            el.appendChild(textDiv); el.appendChild(deleteBtn);
+            el.style.top = '40%'; el.style.left = '30%'; el.style.zIndex = ++globalZIndex;
+            canvas.appendChild(el); makeDraggable(el);
+            showToast('📝 已新增文字 (可按住邊緣拖曳)');
+        }
+
+        function addFloatingElement(emoji) {
+            const canvas = document.getElementById('canvas');
+            const el = document.createElement('div');
+            el.className = 'floating-item';
+            
+            const iconDiv = document.createElement('div');
+            iconDiv.innerText = emoji; iconDiv.style.fontSize = '50px'; iconDiv.style.lineHeight = '1';
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn'; deleteBtn.innerText = '✕'; deleteBtn.onclick = () => el.remove();
+
+            el.appendChild(iconDiv); el.appendChild(deleteBtn);
+            el.style.top = '30%'; el.style.left = '40%'; el.style.zIndex = ++globalZIndex;
+            canvas.appendChild(el); makeDraggable(el);
+            showToast('✨ 已新增元素 (可按住邊緣拖曳)');
+        }
+
+        function makeDraggable(elmnt) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            elmnt.onmousedown = dragMouseDown;
+            
+            function dragMouseDown(e) {
+                if(e.target.hasAttribute('contenteditable') || e.target.tagName === 'BUTTON') return; 
+                if (e.target === elmnt || e.target.classList.contains('resize-both')) {
+                    if (e.offsetX > e.target.offsetWidth - 25 && e.offsetY > e.target.offsetHeight - 25) return;
+                }
+                e.preventDefault(); 
+                elmnt.style.zIndex = ++globalZIndex; 
+                pos3 = e.clientX; pos4 = e.clientY;
+                document.onmouseup = closeDragElement; document.onmousemove = elementDrag;
+            }
+            function elementDrag(e) {
+                e.preventDefault();
+                pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
+                pos3 = e.clientX; pos4 = e.clientY;
+                elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+                elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+            }
+            function closeDragElement() { document.onmouseup = null; document.onmousemove = null; }
+        }
+
+        // --- 6.5 P2 流程項目動態增減功能 ---
+        function addTimelineItem(btn) {
+            const currentItem = btn.closest('.timeline-item');
+            const newItem = currentItem.cloneNode(true);
+            newItem.querySelector('.event-name').innerText = "新增流程主題";
+            newItem.querySelector('.event-person').innerText = "負責人";
+            newItem.querySelector('.duration').innerText = "10 分鐘";
+            currentItem.parentNode.insertBefore(newItem, currentItem.nextSibling);
+            recalculateTimeline();
+            showToast('✅ 已成功新增一項流程！');
+        }
+
+        function removeTimelineItem(btn) {
+            const timeline = btn.closest('.timeline');
+            if (timeline.querySelectorAll('.timeline-item').length <= 1) {
+                showToast('⚠️ 至少需保留一項會議流程！');
+                return;
+            }
+            btn.closest('.timeline-item').remove();
+            recalculateTimeline();
+            showToast('🗑️ 已刪除該流程項目！');
+        }
+
+        function addTimelineItemBottom() {
+            const timeline = document.getElementById('agenda-timeline');
+            if (!timeline) return;
+            const items = timeline.querySelectorAll('.timeline-item');
+            if (items.length > 0) {
+                const lastItem = items[items.length - 1];
+                const newItem = lastItem.cloneNode(true);
+                newItem.querySelector('.event-name').innerText = "新增流程主題";
+                newItem.querySelector('.event-person').innerText = "負責人";
+                newItem.querySelector('.duration').innerText = "10 分鐘";
+                timeline.appendChild(newItem);
+                recalculateTimeline();
+                showToast('✅ 已在最下方新增一項流程！');
+            }
+        }
+
+        // --- 7. P2 時間軸自動計算連動 ---
+        function recalculateTimeline() {
+            const items = Array.from(document.querySelectorAll('.timeline-item'));
+            if (!items.length) return;
+            const firstTimeStr = items[0].querySelector('.time').innerText.trim();
+            let [hours, minutes] = firstTimeStr.split(':').map(Number);
+            if (isNaN(hours) || isNaN(minutes)) return;
+
+            let currentTotalMinutes = hours * 60 + minutes;
+
+            for (let i = 0; i < items.length - 1; i++) {
+                const durationStr = items[i].querySelector('.duration').innerText;
+                const match = durationStr.match(/\d+/); 
+                const minsToAdd = match ? parseInt(match[0], 10) : 0;
+                currentTotalMinutes += minsToAdd;
+
+                const nextHours = Math.floor(currentTotalMinutes / 60) % 24;
+                const nextMins = currentTotalMinutes % 60;
+                const nextTimeStr = `${String(nextHours).padStart(2, '0')}:${String(nextMins).padStart(2, '0')}`;
+
+                const nextTimeEl = items[i+1].querySelector('.time');
+                if (nextTimeEl.innerText.trim() !== nextTimeStr) {
+                    nextTimeEl.innerText = nextTimeStr;
+                }
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg; toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3500);
+        }
+
+        // --- 🔥 8. 真正的原生向量 PDF 引擎 (Native Print) ---
+        function showExportModal() {
+            document.getElementById('export-modal').classList.add('show');
+        }
+
+        function hideExportModal() {
+            document.getElementById('export-modal').classList.remove('show');
+        }
+
+        function startPDFExport() {
+            const pagesToExport = [];
+            if(document.getElementById('export-p1').checked) pagesToExport.push(1);
+            if(document.getElementById('export-p2').checked) pagesToExport.push(2);
+            if(document.getElementById('export-p3').checked) pagesToExport.push(3);
+            if(document.getElementById('export-p4').checked) pagesToExport.push(4);
+
+            if (pagesToExport.length === 0) {
+                showToast("⚠️ 請至少選擇一頁進行匯出！");
+                return;
+            }
+
+            hideExportModal();
+            showToast("⏳ 系統正在為您啟動瀏覽器原生列印引擎...");
+            
+            if (document.activeElement) document.activeElement.blur();
+
+            const printZone = document.getElementById('print-zone');
+            printZone.innerHTML = ''; // 清空列印區塊
+
+            // 抓取目前畫面上顯示的頁首與頁尾狀態
+            const headerHTML = document.querySelector('.page-header').outerHTML;
+            const footerTitle = document.querySelector('.page-footer span:first-child').innerText;
+
+            // 動態組裝所選的頁面到隱藏的 print-zone 裡
+            for (let i = 0; i < pagesToExport.length; i++) {
+                const pageNum = pagesToExport[i];
+                const pageWrapper = document.createElement('div');
+                
+                // 賦予 .canvas 以繼承原有的設計排版，並加上 .print-canvas 觸發 A4 列印約束
+                pageWrapper.className = 'canvas print-canvas'; 
+                
+                if (pageNum === state.page) {
+                    // 如果是目前正在編輯的頁面，直接複製它的 DOM，這樣執秘的所有修改都會被完美保留！
+                    pageWrapper.innerHTML = document.getElementById('canvas').innerHTML;
+                } else {
+                    // 如果是沒有在畫面上顯示的頁面，我們利用前面的模組化函數自動生成
+                    pageWrapper.innerHTML = `
+                        ${headerHTML}
+                        <div class="page-content">
+                            ${getPageContentHTML(pageNum, state.layouts[pageNum])}
+                        </div>
+                        <div class="page-footer" contenteditable="false">
+                            <span contenteditable="true">${footerTitle}</span>
+                            <span>PAGE 0${pageNum}</span>
+                        </div>
+                    `;
+                }
+
+                // 準備好後，把不該出現在 PDF 上的輔助按鈕全部刪除
+                pageWrapper.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn').forEach(el => el.remove());
+                
+                printZone.appendChild(pageWrapper);
+            }
+
+            // 稍微等待 0.8 秒，讓動態拼接的 CSS Grid 與相片完全載入對齊
+            setTimeout(() => {
+                showToast("✅ 請在跳出的列印視窗中，將目的地選擇為「另存為 PDF」，即可獲得真正向量檔！");
+                // 喚醒瀏覽器原生列印功能
+                window.print();
+            }, 800);
+        }
+
+        // 初始化
+        renderLayoutSelector();
+        renderCanvas();
+    </script>
+</body>
+</html>
