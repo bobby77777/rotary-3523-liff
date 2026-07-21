@@ -19,18 +19,23 @@
             --canva-ui-panel: #252627;
             --canva-ui-text: #FFFFFF;
             --canva-accent: #8B3DFF;
+            /* 畫布縮放比例，由 fitCanvas() 依視窗寬度即時計算，桌機維持 1 */
+            --canvas-scale: 1;
         }
 
-        body { margin: 0; padding: 0; font-family: 'Noto Sans TC', sans-serif; background-color: #E6E7E9; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body { margin: 0; padding: 0; font-family: 'Noto Sans TC', sans-serif; background-color: #E6E7E9; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; -webkit-text-size-adjust: 100%; }
 
         /* --- 頂部主導覽列 --- */
-        .top-nav { background-color: var(--canva-ui-bg); display: flex; padding: 0 20px; align-items: center; z-index: 20; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .top-nav { background-color: var(--canva-ui-bg); display: flex; padding: 0 20px; align-items: center; z-index: 20; box-shadow: 0 2px 5px rgba(0,0,0,0.2); flex-shrink: 0; }
         .nav-logo { color: #fff; font-weight: bold; font-size: 16px; margin-right: 30px; display: flex; align-items: center; gap: 8px; }
         .nav-logo span { background: var(--canva-accent); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
         .tool-tab { color: #A6A7A9; display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; padding: 15px 20px; border-bottom: 3px solid transparent; font-weight: bold; }
         .tool-tab:hover { color: var(--canva-ui-text); background-color: rgba(255,255,255,0.05); }
         .tool-tab.active { color: var(--canva-ui-text); border-bottom-color: var(--canva-accent); }
         .tool-tab svg { width: 18px; height: 18px; fill: currentColor; }
+        /* 匯出鍵：手機把工具列橫向捲動時，用 sticky 讓它固定在右緣不被捲走 */
+        .export-tab { margin-left: auto; background: var(--canva-accent); color: #fff; border-radius: 6px; padding: 8px 16px; height: 34px; border: none; flex-shrink: 0; }
+        .export-tab:hover { background: #7A33E6; color: #fff; }
 
         /* --- 第二層功能控制列 --- */
         .sub-panel-container { background-color: var(--canva-ui-panel); color: var(--canva-ui-text); z-index: 19; box-shadow: 0 4px 10px rgba(0,0,0,0.1); flex-shrink: 0; }
@@ -56,8 +61,11 @@
         .tip-box { margin-left: auto; background: rgba(139,61,255,0.1); border: 1px dashed var(--canva-accent); padding: 8px 15px; border-radius: 6px; font-size: 12px; color: #ddd; }
 
         /* --- 中央編輯區 --- */
-        .workspace { flex: 1; display: flex; justify-content: center; align-items: flex-start; position: relative; background-image: radial-gradient(#d1d1d1 1px, transparent 1px); background-size: 20px 20px; padding: 50px 40px; overflow: auto; }
-        .canvas-wrapper { position: relative; flex-shrink: 0; margin: auto; }
+        .workspace { flex: 1; display: flex; justify-content: center; align-items: flex-start; position: relative; background-image: radial-gradient(#d1d1d1 1px, transparent 1px); background-size: 20px 20px; padding: 50px 40px; overflow: auto; -webkit-overflow-scrolling: touch; }
+        /* stage 佔住「縮放後」的版面尺寸，wrapper 則維持 595x842 原始設計座標後再縮放。
+           兩者分離，捲動範圍才會跟著縮放走，不會留下大片空白。 */
+        .canvas-stage { width: calc(595px * var(--canvas-scale)); height: calc(842px * var(--canvas-scale)); flex-shrink: 0; margin: auto; position: relative; }
+        .canvas-wrapper { position: absolute; top: 0; left: 0; width: 595px; height: 842px; transform: scale(var(--canvas-scale)); transform-origin: top left; }
         .canvas-label { position: absolute; top: -30px; left: 0; background: var(--canva-accent); color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .canvas { width: 595px; height: 842px; background-color: var(--c-bg); box-shadow: 0 15px 40px rgba(0,0,0,0.15); position: relative; display: flex; flex-direction: column; overflow: hidden; transition: background-color 0.3s ease; }
 
@@ -69,11 +77,13 @@
         .resize-x { resize: horizontal; overflow: hidden; padding-right: 15px; }
         .resize-both { resize: both; overflow: hidden; padding-right: 15px; padding-bottom: 10px; }
         .resize-x::-webkit-scrollbar, .resize-both::-webkit-scrollbar { display: none; }
+        /* 觸控用縮放握把，桌機不產生也不顯示 (見 @media (hover: none)) */
+        .touch-resize-handle { display: none; }
 
         .editable-image { cursor: pointer; transition: opacity 0.2s, outline 0.2s; }
         .editable-image:hover { opacity: 0.9; outline: 2px dashed var(--canva-accent); }
 
-        .floating-item { position: absolute; cursor: move; z-index: 100; padding: 5px; border: 1px dashed transparent; transition: border 0.2s; }
+        .floating-item { position: absolute; cursor: move; z-index: 100; padding: 5px; border: 1px dashed transparent; transition: border 0.2s; touch-action: none; }
         .floating-item:hover, .floating-item:focus-within { border-color: var(--canva-accent); }
         .floating-item .delete-btn { position: absolute; top: -15px; right: -15px; background: #ff4757; color: white; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; border: none; }
         .floating-item:hover .delete-btn { opacity: 1; }
@@ -143,7 +153,7 @@
         .p3-title { font-family: var(--font-head); font-size: 28px; color: var(--c-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; font-weight: bold; z-index: 10; position: relative;}
         .p3-title::after { content: ''; flex: 1; height: 1px; background: var(--c-secondary); }
         .collage-board { flex: 1; position: relative; width: 100%; height: 100%; }
-        .collage-item { position: absolute; background: #ffffff; padding: 6px 6px 40px 6px; box-shadow: 2px 5px 15px rgba(0,0,0,0.2); border: 1px solid #e0e0e0; transition: box-shadow 0.2s; min-width: 120px; min-height: 120px; cursor: move; }
+        .collage-item { position: absolute; background: #ffffff; padding: 6px 6px 40px 6px; box-shadow: 2px 5px 15px rgba(0,0,0,0.2); border: 1px solid #e0e0e0; transition: box-shadow 0.2s; min-width: 120px; min-height: 120px; cursor: move; touch-action: none; }
         .collage-item:hover { box-shadow: 5px 12px 25px rgba(0,0,0,0.3); }
         .collage-item::after { content: ''; position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; background: repeating-linear-gradient(135deg, transparent, transparent 2px, #ccc 2px, #ccc 4px); pointer-events: none; border-bottom-right-radius: 2px; opacity: 0; transition: opacity 0.2s; }
         .collage-item:hover::after { opacity: 1; background: repeating-linear-gradient(135deg, transparent, transparent 2px, var(--canva-accent) 2px, var(--canva-accent) 4px); }
@@ -213,7 +223,7 @@
         /* 匯出功能彈出視窗 */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 999; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: 0.2s; }
         .modal-overlay.show { opacity: 1; pointer-events: auto; }
-        .modal-content { background: var(--canva-ui-panel); color: white; width: 340px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; transform: translateY(-20px); transition: 0.3s; }
+        .modal-content { background: var(--canva-ui-panel); color: white; width: min(340px, calc(100vw - 32px)); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; transform: translateY(-20px); transition: 0.3s; }
         .modal-overlay.show .modal-content { transform: translateY(0); }
         .modal-header { background: var(--canva-accent); padding: 15px 20px; font-size: 16px; font-weight: bold; }
         .modal-body { padding: 20px; }
@@ -225,6 +235,56 @@
         .modal-btn-cancel:hover { background: #4F5052; }
         .modal-btn-confirm { background: var(--canva-accent); color: white; }
         .modal-btn-confirm:hover { background: #7A33E6; }
+
+        /* --- 觸控裝置：沒有 hover 可用，所有靠 :hover 現身的控制項一律常駐 --- */
+        @media (hover: none) {
+            .item-controls, .photo-tools, .item-add-del, .floating-item .delete-btn { opacity: 1; }
+            .collage-item::after { opacity: 1; }
+            [contenteditable="true"] { outline: 1px dashed rgba(139, 61, 255, 0.35); }
+            /* 放大點擊區，24px 以下在手指上幾乎按不到 */
+            .item-controls button { width: 32px; height: 32px; font-size: 20px; }
+            .item-add-del button { width: 30px; height: 30px; font-size: 15px; }
+            .item-add-del { right: -12px; gap: 6px; }
+            .floating-item .delete-btn { width: 30px; height: 30px; }
+
+            /* 瀏覽器原生的 resize 握把只吃滑鼠，觸控上是個死角，換成自製握把。
+               touch-action 只掛在這 22px 的握把上，元件其餘部分照常可以捲動頁面。 */
+            .resize-x, .resize-both { resize: none; }
+            .touch-resize-handle {
+                display: block; position: absolute; bottom: 0; right: 0;
+                /* 尺寸要抵銷畫布縮放，否則畫布縮到 0.62 時握把只剩約 14px，手指按不準。
+                   除以 scale 讓它在螢幕上維持約 24px，再加上限避免小文字框被握把蓋滿。 */
+                width: min(38px, calc(24px / var(--canvas-scale)));
+                height: min(38px, calc(24px / var(--canvas-scale)));
+                z-index: 30;
+                touch-action: none; cursor: nwse-resize; user-select: none; -webkit-user-select: none;
+                opacity: 0.7;
+                background: linear-gradient(135deg, transparent 46%, var(--canva-accent) 46%, var(--canva-accent) 58%,
+                            transparent 58%, transparent 70%, var(--canva-accent) 70%, var(--canva-accent) 82%, transparent 82%);
+            }
+            .touch-resize-handle:active { opacity: 1; }
+        }
+
+        /* --- 窄螢幕版面 --- */
+        @media (max-width: 820px) {
+            .top-nav { padding: 0 8px; overflow-x: auto; scrollbar-width: none; }
+            .top-nav::-webkit-scrollbar { display: none; }
+            .nav-logo { font-size: 0; margin-right: 12px; flex-shrink: 0; }
+            .nav-logo span { font-size: 12px; }
+            .tool-tab { padding: 12px 12px; font-size: 12px; flex-shrink: 0; white-space: nowrap; }
+            .export-tab { position: sticky; right: 0; margin-left: 8px; padding: 8px 12px; box-shadow: -8px 0 8px var(--canva-ui-bg); }
+
+            /* 控制列吃掉太多高度會讓畫布無處容身，設上限並允許內部捲動 */
+            .sub-panel-container { max-height: 32vh; overflow-y: auto; }
+            .sub-panel { padding: 10px 12px; gap: 14px; flex-direction: column; align-items: stretch; }
+            .sub-panel.active { display: flex; }
+            .btn-row { max-width: none; }
+            .btn { padding: 10px 14px; font-size: 13px; }
+            .tip-box { margin-left: 0; }
+
+            .workspace { padding: 34px 10px 20px; }
+            .toast { left: 12px; right: 12px; bottom: 12px; text-align: center; }
+        }
 
         /* 🔥🔥🔥 真正的向量 PDF 輸出核心：瀏覽器原生列印 CSS 引擎 🔥🔥🔥 */
         #print-zone { display: none; }
@@ -256,7 +316,7 @@
             /* 5. 清除所有編輯用的提示框線、捲動軸與小按鈕，確保 PDF 版面極度乾淨 */
             [contenteditable] { outline: none !important; resize: none !important; }
             .resize-x, .resize-both { resize: none !important; }
-            .item-add-del, .photo-tools, .delete-btn, .timeline-add-btn { display: none !important; }
+            .item-add-del, .photo-tools, .delete-btn, .timeline-add-btn, .touch-resize-handle { display: none !important; }
             .collage-item::after { display: none !important; }
             ::-webkit-scrollbar { display: none !important; }
             .timeline-container, .p4-scroll-area, .p4-list-scroll { overflow: visible !important; height: auto !important; }
@@ -281,7 +341,7 @@
             <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg> 自由文字
         </div>
 
-        <div class="tool-tab" style="margin-left: auto; background: var(--canva-accent); color: white; border-radius: 6px; padding: 8px 16px; height: 34px; border: none; transition: 0.2s;" onclick="showExportModal()" onmouseover="this.style.background='#7A33E6'" onmouseout="this.style.background='var(--canva-accent)'">
+        <div class="tool-tab export-tab" onclick="showExportModal()">
             <svg viewBox="0 0 24 24" style="fill: white; width: 16px; height: 16px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> 匯出 PDF
         </div>
     </div>
@@ -360,6 +420,7 @@
 
     <!-- 編輯區 -->
     <div class="workspace">
+        <div class="canvas-stage">
         <div class="canvas-wrapper">
             <div class="canvas-label" id="canvas-label">Page 1: 雜誌封面型</div>
             <div class="canvas" id="canvas">
@@ -380,6 +441,7 @@
                     <span id="page-number">PAGE 01</span>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -424,6 +486,25 @@
         };
 
         let globalZIndex = 100;
+
+        // --- 0. 畫布自動縮放 ---
+        // 畫布是固定的 595x842 (A4 @72dpi) 設計座標，手機螢幕塞不下。
+        // 這裡量出 workspace 可用寬度換算縮放比，寫進 --canvas-scale 由 CSS 套用；
+        // 桌機空間足夠時維持 1，外觀與行為完全不變。
+        const CANVAS_W = 595, CANVAS_H = 842;
+        let canvasScale = 1;
+
+        function fitCanvas() {
+            const ws = document.querySelector('.workspace');
+            if (!ws) return;
+            const cs = getComputedStyle(ws);
+            const avail = ws.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            canvasScale = Math.min(1, avail / CANVAS_W);
+            document.documentElement.style.setProperty('--canvas-scale', canvasScale.toFixed(4));
+        }
+
+        window.addEventListener('resize', fitCanvas);
+        window.addEventListener('orientationchange', fitCanvas);
 
         // --- 全局共用函數 ---
         window.cloneItem = function(btn) {
@@ -626,7 +707,7 @@
                         itemsHtml += `
                             <div class="collage-item resize-both" style="left: ${pos.x}%; top: ${pos.y}%; width: ${pos.w}px; transform: rotate(${pos.r}deg); z-index: ${globalZIndex + i};" data-rotation="${pos.r}">
                                 <div class="photo-tools" contenteditable="false">
-                                    <button class="rotate-handle" onmousedown="startRotate(event, this)" title="按住並拖曳來自由旋轉">↻</button>
+                                    <button class="rotate-handle" onpointerdown="startRotate(event, this)" title="按住並拖曳來自由旋轉">↻</button>
                                     <button onclick="bringToFront(this)" title="移至最前">⬆️</button>
                                 </div>
                                 <img class="editable-image" onclick="simulateRandomUpload(this)" src="${mockGallery[i]}">
@@ -747,6 +828,7 @@
 
             // 將 HTML 寫入畫面
             container.innerHTML = getPageContentHTML(page, layout);
+            addTouchHandles();
 
             // 重新綁定 P3 動態拼接的拖曳事件
             if (page === 3 && layout.charAt(0) === 'C') {
@@ -790,31 +872,25 @@
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
 
-            const startX = e.clientX;
-            const startY = e.clientY;
-            const startAngle = Math.atan2(startY - centerY, startX - centerX) * (180 / Math.PI);
-            
+            // 角度在等比縮放下不變，因此這裡不需要換算 canvasScale。
+            const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
             const currentRot = parseFloat(el.getAttribute('data-rotation')) || 0;
 
-            function onMouseMove(moveEvent) {
-                const currentX = moveEvent.clientX;
-                const currentY = moveEvent.clientY;
-                const currentAngle = Math.atan2(currentY - centerY, currentX - centerX) * (180 / Math.PI);
-
-                const rotDiff = currentAngle - startAngle;
-                const newRot = currentRot + rotDiff;
-
+            function onPointerMove(moveEvent) {
+                const currentAngle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) * (180 / Math.PI);
+                const newRot = currentRot + (currentAngle - startAngle);
                 el.setAttribute('data-rotation', newRot);
                 el.style.transform = `rotate(${newRot}deg)`;
             }
 
-            function onMouseUp() {
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
+            function onPointerUp(upEvent) {
+                if (btn.hasPointerCapture(upEvent.pointerId)) btn.releasePointerCapture(upEvent.pointerId);
+                btn.onpointermove = null; btn.onpointerup = null; btn.onpointercancel = null;
             }
 
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
+            btn.setPointerCapture(e.pointerId);
+            btn.onpointermove = onPointerMove;
+            btn.onpointerup = btn.onpointercancel = onPointerUp;
         }
 
         function bringToFront(btn) {
@@ -840,7 +916,7 @@
 
             el.appendChild(textDiv); el.appendChild(deleteBtn);
             el.style.top = '40%'; el.style.left = '30%'; el.style.zIndex = ++globalZIndex;
-            canvas.appendChild(el); makeDraggable(el);
+            canvas.appendChild(el); makeDraggable(el); addTouchHandles();
             showToast('📝 已新增文字 (可按住邊緣拖曳)');
         }
 
@@ -861,28 +937,96 @@
             showToast('✨ 已新增元素 (可按住邊緣拖曳)');
         }
 
+        // 用 Pointer Events 取代 mouse events，同一份程式碼即可支援滑鼠與觸控。
         function makeDraggable(elmnt) {
-            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-            elmnt.onmousedown = dragMouseDown;
-            
-            function dragMouseDown(e) {
-                if(e.target.hasAttribute('contenteditable') || e.target.tagName === 'BUTTON') return; 
+            let lastX = 0, lastY = 0;
+            elmnt.onpointerdown = dragPointerDown;
+
+            function dragPointerDown(e) {
+                if(e.target.hasAttribute('contenteditable') || e.target.tagName === 'BUTTON') return;
                 if (e.target === elmnt || e.target.classList.contains('resize-both')) {
                     if (e.offsetX > e.target.offsetWidth - 25 && e.offsetY > e.target.offsetHeight - 25) return;
                 }
-                e.preventDefault(); 
-                elmnt.style.zIndex = ++globalZIndex; 
-                pos3 = e.clientX; pos4 = e.clientY;
-                document.onmouseup = closeDragElement; document.onmousemove = elementDrag;
+                e.preventDefault();
+                elmnt.style.zIndex = ++globalZIndex;
+                lastX = e.clientX; lastY = e.clientY;
+                elmnt.setPointerCapture(e.pointerId);
+                elmnt.onpointermove = elementDrag;
+                elmnt.onpointerup = elmnt.onpointercancel = closeDragElement;
             }
             function elementDrag(e) {
                 e.preventDefault();
-                pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
-                pos3 = e.clientX; pos4 = e.clientY;
-                elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
-                elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+                // 螢幕位移要除以縮放比，才會換算回畫布的設計座標，
+                // 否則畫布縮小時元件會跑得比手指快。
+                const dx = (e.clientX - lastX) / canvasScale;
+                const dy = (e.clientY - lastY) / canvasScale;
+                lastX = e.clientX; lastY = e.clientY;
+                elmnt.style.top = (elmnt.offsetTop + dy) + "px";
+                elmnt.style.left = (elmnt.offsetLeft + dx) + "px";
             }
-            function closeDragElement() { document.onmouseup = null; document.onmousemove = null; }
+            function closeDragElement(e) {
+                if (elmnt.hasPointerCapture(e.pointerId)) elmnt.releasePointerCapture(e.pointerId);
+                elmnt.onpointermove = null; elmnt.onpointerup = null; elmnt.onpointercancel = null;
+            }
+        }
+
+        // --- 6.2 觸控縮放 ---
+        // 只有觸控裝置需要，桌機沿用瀏覽器原生的 resize，不注入任何節點。
+        const isTouchDevice = window.matchMedia('(hover: none)').matches;
+
+        function addTouchHandles() {
+            if (!isTouchDevice) return;
+            // 排除拍立得說明文字：它本來就貼齊相片寬度，而且握把會和相片自己的握把疊在一起
+            document.querySelectorAll('#canvas .resize-x:not(.polaroid-caption), #canvas .resize-both').forEach(el => {
+                if (el.querySelector(':scope > .touch-resize-handle')) return;
+                // 握把要靠 absolute 貼在右下角，元件本身得先是個定位參考點。
+                // 有些元件 (如 .polaroid-caption) 本來就是 absolute，別去動它。
+                if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+                const handle = document.createElement('i');
+                handle.className = 'touch-resize-handle';
+                // 這些元件多半是 contenteditable，標成不可編輯才不會被當成內文
+                handle.contentEditable = 'false';
+                el.appendChild(handle);
+            });
+        }
+
+        // 用 capture 階段攔截：stopPropagation 可以擋掉 .collage-item 自己的拖曳處理，
+        // 避免同一根手指同時觸發「移動」與「縮放」。
+        document.addEventListener('pointerdown', function (e) {
+            if (e.target.classList && e.target.classList.contains('touch-resize-handle')) {
+                e.stopPropagation();
+                startTouchResize(e);
+            }
+        }, true);
+
+        function startTouchResize(e) {
+            const handle = e.target;
+            const el = handle.parentElement;
+            if (!el) return;
+            e.preventDefault();
+
+            const bothAxes = el.classList.contains('resize-both');
+            const rot = (parseFloat(el.getAttribute('data-rotation')) || 0) * Math.PI / 180;
+            const cos = Math.cos(rot), sin = Math.sin(rot);
+            const startX = e.clientX, startY = e.clientY;
+            // 用 computed width/height 而非 offsetWidth：offsetWidth 含 padding，
+            // 拿它當基準再寫回 style.width 會讓元件每縮放一次就多長出一份 padding。
+            const cs = getComputedStyle(el);
+            const startW = parseFloat(cs.width), startH = parseFloat(cs.height);
+
+            handle.setPointerCapture(e.pointerId);
+            handle.onpointermove = function (mv) {
+                // 位移先除以縮放比回到設計座標，再逆旋轉投影到元件自身的軸向，
+                // 旋轉過的拼貼照片才會沿著「它自己的」邊縮放，而不是螢幕的水平垂直。
+                const dx = (mv.clientX - startX) / canvasScale;
+                const dy = (mv.clientY - startY) / canvasScale;
+                el.style.width = Math.max(40, startW + dx * cos + dy * sin) + 'px';
+                if (bothAxes) el.style.height = Math.max(28, startH - dx * sin + dy * cos) + 'px';
+            };
+            handle.onpointerup = handle.onpointercancel = function (up) {
+                if (handle.hasPointerCapture(up.pointerId)) handle.releasePointerCapture(up.pointerId);
+                handle.onpointermove = null; handle.onpointerup = null; handle.onpointercancel = null;
+            };
         }
 
         // --- 6.5 P2 流程項目動態增減功能 ---
@@ -1016,7 +1160,7 @@
                 }
 
                 // 準備好後，把不該出現在 PDF 上的輔助按鈕全部刪除
-                pageWrapper.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn').forEach(el => el.remove());
+                pageWrapper.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle').forEach(el => el.remove());
                 
                 printZone.appendChild(pageWrapper);
             }
@@ -1030,6 +1174,7 @@
         }
 
         // 初始化
+        fitCanvas();
         renderLayoutSelector();
         renderCanvas();
     </script>
