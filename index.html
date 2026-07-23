@@ -2250,7 +2250,9 @@ function clickEbook(name) {
     addChatMessage("user", name);
     const page = EBOOK_PAGES[name];
     if (page) {
-        const url = new URL(page, location.href).href;
+        // 社刊：一般社員開成品的唯讀閱覽版（可下載 PDF），主委/管理者才進編輯器
+        const readOnly = name === '本社社刊' && userRole === 'member';
+        const url = new URL(page + (readOnly ? '?view=1' : ''), location.href).href;
         if (liff.isInClient()) liff.openWindow({ url, external: false });
         else window.open(url, '_blank');
         return;

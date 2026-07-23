@@ -286,6 +286,22 @@
             .toast { left: 12px; right: 12px; bottom: 12px; text-align: center; }
         }
 
+        /* --- 閱覽（唯讀）模式：社員開啟時看到的成品，隱藏所有編輯工具，四頁直式排好供閱讀 --- */
+        body.view-mode .tool-tab:not(.export-tab) { display: none; }
+        body.view-mode .sub-panel-container { display: none; }
+        body.view-mode .canvas-stage { display: none; }
+        body.view-mode .workspace { flex-direction: column; align-items: center; padding-top: 28px; }
+        body.view-mode .export-tab { margin-left: auto; }
+
+        .reader { display: none; }
+        body.view-mode .reader { display: flex; flex-direction: column; align-items: center; gap: 30px; width: 100%; padding-bottom: 40px; }
+        .reader-item { width: calc(595px * var(--canvas-scale)); height: calc(842px * var(--canvas-scale)); flex-shrink: 0; }
+        .reader-canvas { transform: scale(var(--canvas-scale)); transform-origin: top left; }
+        /* 閱覽模式下把編輯提示線與可縮放握把全部關掉，讓成品乾乾淨淨 */
+        body.view-mode [contenteditable] { outline: none !important; resize: none !important; cursor: default; }
+        body.view-mode .resize-x, body.view-mode .resize-both { resize: none !important; }
+        body.view-mode .editable-image { cursor: default; }
+
         /* 🔥🔥🔥 真正的向量 PDF 輸出核心：瀏覽器原生列印 CSS 引擎 🔥🔥🔥 */
         #print-zone { display: none; }
         
@@ -448,6 +464,9 @@
             </div>
         </div>
         </div>
+
+        <!-- 閱覽（唯讀）模式的成品呈現區：四頁直式排好供社員閱讀，由 renderReader() 動態填入 -->
+        <div class="reader" id="reader"></div>
     </div>
 
     <div class="toast" id="toast">✅ 執行成功！</div>
@@ -1188,6 +1207,27 @@
             document.getElementById('export-modal').classList.remove('show');
         }
 
+        // 組出某一頁完整的 .canvas 內容 (頁首 + 內文 + 頁尾)，PDF 匯出與唯讀閱覽共用。
+        // 目前編輯中的頁面直接複製 DOM（保留執秘所有修改），其餘頁面用快取或預設版型生成。
+        function buildPageInnerHTML(pageNum) {
+            if (pageNum === state.page) {
+                return document.getElementById('canvas').innerHTML;
+            }
+            const headerHTML = document.querySelector('.page-header').outerHTML;
+            const footerTitle = document.querySelector('.page-footer span:first-child').innerText;
+            const cached = pageCache[pageKey(pageNum, state.layouts[pageNum])];
+            return `
+                ${headerHTML}
+                <div class="page-content">
+                    ${cached || getPageContentHTML(pageNum, state.layouts[pageNum])}
+                </div>
+                <div class="page-footer" contenteditable="false">
+                    <span contenteditable="true">${footerTitle}</span>
+                    <span>PAGE 0${pageNum}</span>
+                </div>
+            `;
+        }
+
         function startPDFExport() {
             const pagesToExport = [];
             if(document.getElementById('export-p1').checked) pagesToExport.push(1);
@@ -1202,46 +1242,24 @@
 
             hideExportModal();
             showToast("⏳ 系統正在為您啟動瀏覽器原生列印引擎...");
-            
+
             if (document.activeElement) document.activeElement.blur();
 
             const printZone = document.getElementById('print-zone');
             printZone.innerHTML = ''; // 清空列印區塊
 
-            // 抓取目前畫面上顯示的頁首與頁尾狀態
-            const headerHTML = document.querySelector('.page-header').outerHTML;
-            const footerTitle = document.querySelector('.page-footer span:first-child').innerText;
-
             // 動態組裝所選的頁面到隱藏的 print-zone 裡
             for (let i = 0; i < pagesToExport.length; i++) {
                 const pageNum = pagesToExport[i];
                 const pageWrapper = document.createElement('div');
-                
+
                 // 賦予 .canvas 以繼承原有的設計排版，並加上 .print-canvas 觸發 A4 列印約束
-                pageWrapper.className = 'canvas print-canvas'; 
-                
-                if (pageNum === state.page) {
-                    // 如果是目前正在編輯的頁面，直接複製它的 DOM，這樣執秘的所有修改都會被完美保留！
-                    pageWrapper.innerHTML = document.getElementById('canvas').innerHTML;
-                } else {
-                    // 沒顯示在畫面上的頁面：優先用快取 (才不會把編輯過的內容洗掉)，
-                    // 從沒開過的頁面才用模組化函數生成預設版型
-                    const cached = pageCache[pageKey(pageNum, state.layouts[pageNum])];
-                    pageWrapper.innerHTML = `
-                        ${headerHTML}
-                        <div class="page-content">
-                            ${cached || getPageContentHTML(pageNum, state.layouts[pageNum])}
-                        </div>
-                        <div class="page-footer" contenteditable="false">
-                            <span contenteditable="true">${footerTitle}</span>
-                            <span>PAGE 0${pageNum}</span>
-                        </div>
-                    `;
-                }
+                pageWrapper.className = 'canvas print-canvas';
+                pageWrapper.innerHTML = buildPageInnerHTML(pageNum);
 
                 // 準備好後，把不該出現在 PDF 上的輔助按鈕全部刪除
                 pageWrapper.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle').forEach(el => el.remove());
-                
+
                 printZone.appendChild(pageWrapper);
             }
 
@@ -1253,10 +1271,49 @@
             }, 800);
         }
 
+        // --- 🔥 9. 唯讀閱覽模式：社員從「每週社刊」開啟成品時，只讀不改，並可下載 PDF ---
+        // 以網址參數 ?view=1 進入。四頁完整排好直式呈現，所有編輯工具與握把都收起來。
+        const VIEW_MODE = new URLSearchParams(location.search).has('view');
+
+        function renderReader() {
+            const reader = document.getElementById('reader');
+            reader.innerHTML = '';
+            [1, 2, 3, 4].forEach(pageNum => {
+                const item = document.createElement('div');
+                item.className = 'reader-item';
+                const canvas = document.createElement('div');
+                canvas.className = 'canvas reader-canvas';
+                canvas.innerHTML = buildPageInnerHTML(pageNum);
+
+                // 拿掉所有編輯用的控制項，並把內容全部鎖成唯讀
+                canvas.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle').forEach(el => el.remove());
+                canvas.querySelectorAll('[contenteditable]').forEach(el => el.setAttribute('contenteditable', 'false'));
+                canvas.querySelectorAll('.editable-image').forEach(img => img.removeAttribute('onclick'));
+
+                item.appendChild(canvas);
+                reader.appendChild(item);
+            });
+        }
+
+        function enterViewMode() {
+            document.body.classList.add('view-mode');
+            document.title = '扶輪社刊';
+            const logo = document.querySelector('.nav-logo');
+            if (logo) logo.innerHTML = '<span>PRO</span> 每週社刊';
+            // 把「產生 PDF」分頁換成社員直覺的「下載 PDF」，直接匯出整份四頁
+            const exportTab = document.querySelector('.export-tab');
+            if (exportTab) {
+                exportTab.setAttribute('onclick', 'startPDFExport()');
+                exportTab.lastChild.textContent = ' 下載 PDF';
+            }
+            renderReader();
+        }
+
         // 初始化
         fitCanvas();
         renderLayoutSelector();
         renderCanvas();
+        if (VIEW_MODE) enterViewMode();
     </script>
 </body>
 </html>
