@@ -22,6 +22,8 @@
         .btn-3d-success:active { box-shadow: 0 0px 0 #064e3b; }
         .btn-3d-warning { box-shadow: 0 4px 0 #92400e; }
         .btn-3d-warning:active { box-shadow: 0 0px 0 #92400e; }
+        .btn-3d-danger { box-shadow: 0 4px 0 #991b1b; }
+        .btn-3d-danger:active { box-shadow: 0 0px 0 #991b1b; }
         .btn-3d-white { box-shadow: 0 4px 0 #d1d5db; }
         .btn-3d-white:active { box-shadow: 0 0px 0 #d1d5db; }
         .btn-3d-dark { box-shadow: 0 4px 0 rgba(0,0,0,0.5); }
@@ -2190,9 +2192,14 @@ function clickMenuItem(itemName, key) {
                     </div>
                     <h5 class="font-bold text-gray-900 text-sm leading-snug">${ev.title}</h5>
                     <p class="text-gray-600 text-xs"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${ev.location}</p>
-                    <button onclick="selectEvent(${ev.id})" class="mt-1 w-full bg-blue-600 text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1 btn-3d btn-3d-primary mb-1">
-                        <i class="fa-solid fa-hand-pointer"></i> 帶入首頁查看與報名
-                    </button>
+                    <div class="flex gap-2 mt-1 mb-1">
+                        <button onclick="selectEvent(${ev.id})" class="flex-1 bg-blue-600 text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1 btn-3d btn-3d-primary">
+                            <i class="fa-solid fa-hand-pointer"></i> 帶入首頁查看與報名
+                        </button>
+                        <button onclick="event.stopPropagation(); openBulletinPdf()" class="bg-red-600 text-white font-bold py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center gap-1 btn-3d btn-3d-danger">
+                            <i class="fa-solid fa-file-pdf"></i> PDF
+                        </button>
+                    </div>
                 </div>`;
             });
             html += '</div>';
@@ -2258,6 +2265,13 @@ function clickEbook(name) {
         return;
     }
     setTimeout(() => addChatMessage("bot", `📖 《${name}》電子書建置中，上線後即可於此線上翻閱。`), 400);
+}
+
+// 行事曆活動卡上的 PDF 鈕：開啟該活動社刊的唯讀閱覽版（可下載 PDF）。
+function openBulletinPdf() {
+    const url = new URL('bulletin.html?view=1', location.href).href;
+    if (liff.isInClient()) liff.openWindow({ url, external: false });
+    else window.open(url, '_blank');
 }
 
 // ============================================================
