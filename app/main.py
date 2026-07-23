@@ -7,13 +7,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, Form, Request
+from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from . import db, line_api
-from .config import APP_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
+from .config import APP_BASE_URL, BULLETIN_VIEWER_URL, LINE_CHANNEL_SECRET, LIFF_URL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,6 +31,9 @@ async def lifespan(app: FastAPI):
     db.ensure_event_guests_table()
     db.ensure_golf_scores_table()
     db.ensure_club_dues_table()
+    db.ensure_bulletin_editors_table()
+    db.ensure_bulletin_pdf_table()
+    db.ensure_personal_information_columns()
     yield
 
 
@@ -1236,6 +1239,35 @@ async def me(request: Request):
         "is_admin": db.is_admin(uid),
         "name": _member_name(uid),
     }
+
+
+@app.get("/bulletin/can_edit")
+async def bulletin_can_edit(request: Request):
+    """Whether the caller may edit the weekly bulletin — DB-driven 社刊主委 whitelist."""
+    uid = request.headers.get("X-Line-UserId", "")
+    return {"status": "ok", "can_edit": db.is_bulletin_editor(uid)}
+
+
+@app.post("/bulletin/pdf")
+async def publish_bulletin_pdf(request: Request):
+    """社刊主委按『產生 PDF』時上傳成品，存為本社最新社刊。Body 為 PDF 位元組。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_bulletin_editor(uid):
+        raise HTTPException(status_code=403, detail="Not a bulletin editor")
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty PDF body")
+    db.save_bulletin_pdf(data)
+    return {"status": "ok"}
+
+
+@app.get("/bulletin/pdf")
+async def get_bulletin_pdf():
+    """社員在行事曆例會卡按 PDF 鈕時取回最新社刊；尚未發布時導回線上唯讀版。"""
+    data = db.get_bulletin_pdf()
+    if data is None:
+        return RedirectResponse(url=BULLETIN_VIEWER_URL)
+    return Response(content=data, media_type="application/pdf")
 
 
 @app.post("/payment/report")

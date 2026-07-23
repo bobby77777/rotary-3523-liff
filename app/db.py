@@ -46,24 +46,31 @@ def execute(sql: str, params=None) -> None:
         _release_conn(conn)
 
 
+def ensure_personal_information_columns() -> None:
+    execute("ALTER TABLE personal_information ADD COLUMN IF NOT EXISTS spouse_name TEXT NOT NULL DEFAULT ''")
+
+
 def upsert_personal_info(
     line_user_id: str,
     club_name: str,
     full_name: str,
     nickname: str,
     diet_type: str,
+    spouse_name: str = "",
 ) -> None:
+    """Blank spouse_name leaves any existing 寶尊眷 untouched (the member form never sends it)."""
     execute(
         """
-        INSERT INTO personal_information (line_user_id, club_name, full_name, nickname, diet_type)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO personal_information (line_user_id, club_name, full_name, nickname, diet_type, spouse_name)
+        VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (line_user_id) DO UPDATE SET
-            club_name  = EXCLUDED.club_name,
-            full_name  = EXCLUDED.full_name,
-            nickname   = EXCLUDED.nickname,
-            diet_type  = EXCLUDED.diet_type
+            club_name   = EXCLUDED.club_name,
+            full_name   = EXCLUDED.full_name,
+            nickname    = EXCLUDED.nickname,
+            diet_type   = EXCLUDED.diet_type,
+            spouse_name = COALESCE(NULLIF(EXCLUDED.spouse_name, ''), personal_information.spouse_name)
         """,
-        (line_user_id, club_name, full_name, nickname, diet_type),
+        (line_user_id, club_name, full_name, nickname, diet_type, spouse_name),
     )
 
 
@@ -373,6 +380,80 @@ def ensure_admin_users_table() -> None:
     """)
 
 
+def ensure_bulletin_editors_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS bulletin_editors (
+            line_user_id TEXT PRIMARY KEY,
+            name         TEXT NOT NULL DEFAULT '',
+            created_at   TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    # Seed the original 社刊主委 so existing edit access is preserved after the move to DB.
+    execute("""
+        INSERT INTO bulletin_editors (line_user_id, name)
+        VALUES ('U40fb26734c5a1da70261e06570830f01', '社刊主委')
+        ON CONFLICT (line_user_id) DO NOTHING
+    """)
+
+
+def is_bulletin_editor(line_user_id: str) -> bool:
+    if not line_user_id:
+        return False
+    rows = query("SELECT 1 FROM bulletin_editors WHERE line_user_id = %s", (line_user_id,))
+    return len(rows) > 0
+
+
+def add_bulletin_editor(line_user_id: str, name: str = "") -> None:
+    execute(
+        """
+        INSERT INTO bulletin_editors (line_user_id, name)
+        VALUES (%s, %s)
+        ON CONFLICT (line_user_id) DO UPDATE SET name = EXCLUDED.name
+        """,
+        (line_user_id, name),
+    )
+
+
+def remove_bulletin_editor(line_user_id: str) -> None:
+    execute("DELETE FROM bulletin_editors WHERE line_user_id = %s", (line_user_id,))
+
+
+def list_bulletin_editors() -> list[dict]:
+    return query("SELECT line_user_id, name FROM bulletin_editors ORDER BY created_at")
+
+
+# ── Published bulletin PDF ──────────────────────────────────────────────────────
+# One current 社刊 for the whole club: the latest PDF a 主委 publishes replaces it.
+# Single-row table (id is pinned to 1) holding the PDF bytes.
+def ensure_bulletin_pdf_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS bulletin_pdf (
+            id         INT PRIMARY KEY DEFAULT 1,
+            data       BYTEA NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            CONSTRAINT bulletin_pdf_singleton CHECK (id = 1)
+        )
+    """)
+
+
+def save_bulletin_pdf(data: bytes) -> None:
+    execute(
+        """
+        INSERT INTO bulletin_pdf (id, data, updated_at)
+        VALUES (1, %s, NOW())
+        ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+        """,
+        (psycopg2.Binary(data),),
+    )
+
+
+def get_bulletin_pdf() -> bytes | None:
+    rows = query("SELECT data FROM bulletin_pdf WHERE id = 1")
+    if not rows or rows[0]["data"] is None:
+        return None
+    return bytes(rows[0]["data"])
+
+
 def ensure_user_state_table() -> None:
     execute("""
         CREATE TABLE IF NOT EXISTS user_state (
@@ -592,17 +673,19 @@ def get_user_role(line_user_id: str) -> str:
     return rows[0]["role"] if rows else "member"
 
 
-def set_user_role(line_user_id: str, role: str, club_name: str = "") -> None:
+def set_user_role(line_user_id: str, role: str, club_name: str = "", scope: str = "") -> None:
+    """Blank scope keeps the user's current viewpoint; new rows default to district."""
     execute(
         """
-        INSERT INTO user_roles (line_user_id, role, club_name, updated_at)
-        VALUES (%s, %s, %s, NOW())
+        INSERT INTO user_roles (line_user_id, role, club_name, scope, updated_at)
+        VALUES (%s, %s, %s, COALESCE(NULLIF(%s, ''), 'district'), NOW())
         ON CONFLICT (line_user_id) DO UPDATE SET
             role = EXCLUDED.role,
             club_name = EXCLUDED.club_name,
+            scope = COALESCE(NULLIF(%s, ''), user_roles.scope),
             updated_at = NOW()
         """,
-        (line_user_id, role, club_name),
+        (line_user_id, role, club_name, scope, scope),
     )
 
 
