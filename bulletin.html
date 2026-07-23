@@ -10,6 +10,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
+    <!-- LIFF：用來辨識開啟者的 LINE 身分，只有白名單使用者可進編輯器 -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+
     <style>
         :root {
             --c-primary: #00246B;
@@ -1314,8 +1317,11 @@
         }
 
         // --- 🔥 9. 唯讀閱覽模式：社員從「每週社刊」開啟成品時，只讀不改，並可下載 PDF ---
-        // 以網址參數 ?view=1 進入。四頁完整排好直式呈現，所有編輯工具與握把都收起來。
-        const VIEW_MODE = new URLSearchParams(location.search).has('view');
+        // 進入唯讀的兩種情況：帶 ?view=1 網址參數，或登入者不在編輯白名單內。
+        // 四頁完整排好直式呈現，所有編輯工具與握把都收起來。
+        const LIFF_ID = '2010535285-kh8rJmpS';
+        const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+        const FORCE_VIEW = new URLSearchParams(location.search).has('view');
 
         function renderReader() {
             const reader = document.getElementById('reader');
@@ -1355,7 +1361,28 @@
         fitCanvas();
         renderLayoutSelector();
         renderCanvas();
-        if (VIEW_MODE) enterViewMode();
+        gateEditAccess();
+
+        // 依 LINE 身分決定進編輯器或唯讀：編輯白名單（社刊主委）存在後端 DB，
+        // 這裡拿 userId 向後端查詢；非白名單、帶 ?view=1、或查詢失敗者一律唯讀，
+        // 避免一般社員誤改社刊。
+        async function gateEditAccess() {
+            if (FORCE_VIEW) { enterViewMode(); return; }
+            let canEdit = false;
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                const userId = liff.isLoggedIn() ? (await liff.getProfile()).userId : '';
+                if (userId) {
+                    const res = await fetch(API_BASE + '/bulletin/can_edit', {
+                        headers: { 'X-Line-UserId': userId },
+                    });
+                    canEdit = (await res.json()).can_edit === true;
+                }
+            } catch (e) {
+                console.warn('編輯權限查詢失敗，改用唯讀模式', e);
+            }
+            if (!canEdit) enterViewMode();
+        }
     </script>
 </body>
 </html>
