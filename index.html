@@ -2266,7 +2266,10 @@ async function clickEbook(name) {
         } else {
             readOnly = false;
         }
-        const url = new URL(page + (readOnly ? '?view=1' : ''), location.href).href;
+        // 進編輯器時把主委 userId 帶給 bulletin.html，讓它按「產生 PDF」時能發布社刊。
+        const params = readOnly ? '?view=1'
+            : (lineProfile?.userId ? '?uid=' + encodeURIComponent(lineProfile.userId) : '');
+        const url = new URL(page + params, location.href).href;
         if (liff.isInClient()) liff.openWindow({ url, external: false });
         else window.open(url, '_blank');
         return;
@@ -2274,9 +2277,10 @@ async function clickEbook(name) {
     setTimeout(() => addChatMessage("bot", `📖 《${name}》電子書建置中，上線後即可於此線上翻閱。`), 400);
 }
 
-// 行事曆活動卡上的 PDF 鈕：開啟該活動社刊的唯讀閱覽版（可下載 PDF）。
+// 行事曆例會卡的 PDF 鈕：開啟主委發布的最新社刊 PDF（GET /bulletin/pdf）。
+// 後端若尚未有社刊，會 302 導回唯讀線上版 bulletin.html?view=1 作為備援。
 function openBulletinPdf() {
-    const url = new URL('bulletin.html?view=1', location.href).href;
+    const url = API_BASE + '/bulletin/pdf';
     if (liff.isInClient()) liff.openWindow({ url, external: false });
     else window.open(url, '_blank');
 }

@@ -1303,7 +1303,10 @@
 
                 const fname = '社刊_' + new Date().toISOString().slice(0, 10) + '.pdf';
                 doc.save(fname);
-                showToast("✅ PDF 已產生，請查看下載檔案或分享。");
+                // 社刊主委（編輯模式）按「產生 PDF」時，順手把成品發布為本社最新社刊，
+                // 社員便能在行事曆例會卡的 PDF 鈕直接看到這一版；唯讀模式只下載不發布。
+                if (!FORCE_VIEW) await publishBulletin(doc.output('blob'));
+                else showToast("✅ PDF 已產生，請查看下載檔案或分享。");
             } catch (e) {
                 console.error(e);
                 showToast("⚠️ 產生 PDF 時發生問題，請再試一次。");
@@ -1320,6 +1323,29 @@
         // 是否進唯讀：由開啟者（index.html）依後端 DB 白名單判定後，用 ?view=1 傳進來。
         // 一般社員的社刊連結會帶 ?view=1；社刊主委則不帶，直接進編輯器。
         const FORCE_VIEW = new URLSearchParams(location.search).has('view');
+        // 編輯者身分由開啟者（index.html）以 ?uid= 帶進來，發布社刊時當作 X-Line-UserId
+        // 交給後端驗證是否為白名單主委。
+        const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+        const EDITOR_UID = new URLSearchParams(location.search).get('uid') || '';
+
+        // 把剛產生的 PDF 上傳成本社「最新社刊」：POST /bulletin/pdf，body 為 PDF 位元組，
+        // 後端依 X-Line-UserId 驗證主委身分（非主委回 403）。之後社員的行事曆例會 PDF 鈕
+        // （GET /bulletin/pdf）就會拿到這一版。
+        async function publishBulletin(blob) {
+            showToast("⏳ 正在發布為本週社刊…");
+            try {
+                const res = await fetch(API_BASE + '/bulletin/pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/pdf', 'X-Line-UserId': EDITOR_UID },
+                    body: blob,
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                showToast("✅ 已發布為本週社刊，社員可在行事曆例會下載。");
+            } catch (e) {
+                console.warn('社刊發布失敗', e);
+                showToast("⚠️ PDF 已下載，但發布到雲端失敗，社員暫時看不到最新版。");
+            }
+        }
 
         function renderReader() {
             const reader = document.getElementById('reader');
