@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>扶輪社刊</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
-    
+
+    <!-- PDF 產生：html2canvas 把版面拍成高解析圖，jsPDF 組成 A4 檔並觸發真正的下載 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
     <style>
         :root {
             --c-primary: #00246B;
@@ -474,10 +478,10 @@
     <!-- 匯出選單 Modal 介面 -->
     <div class="modal-overlay" id="export-modal">
         <div class="modal-content">
-            <div class="modal-header">匯出真正的向量 PDF</div>
+            <div class="modal-header">下載 PDF</div>
             <div class="modal-body">
                 <div style="font-size: 12px; color: #A6A7A9; margin-bottom: 20px;">
-                    我們將喚醒系統原生的列印引擎，為您製作文字可選取、可無限放大的真正 PDF。<br><br>請勾選您要包含的頁面：
+                    系統會把版面產生成 PDF 檔並直接下載，手機與 LINE 內建瀏覽器都能保存與分享。<br><br>請勾選您要包含的頁面：
                 </div>
                 <label class="export-option"><input type="checkbox" id="export-p1" checked> P.1 主講人與美照</label>
                 <label class="export-option"><input type="checkbox" id="export-p2" checked> P.2 本週會議流程</label>
@@ -1198,7 +1202,7 @@
             setTimeout(() => toast.classList.remove('show'), 3500);
         }
 
-        // --- 🔥 8. 真正的原生向量 PDF 引擎 (Native Print) ---
+        // --- 🔥 8. PDF 產生引擎：直接產出檔案並下載（手機／LINE 也存得下來） ---
         function showExportModal() {
             document.getElementById('export-modal').classList.add('show');
         }
@@ -1241,34 +1245,72 @@
             }
 
             hideExportModal();
-            showToast("⏳ 系統正在為您啟動瀏覽器原生列印引擎...");
+            downloadPDF(pagesToExport);
+        }
 
+        // 把選定頁面拍成高解析圖，組成 A4 PDF 後直接下載成檔案。
+        // 相對於 window.print()，這條路在手機與 LINE 內建瀏覽器都存得下來。
+        let pdfBusy = false;
+        async function downloadPDF(pages) {
+            if (pdfBusy) return;
+            if (typeof html2canvas === 'undefined' || !window.jspdf) {
+                showToast("⚠️ PDF 元件尚未載入完成，請稍候再按一次。");
+                return;
+            }
+            pdfBusy = true;
+            showToast("⏳ 正在產生 PDF，請稍候…");
             if (document.activeElement) document.activeElement.blur();
 
-            const printZone = document.getElementById('print-zone');
-            printZone.innerHTML = ''; // 清空列印區塊
+            // 離線渲染區：用真實 A4 像素尺寸（不縮放），html2canvas 才能拍到清晰、對齊的版面
+            const stage = document.getElementById('print-zone');
+            stage.innerHTML = '';
+            stage.style.cssText = 'display:block; position:fixed; left:-10000px; top:0; width:595px; background:var(--c-bg);';
 
-            // 動態組裝所選的頁面到隱藏的 print-zone 裡
-            for (let i = 0; i < pagesToExport.length; i++) {
-                const pageNum = pagesToExport[i];
-                const pageWrapper = document.createElement('div');
+            const built = [];
+            pages.forEach(pageNum => {
+                const el = document.createElement('div');
+                el.className = 'canvas';
+                el.style.cssText = 'width:595px; height:842px; box-shadow:none; margin:0; transform:none;';
+                el.innerHTML = buildPageInnerHTML(pageNum);
+                // 拿掉所有編輯用的控制項與外框，讓成品乾淨
+                el.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle').forEach(n => n.remove());
+                el.querySelectorAll('[contenteditable]').forEach(n => n.setAttribute('contenteditable', 'false'));
+                stage.appendChild(el);
+                built.push(el);
+            });
 
-                // 賦予 .canvas 以繼承原有的設計排版，並加上 .print-canvas 觸發 A4 列印約束
-                pageWrapper.className = 'canvas print-canvas';
-                pageWrapper.innerHTML = buildPageInnerHTML(pageNum);
+            try {
+                // 等中文網頁字型與圖片就緒，否則會拍到系統替代字或空白圖
+                if (document.fonts && document.fonts.ready) await document.fonts.ready;
+                await new Promise(r => setTimeout(r, 350));
 
-                // 準備好後，把不該出現在 PDF 上的輔助按鈕全部刪除
-                pageWrapper.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle').forEach(el => el.remove());
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+                const pw = doc.internal.pageSize.getWidth();
+                const ph = doc.internal.pageSize.getHeight();
+                const bg = getComputedStyle(document.documentElement).getPropertyValue('--c-bg').trim() || '#ffffff';
 
-                printZone.appendChild(pageWrapper);
+                for (let i = 0; i < built.length; i++) {
+                    const shot = await html2canvas(built[i], {
+                        scale: 2, useCORS: true, backgroundColor: bg,
+                        width: 595, height: 842, windowWidth: 595, windowHeight: 842
+                    });
+                    const img = shot.toDataURL('image/jpeg', 0.92);
+                    if (i > 0) doc.addPage();
+                    doc.addImage(img, 'JPEG', 0, 0, pw, ph);
+                }
+
+                const fname = '社刊_' + new Date().toISOString().slice(0, 10) + '.pdf';
+                doc.save(fname);
+                showToast("✅ PDF 已產生，請查看下載檔案或分享。");
+            } catch (e) {
+                console.error(e);
+                showToast("⚠️ 產生 PDF 時發生問題，請再試一次。");
+            } finally {
+                stage.innerHTML = '';
+                stage.style.cssText = '';
+                pdfBusy = false;
             }
-
-            // 稍微等待 0.8 秒，讓動態拼接的 CSS Grid 與相片完全載入對齊
-            setTimeout(() => {
-                showToast("✅ 請在跳出的列印視窗中，將目的地選擇為「另存為 PDF」，即可獲得真正向量檔！");
-                // 喚醒瀏覽器原生列印功能
-                window.print();
-            }, 800);
         }
 
         // --- 🔥 9. 唯讀閱覽模式：社員從「每週社刊」開啟成品時，只讀不改，並可下載 PDF ---
