@@ -51,7 +51,7 @@ ingest.py (standalone process)
 | `document_rows` | Raw CSV/XLSX rows (JSONB) for SQL search |
 | `documents` | Chunked text + pgvector embeddings for RAG |
 | `document_metadata` | Document list (id, title, url, schema) |
-| `personal_information` | Member profiles (line_user_id, club, name, nickname, diet) |
+| `personal_information` | Member profiles (line_user_id, club, name, nickname, diet, 寶尊眷) |
 | `message_store` | Last 20 messages per user for conversation history |
 
 ---
@@ -127,7 +127,8 @@ create table personal_information (
     club_name text,
     full_name text,
     nickname text,
-    diet_type text
+    diet_type text,
+    spouse_name text not null default ''
 );
 ```
 
