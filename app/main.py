@@ -59,17 +59,19 @@ def _verify_line_signature(body: bytes, signature: str) -> bool:
 
 # ── Event schedule ────────────────────────────────────────────────────────────
 
+# 地區活動的 PDF 走 Google Drive：把上傳後的分享連結填進 pdf_url，留空則前端顯示「PDF準備中」。
+# （只有本社例會會連到社刊，故地區月例會/聯合例會也走 pdf_url。）
 _EVENT_SCHEDULE = [
-    {"id": 101, "date": "2024-11-22", "weekday": "星期五", "title": "RF GMS 扶輪獎助金管理研討會",     "location": "政大公企中心 2F",        "chair": "蔡輝彬 P.P. Stanley", "time": "13:30-17:30", "type": "地區會議", "fee": "免費"},
-    {"id": 102, "date": "2025-02-25", "weekday": "星期二", "title": "DTTS 地區團隊訓練研討會",         "location": "漢來飯店",                "chair": "王維宏 P.P. JoeWang", "time": "13:00-17:00", "type": "訓練研討", "fee": "NT$300"},
-    {"id": 103, "date": "2025-03-22", "weekday": "星期六", "title": "PETS 社長當選人訓練研討會",       "location": "美福飯店",                "chair": "許顥譪 P.P. Anthony", "time": "10:00-16:30", "type": "訓練研討", "fee": "NT$500"},
-    {"id": 104, "date": "2025-05-24", "weekday": "星期六", "title": "DTA 地區訓練講習會 (合併 CTTS)", "location": "大直典華",                "chair": "蔡圻 P.P. Chigo",    "time": "10:00-16:30", "type": "訓練研討", "fee": "NT$500"},
-    {"id": 105, "date": "2025-07-01", "weekday": "星期二", "title": "總監暨社長聯合就職典禮",         "location": "漢來飯店",                "chair": "蔡圻 P.P. Chigo",    "time": "11:00-14:00", "type": "年度慶典", "fee": "NT$1,200"},
-    {"id": 106, "date": "2025-07-14", "weekday": "星期一", "title": "總監盃高爾夫球比賽",             "location": "老淡水高爾夫球場",        "chair": "林星煌 P.P. Star",    "time": "整天",        "type": "地區運動", "fee": "NT$3,500"},
-    {"id": 107, "date": "2026-06-15", "weekday": "星期一", "title": "地區青少年交換(RYE)講習會",      "location": "台北福華大飯店",          "chair": "陳俊宇 P.P. RYE",    "time": "10:00-15:00", "type": "講習培訓", "fee": "免費"},
-    {"id": 108, "date": "2026-10-24", "weekday": "星期六", "title": "第九屆地區年會暨職業服務論壇",   "location": "台北萬豪酒店 5樓萬豪廳", "chair": "張秘書長",            "time": "09:00-17:30", "type": "地區年會", "fee": "NT$2,000"},
-    {"id": 109, "date": "2026-08-15", "weekday": "星期六", "title": "3523 地區月例會",                "location": "圓山飯店",                "chair": "地區秘書處",          "time": "12:00-14:00", "type": "月例會",   "fee": "NT$800"},
-    {"id": 110, "date": "2026-09-20", "weekday": "星期日", "title": "社際聯合例會暨餐敘",            "location": "君品酒店",                "chair": "輪值主委",            "time": "11:30-14:00", "type": "聯合活動", "fee": "NT$600"},
+    {"id": 101, "date": "2024-11-22", "weekday": "星期五", "title": "RF GMS 扶輪獎助金管理研討會",     "location": "政大公企中心 2F",        "chair": "蔡輝彬 P.P. Stanley", "time": "13:30-17:30", "type": "地區會議", "fee": "免費",     "pdf_url": ""},
+    {"id": 102, "date": "2025-02-25", "weekday": "星期二", "title": "DTTS 地區團隊訓練研討會",         "location": "漢來飯店",                "chair": "王維宏 P.P. JoeWang", "time": "13:00-17:00", "type": "訓練研討", "fee": "NT$300",   "pdf_url": ""},
+    {"id": 103, "date": "2025-03-22", "weekday": "星期六", "title": "PETS 社長當選人訓練研討會",       "location": "美福飯店",                "chair": "許顥譪 P.P. Anthony", "time": "10:00-16:30", "type": "訓練研討", "fee": "NT$500",   "pdf_url": ""},
+    {"id": 104, "date": "2025-05-24", "weekday": "星期六", "title": "DTA 地區訓練講習會 (合併 CTTS)", "location": "大直典華",                "chair": "蔡圻 P.P. Chigo",    "time": "10:00-16:30", "type": "訓練研討", "fee": "NT$500",   "pdf_url": ""},
+    {"id": 105, "date": "2025-07-01", "weekday": "星期二", "title": "總監暨社長聯合就職典禮",         "location": "漢來飯店",                "chair": "蔡圻 P.P. Chigo",    "time": "11:00-14:00", "type": "年度慶典", "fee": "NT$1,200", "pdf_url": ""},
+    {"id": 106, "date": "2025-07-14", "weekday": "星期一", "title": "總監盃高爾夫球比賽",             "location": "老淡水高爾夫球場",        "chair": "林星煌 P.P. Star",    "time": "整天",        "type": "地區運動", "fee": "NT$3,500", "pdf_url": ""},
+    {"id": 107, "date": "2026-06-15", "weekday": "星期一", "title": "地區青少年交換(RYE)講習會",      "location": "台北福華大飯店",          "chair": "陳俊宇 P.P. RYE",    "time": "10:00-15:00", "type": "講習培訓", "fee": "免費",     "pdf_url": ""},
+    {"id": 108, "date": "2026-10-24", "weekday": "星期六", "title": "第九屆地區年會暨職業服務論壇",   "location": "台北萬豪酒店 5樓萬豪廳", "chair": "張秘書長",            "time": "09:00-17:30", "type": "地區年會", "fee": "NT$2,000", "pdf_url": ""},
+    {"id": 109, "date": "2026-08-15", "weekday": "星期六", "title": "3523 地區月例會",                "location": "圓山飯店",                "chair": "地區秘書處",          "time": "12:00-14:00", "type": "月例會",   "fee": "NT$800",   "pdf_url": ""},
+    {"id": 110, "date": "2026-09-20", "weekday": "星期日", "title": "社際聯合例會暨餐敘",            "location": "君品酒店",                "chair": "輪值主委",            "time": "11:30-14:00", "type": "聯合活動", "fee": "NT$600",   "pdf_url": ""},
 ]
 
 # ── Golf (新貝利亞 / New Peoria) ──────────────────────────────────────────────
@@ -153,9 +155,10 @@ def _club_events(club_name: str) -> list[dict]:
     def wd(days):
         return wk[(today + timedelta(days=days)).weekday()]
     return [
+        # 社內例會連到社刊，不需 pdf_url；其他社內活動走 Google Drive，pdf_url 留空則顯示「PDF準備中」。
         {"id": 9001, "date": d(9),  "weekday": wd(9),  "title": f"{club} 第 1234 次例會 · 專題演講", "location": "本社例會餐廳", "chair": "本社社長",     "time": "12:00-14:00", "type": "社內例會", "fee": "NT$300", "scope": "club"},
-        {"id": 9002, "date": d(24), "weekday": wd(24), "title": f"{club} 秋季國內旅遊",              "location": "宜蘭礁溪",     "chair": "本社旅遊主委", "time": "整天",        "type": "社內旅遊", "fee": "NT$2,800", "scope": "club"},
-        {"id": 9003, "date": d(40), "weekday": wd(40), "title": f"{club} 高球月例賽",                "location": "美麗華高爾夫", "chair": "本社高球主委", "time": "06:00-14:00", "type": "社內高球", "fee": "NT$1,800", "scope": "club"},
+        {"id": 9002, "date": d(24), "weekday": wd(24), "title": f"{club} 秋季國內旅遊",              "location": "宜蘭礁溪",     "chair": "本社旅遊主委", "time": "整天",        "type": "社內旅遊", "fee": "NT$2,800", "scope": "club", "pdf_url": ""},
+        {"id": 9003, "date": d(40), "weekday": wd(40), "title": f"{club} 高球月例賽",                "location": "美麗華高爾夫", "chair": "本社高球主委", "time": "06:00-14:00", "type": "社內高球", "fee": "NT$1,800", "scope": "club", "pdf_url": ""},
     ]
 
 
