@@ -6,9 +6,8 @@
     <title>扶輪社刊</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
 
-    <!-- PDF 產生：html2canvas 把版面拍成高解析圖，jsPDF 組成 A4 檔並觸發真正的下載 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- PDF 產生：改用瀏覽器原生列印引擎輸出「真正的向量 PDF」(文字可選取、可搜尋、放大不糊)，
+         不再用 html2canvas 拍成點陣圖。詳見下方 @media print 與 printPages()。 -->
 
 
     <style>
@@ -311,36 +310,45 @@
         #print-zone { display: none; }
         
         @media print {
-            /* 1. 隱藏所有編輯器操作介面 */
-            .top-nav, .sub-panel-container, .workspace, .toast, .modal-overlay { display: none !important; }
-            
-            /* 2. 重設頁面基礎，強制啟動背景圖形列印 (-webkit-print-color-adjust) */
-            body { background: var(--c-bg); margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            
-            /* 3. 顯示我們在背景偷偷生成的「列印專用排版區」 */
-            #print-zone { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
-            
-            /* 4. 精準定義 A4 實體尺寸 (210x297mm) 與分頁邏輯 */
-            .print-canvas {
-                width: 210mm !important;
-                height: 297mm !important;
+            /* 1. 隱藏所有編輯器操作介面與畫面上的閱覽區，只留列印專用排版區 */
+            .top-nav, .sub-panel-container, .workspace, .toast, .modal-overlay, .reader { display: none !important; }
+
+            /* 2. 重設頁面基礎，強制啟動背景色/圖形列印 (-webkit-print-color-adjust) */
+            body { background: #fff; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+            /* 3. 顯示我們在背景生成的「列印專用排版區」 */
+            #print-zone { display: block !important; position: static; }
+
+            /* 4. 每一頁 = 一張 A4。版面是以 595x842px (A4@72dpi) 座標設計的，
+                  列印引擎用 96dpi，因此把 .canvas 依 96/72=1.3333 放大填滿整張 A4，
+                  文字仍以向量輸出、影像維持原解析度。 */
+            .print-page {
+                width: 210mm;
+                height: 297mm;
+                overflow: hidden;
                 page-break-after: always;
+                position: relative;
+                background: var(--c-bg);
+            }
+            .print-page:last-child { page-break-after: auto; }
+            .print-page .canvas {
+                width: 595px;
+                height: 842px;
+                transform: scale(1.3333);
+                transform-origin: top left;
                 box-shadow: none !important;
                 margin: 0 !important;
-                border: none !important;
-                transform: none !important;
-                background-color: var(--c-bg) !important;
+                overflow: hidden;
             }
-            .print-canvas:last-child { page-break-after: auto; }
             @page { size: A4 portrait; margin: 0; }
-            
+
             /* 5. 清除所有編輯用的提示框線、捲動軸與小按鈕，確保 PDF 版面極度乾淨 */
             [contenteditable] { outline: none !important; resize: none !important; }
             .resize-x, .resize-both { resize: none !important; }
             .item-add-del, .photo-tools, .delete-btn, .timeline-add-btn, .touch-resize-handle { display: none !important; }
             .collage-item::after { display: none !important; }
             ::-webkit-scrollbar { display: none !important; }
-            .timeline-container, .p4-scroll-area, .p4-list-scroll { overflow: visible !important; height: auto !important; }
+            /* 內部捲動框僅隱藏捲軸即可；高度維持與編輯畫布一致，確保列印所見即所得(WYSIWYG)。 */
         }
     </style>
 </head>
@@ -482,7 +490,7 @@
             <div class="modal-header">下載 PDF</div>
             <div class="modal-body">
                 <div style="font-size: 12px; color: #A6A7A9; margin-bottom: 20px;">
-                    系統會把版面產生成 PDF 檔並直接下載，手機與 LINE 內建瀏覽器都能保存與分享。<br><br>請勾選您要包含的頁面：
+                    系統會開啟列印視窗，請於目的地選擇「另存為 PDF」，即可得到文字可選取、可搜尋、放大不模糊的向量 PDF。<br><br>請勾選您要包含的頁面：
                 </div>
                 <label class="export-option"><input type="checkbox" id="export-p1" checked> P.1 主講人與美照</label>
                 <label class="export-option"><input type="checkbox" id="export-p2" checked> P.2 本週會議流程</label>
@@ -1246,73 +1254,85 @@
             }
 
             hideExportModal();
-            downloadPDF(pagesToExport);
+            exportPDF(pagesToExport);
         }
 
-        // 把選定頁面拍成高解析圖，組成 A4 PDF 後直接下載成檔案。
-        // 相對於 window.print()，這條路在手機與 LINE 內建瀏覽器都存得下來。
+        // 社員從後端載到的成品頁面 HTML（唯讀模式用）。null 代表沒有雲端版本，退回預設範本。
+        let loadedPages = null;
+
+        // 把一頁 .canvas 內容清成「乾淨、唯讀」的成品：拿掉所有編輯握把、關掉 contenteditable、
+        // 移除圖片的 onclick，避免成品或發布出去的版本殘留編輯器互動。
+        function cleanPageHTML(html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            tmp.querySelectorAll('.item-controls, .item-add-del, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle')
+               .forEach(n => n.remove());
+            tmp.querySelectorAll('[contenteditable]').forEach(n => n.setAttribute('contenteditable', 'false'));
+            tmp.querySelectorAll('.editable-image').forEach(img => img.removeAttribute('onclick'));
+            return tmp.innerHTML;
+        }
+
+        // 取得目前四頁的成品 HTML：優先用雲端載入的版本（社員），否則即時由編輯內容組出（主委）。
+        function currentPagesHTML() {
+            if (loadedPages) return loadedPages.slice();
+            stashCurrentPage();
+            return [1, 2, 3, 4].map(n => cleanPageHTML(buildPageInnerHTML(n)));
+        }
+
+        // 產生真正的向量 PDF：把選定頁面放進列印專用區，交給瀏覽器原生列印引擎「另存為 PDF」。
+        // 相較於點陣截圖，文字可選取、可搜尋、放大不糊，檔案也更小。
         let pdfBusy = false;
-        async function downloadPDF(pages) {
-            if (pdfBusy) return;
-            if (typeof html2canvas === 'undefined' || !window.jspdf) {
-                showToast("⚠️ PDF 元件尚未載入完成，請稍候再按一次。");
-                return;
-            }
-            pdfBusy = true;
-            showToast("⏳ 正在產生 PDF，請稍候…");
-            if (document.activeElement) document.activeElement.blur();
-
-            // 離線渲染區：用真實 A4 像素尺寸（不縮放），html2canvas 才能拍到清晰、對齊的版面
-            const stage = document.getElementById('print-zone');
-            stage.innerHTML = '';
-            stage.style.cssText = 'display:block; position:fixed; left:-10000px; top:0; width:595px; background:var(--c-bg);';
-
-            const built = [];
+        async function printPages(pages) {
+            const allPages = currentPagesHTML();
+            const zone = document.getElementById('print-zone');
+            zone.innerHTML = '';
             pages.forEach(pageNum => {
-                const el = document.createElement('div');
-                el.className = 'canvas';
-                el.style.cssText = 'width:595px; height:842px; box-shadow:none; margin:0; transform:none;';
-                el.innerHTML = buildPageInnerHTML(pageNum);
-                // 拿掉所有編輯用的控制項與外框，讓成品乾淨
-                el.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle').forEach(n => n.remove());
-                el.querySelectorAll('[contenteditable]').forEach(n => n.setAttribute('contenteditable', 'false'));
-                stage.appendChild(el);
-                built.push(el);
+                const wrap = document.createElement('div');
+                wrap.className = 'print-page';
+                const cv = document.createElement('div');
+                cv.className = 'canvas';
+                cv.innerHTML = allPages[pageNum - 1] || '';
+                wrap.appendChild(cv);
+                zone.appendChild(wrap);
             });
 
+            // 等中文字型與所有圖片就緒，否則列印時會抓到替代字或空白圖
+            if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+            const imgs = Array.from(zone.querySelectorAll('img'));
+            await Promise.all(imgs.map(img => img.complete ? Promise.resolve()
+                : new Promise(r => { img.onload = img.onerror = r; })));
+            await new Promise(r => setTimeout(r, 150));
+
+            // 列印結束（或取消）後清掉暫存版面
+            const cleanup = () => { zone.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
+            window.addEventListener('afterprint', cleanup);
+            window.print();
+            setTimeout(cleanup, 60000); // 保險：某些行動瀏覽器不觸發 afterprint
+        }
+
+        // 主委按「產生 PDF」：先把完整四頁成品發布為本社最新社刊（社員才能線上閱覽/列印），
+        // 再開啟列印視窗讓自己另存 PDF。唯讀模式（社員）只列印、不發布。
+        async function exportPDF(pages) {
+            if (pdfBusy) return;
+            pdfBusy = true;
+            if (document.activeElement) document.activeElement.blur();
             try {
-                // 等中文網頁字型與圖片就緒，否則會拍到系統替代字或空白圖
-                if (document.fonts && document.fonts.ready) await document.fonts.ready;
-                await new Promise(r => setTimeout(r, 350));
-
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
-                const pw = doc.internal.pageSize.getWidth();
-                const ph = doc.internal.pageSize.getHeight();
-                const bg = getComputedStyle(document.documentElement).getPropertyValue('--c-bg').trim() || '#ffffff';
-
-                for (let i = 0; i < built.length; i++) {
-                    const shot = await html2canvas(built[i], {
-                        scale: 2, useCORS: true, backgroundColor: bg,
-                        width: 595, height: 842, windowWidth: 595, windowHeight: 842
-                    });
-                    const img = shot.toDataURL('image/jpeg', 0.92);
-                    if (i > 0) doc.addPage();
-                    doc.addImage(img, 'JPEG', 0, 0, pw, ph);
+                if (!FORCE_VIEW) {
+                    showToast("⏳ 正在發布為本週社刊…");
+                    try {
+                        await publishBulletinContent(serializeBulletin());
+                        showToast("✅ 已發布為本週社刊，社員可線上閱覽並下載 PDF。");
+                    } catch (e) {
+                        console.warn('社刊發布失敗', e);
+                        showToast("⚠️ 發布到雲端失敗，社員暫時看不到最新版；您仍可在列印視窗另存 PDF。");
+                    }
                 }
-
-                const fname = '社刊_' + new Date().toISOString().slice(0, 10) + '.pdf';
-                doc.save(fname);
-                // 社刊主委（編輯模式）按「產生 PDF」時，順手把成品發布為本社最新社刊，
-                // 社員便能在行事曆例會卡的 PDF 鈕直接看到這一版；唯讀模式只下載不發布。
-                if (!FORCE_VIEW) await publishBulletin(doc.output('blob'));
-                else showToast("✅ PDF 已產生，請查看下載檔案或分享。");
+                showToast("🖨️ 開啟列印視窗，請於目的地選擇「另存為 PDF」。");
+                await printPages(pages);
             } catch (e) {
                 console.error(e);
                 showToast("⚠️ 產生 PDF 時發生問題，請再試一次。");
             } finally {
-                stage.innerHTML = '';
-                stage.style.cssText = '';
                 pdfBusy = false;
             }
         }
@@ -1328,40 +1348,70 @@
         const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
         const EDITOR_UID = new URLSearchParams(location.search).get('uid') || '';
 
-        // 把剛產生的 PDF 上傳成本社「最新社刊」：POST /bulletin/pdf，body 為 PDF 位元組，
-        // 後端依 X-Line-UserId 驗證主委身分（非主委回 403）。之後社員的行事曆例會 PDF 鈕
-        // （GET /bulletin/pdf）就會拿到這一版。
-        async function publishBulletin(blob) {
-            showToast("⏳ 正在發布為本週社刊…");
+        // 把主委編輯好的「社刊內容」序列化成 JSON：四頁成品 HTML + 品牌色。
+        // 存的是內容本身（不是點陣 PDF），社員載入後即可線上閱覽，並自行列印成向量 PDF。
+        function serializeBulletin() {
+            const rootStyle = getComputedStyle(document.documentElement);
+            return {
+                v: 1,
+                savedAt: new Date().toISOString(),
+                theme: {
+                    primary: rootStyle.getPropertyValue('--c-primary').trim(),
+                    secondary: rootStyle.getPropertyValue('--c-secondary').trim(),
+                    bg: rootStyle.getPropertyValue('--c-bg').trim(),
+                },
+                pages: currentPagesHTML(),
+            };
+        }
+
+        // 發布為本社「最新社刊」：POST /bulletin/content（JSON）。
+        // 後端依 X-Line-UserId 驗證主委身分（非主委回 403），之後社員 GET /bulletin/content 取得此版。
+        async function publishBulletinContent(payload) {
+            const res = await fetch(API_BASE + '/bulletin/content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Line-UserId': EDITOR_UID },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+        }
+
+        // 套用載入的社刊內容：還原品牌色，並把四頁成品交給閱覽/列印使用。
+        function applyBulletinContent(data) {
+            if (data && data.theme) {
+                const s = document.documentElement.style;
+                if (data.theme.primary) s.setProperty('--c-primary', data.theme.primary);
+                if (data.theme.secondary) s.setProperty('--c-secondary', data.theme.secondary);
+                if (data.theme.bg) s.setProperty('--c-bg', data.theme.bg);
+            }
+            if (data && Array.isArray(data.pages) && data.pages.length) {
+                loadedPages = data.pages;
+            }
+        }
+
+        // 社員唯讀模式：載入主委發布的最新社刊內容。失敗時 loadedPages 維持 null，退回預設範本。
+        async function loadBulletinContent() {
             try {
-                const res = await fetch(API_BASE + '/bulletin/pdf', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/pdf', 'X-Line-UserId': EDITOR_UID },
-                    body: blob,
+                const res = await fetch(API_BASE + '/bulletin/content', {
+                    headers: { 'ngrok-skip-browser-warning': '1' },
                 });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                showToast("✅ 已發布為本週社刊，社員可在行事曆例會下載。");
+                if (!res.ok) return;
+                applyBulletinContent(await res.json());
             } catch (e) {
-                console.warn('社刊發布失敗', e);
-                showToast("⚠️ PDF 已下載，但發布到雲端失敗，社員暫時看不到最新版。");
+                console.warn('載入社刊內容失敗，改用預設範本', e);
             }
         }
 
         function renderReader() {
             const reader = document.getElementById('reader');
             reader.innerHTML = '';
-            [1, 2, 3, 4].forEach(pageNum => {
+            // 優先呈現主委發布到雲端的成品；沒有雲端版本時，退回即時組出的預設範本。
+            const pagesHTML = loadedPages || [1, 2, 3, 4].map(n => cleanPageHTML(buildPageInnerHTML(n)));
+            pagesHTML.forEach(html => {
                 const item = document.createElement('div');
                 item.className = 'reader-item';
                 const canvas = document.createElement('div');
                 canvas.className = 'canvas reader-canvas';
-                canvas.innerHTML = buildPageInnerHTML(pageNum);
-
-                // 拿掉所有編輯用的控制項，並把內容全部鎖成唯讀
-                canvas.querySelectorAll('.item-controls, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle').forEach(el => el.remove());
-                canvas.querySelectorAll('[contenteditable]').forEach(el => el.setAttribute('contenteditable', 'false'));
-                canvas.querySelectorAll('.editable-image').forEach(img => img.removeAttribute('onclick'));
-
+                canvas.innerHTML = html;
                 item.appendChild(canvas);
                 reader.appendChild(item);
             });
@@ -1382,10 +1432,16 @@
         }
 
         // 初始化
-        fitCanvas();
-        renderLayoutSelector();
-        renderCanvas();
-        if (FORCE_VIEW) enterViewMode();
+        (async function init() {
+            fitCanvas();
+            renderLayoutSelector();
+            renderCanvas();
+            if (FORCE_VIEW) {
+                // 社員唯讀模式：先向後端取主委發布的最新社刊內容，再排版呈現。
+                await loadBulletinContent();
+                enterViewMode();
+            }
+        })();
     </script>
 </body>
 </html>

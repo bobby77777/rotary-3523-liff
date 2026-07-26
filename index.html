@@ -2277,11 +2277,13 @@ async function clickEbook(name) {
     setTimeout(() => addChatMessage("bot", `📖 《${name}》電子書建置中，上線後即可於此線上翻閱。`), 400);
 }
 
-// 行事曆例會卡的 PDF 鈕：開啟主委發布的最新社刊 PDF（GET /bulletin/pdf）。
-// 後端若尚未有社刊，會 302 導回唯讀線上版 bulletin.html?view=1 作為備援。
+// 行事曆例會卡的 PDF 鈕：開啟主委發布的最新社刊（唯讀線上版 bulletin.html?view=1）。
+// 該頁會向後端載入主委發布的內容並排版呈現，社員可直接閱覽，或按「下載 PDF」用瀏覽器
+// 原生列印引擎另存成文字可選取的向量 PDF。
 function openBulletinPdf() {
-    const url = API_BASE + '/bulletin/pdf';
-    if (liff.isInClient()) liff.openWindow({ url, external: false });
+    const url = new URL('bulletin.html?view=1', location.href).href;
+    // external:true 走裝置的預設瀏覽器(Safari/Chrome)，其「列印→另存為 PDF」比 LINE 內建瀏覽器可靠。
+    if (liff.isInClient()) liff.openWindow({ url, external: true });
     else window.open(url, '_blank');
 }
 
