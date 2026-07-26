@@ -422,36 +422,38 @@ def list_bulletin_editors() -> list[dict]:
     return query("SELECT line_user_id, name FROM bulletin_editors ORDER BY created_at")
 
 
-# ── Published bulletin PDF ──────────────────────────────────────────────────────
-# One current 社刊 for the whole club: the latest PDF a 主委 publishes replaces it.
-# Single-row table (id is pinned to 1) holding the PDF bytes.
-def ensure_bulletin_pdf_table() -> None:
+# ── Published bulletin content ──────────────────────────────────────────────────
+# The 社刊 is now published as *content* (the four finished pages' HTML + theme),
+# not a rasterised PDF — members load it, view it live, and print their own vector
+# PDF via the browser. Stored as the raw JSON string (payloads embed base64 images,
+# so we keep them verbatim in a TEXT column rather than re-encoding through JSONB).
+def ensure_bulletin_content_table() -> None:
     execute("""
-        CREATE TABLE IF NOT EXISTS bulletin_pdf (
+        CREATE TABLE IF NOT EXISTS bulletin_content (
             id         INT PRIMARY KEY DEFAULT 1,
-            data       BYTEA NOT NULL,
+            data       TEXT NOT NULL,
             updated_at TIMESTAMPTZ DEFAULT NOW(),
-            CONSTRAINT bulletin_pdf_singleton CHECK (id = 1)
+            CONSTRAINT bulletin_content_singleton CHECK (id = 1)
         )
     """)
 
 
-def save_bulletin_pdf(data: bytes) -> None:
+def save_bulletin_content(raw: str) -> None:
     execute(
         """
-        INSERT INTO bulletin_pdf (id, data, updated_at)
+        INSERT INTO bulletin_content (id, data, updated_at)
         VALUES (1, %s, NOW())
         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
         """,
-        (psycopg2.Binary(data),),
+        (raw,),
     )
 
 
-def get_bulletin_pdf() -> bytes | None:
-    rows = query("SELECT data FROM bulletin_pdf WHERE id = 1")
+def get_bulletin_content() -> str | None:
+    rows = query("SELECT data FROM bulletin_content WHERE id = 1")
     if not rows or rows[0]["data"] is None:
         return None
-    return bytes(rows[0]["data"])
+    return rows[0]["data"]
 
 
 def ensure_user_state_table() -> None:

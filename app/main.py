@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import base64
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import date
@@ -9,11 +10,11 @@ from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from . import db, line_api
-from .config import APP_BASE_URL, BULLETIN_VIEWER_URL, LINE_CHANNEL_SECRET, LIFF_URL
+from .config import APP_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def lifespan(app: FastAPI):
     db.ensure_golf_scores_table()
     db.ensure_club_dues_table()
     db.ensure_bulletin_editors_table()
-    db.ensure_bulletin_pdf_table()
+    db.ensure_bulletin_content_table()
     db.ensure_personal_information_columns()
     yield
 
@@ -1248,26 +1249,31 @@ async def bulletin_can_edit(request: Request):
     return {"status": "ok", "can_edit": db.is_bulletin_editor(uid)}
 
 
-@app.post("/bulletin/pdf")
-async def publish_bulletin_pdf(request: Request):
-    """社刊主委按『產生 PDF』時上傳成品，存為本社最新社刊。Body 為 PDF 位元組。"""
+@app.post("/bulletin/content")
+async def publish_bulletin_content(request: Request):
+    """社刊主委按『產生 PDF』時發布成品內容（四頁 HTML + 品牌色，JSON）。
+    社員之後 GET /bulletin/content 取得此版，線上閱覽並自行列印成向量 PDF。"""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_bulletin_editor(uid):
         raise HTTPException(status_code=403, detail="Not a bulletin editor")
-    data = await request.body()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty PDF body")
-    db.save_bulletin_pdf(data)
+    raw = (await request.body()).decode("utf-8")
+    if not raw.strip():
+        raise HTTPException(status_code=400, detail="Empty content body")
+    try:
+        json.loads(raw)  # 僅驗證為合法 JSON，實際原文照存（內含 base64 圖片）
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Body is not valid JSON")
+    db.save_bulletin_content(raw)
     return {"status": "ok"}
 
 
-@app.get("/bulletin/pdf")
-async def get_bulletin_pdf():
-    """社員在行事曆例會卡按 PDF 鈕時取回最新社刊；尚未發布時導回線上唯讀版。"""
-    data = db.get_bulletin_pdf()
-    if data is None:
-        return RedirectResponse(url=BULLETIN_VIEWER_URL)
-    return Response(content=data, media_type="application/pdf")
+@app.get("/bulletin/content")
+async def get_bulletin_content():
+    """社員唯讀版載入主委發布的最新社刊內容；尚未發布時回 404，前端退回預設範本。"""
+    raw = db.get_bulletin_content()
+    if raw is None:
+        raise HTTPException(status_code=404, detail="No bulletin published yet")
+    return Response(content=raw, media_type="application/json")
 
 
 @app.post("/payment/report")
