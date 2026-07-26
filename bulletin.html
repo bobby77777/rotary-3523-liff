@@ -353,6 +353,8 @@
     </style>
 </head>
 <body>
+    <!-- 唯讀模式(?view)在編輯器 DOM 尚未繪出前就先套上 view-mode，避免社員先閃到一秒編輯畫面 -->
+    <script>if (new URLSearchParams(location.search).has('view')) document.body.classList.add('view-mode');</script>
 
     <!-- 頂部主導覽列 -->
     <div class="top-nav">
@@ -1428,7 +1430,9 @@
                 exportTab.setAttribute('onclick', 'startPDFExport()');
                 exportTab.lastChild.textContent = ' 下載 PDF';
             }
-            renderReader();
+            // 內容尚未從後端載回前先放佔位提示，避免閃出預設範本；載入完成後由 renderReader() 取代。
+            const reader = document.getElementById('reader');
+            if (reader) reader.innerHTML = '<div style="padding:80px 20px; color:#999; font-size:14px;">社刊載入中…</div>';
         }
 
         // 初始化
@@ -1437,9 +1441,10 @@
             renderLayoutSelector();
             renderCanvas();
             if (FORCE_VIEW) {
-                // 社員唯讀模式：先向後端取主委發布的最新社刊內容，再排版呈現。
-                await loadBulletinContent();
+                // 社員唯讀模式：先立刻切到閱覽外觀（隱藏編輯器），再向後端取最新社刊內容排版呈現。
                 enterViewMode();
+                await loadBulletinContent();
+                renderReader();
             }
         })();
     </script>
