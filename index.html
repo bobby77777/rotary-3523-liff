@@ -849,12 +849,13 @@ const clubsData = [
     { id: 10, area: "第三分區", name: "台北忠孝扶輪社", charterYear: 1996, registered: 13, paid: 11, attended: 5 }
 ];
 
+// 地區活動的 PDF 走 Google Drive：把上傳後的分享連結填進 pdf_url，留空則顯示「PDF準備中」。
 const districtEvents = [
-    { id: 102, date: "2025-05-25", displayDate: "2025-05-25", weekday: "星期日", title: "DTTS 地區團隊訓練研討會", location: "漢來飯店", chair: "王維宏", time: "13:00-17:00", type: "訓練研討" },
-    { id: 104, date: "2025-08-24", displayDate: "2025-08-24", weekday: "星期日", title: "DTA 地區訓練講習會", location: "大直典華", chair: "蔡圻", time: "10:00-16:30", type: "訓練研討" },
-    { id: 107, date: "2026-09-15", displayDate: "2026-09-15", weekday: "星期二", title: "地區青少年交換(RYE)講習會", location: "台北福華大飯店", chair: "陳俊宇", time: "10:00-15:00", type: "講習培訓" },
-    { id: 106, date: "2026-10-14", displayDate: "2026-10-14", weekday: "星期三", title: "總監盃高爾夫球比賽", location: "老淡水高爾夫球場", chair: "林星煌", time: "整天", type: "地區運動" },
-    { id: 109, date: "2026-12-26", displayDate: "2026-12-26~27", weekday: "星期六、日", title: "地區年會", location: "圓山飯店", chair: "王欽秉", time: "整天", type: "地區年會" }
+    { id: 102, date: "2025-05-25", displayDate: "2025-05-25", weekday: "星期日", title: "DTTS 地區團隊訓練研討會", location: "漢來飯店", chair: "王維宏", time: "13:00-17:00", type: "訓練研討", pdf_url: "" },
+    { id: 104, date: "2025-08-24", displayDate: "2025-08-24", weekday: "星期日", title: "DTA 地區訓練講習會", location: "大直典華", chair: "蔡圻", time: "10:00-16:30", type: "訓練研討", pdf_url: "" },
+    { id: 107, date: "2026-09-15", displayDate: "2026-09-15", weekday: "星期二", title: "地區青少年交換(RYE)講習會", location: "台北福華大飯店", chair: "陳俊宇", time: "10:00-15:00", type: "講習培訓", pdf_url: "" },
+    { id: 106, date: "2026-10-14", displayDate: "2026-10-14", weekday: "星期三", title: "總監盃高爾夫球比賽", location: "老淡水高爾夫球場", chair: "林星煌", time: "整天", type: "地區運動", pdf_url: "" },
+    { id: 109, date: "2026-12-26", displayDate: "2026-12-26~27", weekday: "星期六、日", title: "地區年會", location: "圓山飯店", chair: "王欽秉", time: "整天", type: "地區年會", pdf_url: "" }
 ];
 
 const golfPlayers = [
@@ -1036,8 +1037,9 @@ function getActiveEventsData() {
         return x.toISOString().slice(0, 10);
     };
     return [
+        // 非例會活動用 pdf_url 掛上傳到 Google Drive 的 PDF 分享連結；沒填則顯示「PDF準備中」。
         { id: 9001, date: iso(9),  displayDate: iso(9),  weekday:"", title:`${cn} 第 1234 次例會 · 專題演講`, location:"本社例會餐廳", chair:"本社社長",     time:"12:00-14:00", type:"社內例會", fee:"NT$300" },
-        { id: 9002, date: iso(24), displayDate: iso(24), weekday:"", title:`${cn} 秋季國內旅遊`,              location:"宜蘭礁溪",     chair:"本社旅遊主委", time:"整天",        type:"社內旅遊", fee:"NT$2,800" },
+        { id: 9002, date: iso(24), displayDate: iso(24), weekday:"", title:`${cn} 秋季國內旅遊`,              location:"宜蘭礁溪",     chair:"本社旅遊主委", time:"整天",        type:"社內旅遊", fee:"NT$2,800", pdf_url:"" },
         { id: 9003, date: iso(40), displayDate: iso(40), weekday:"", title:`${cn} 高球月例賽`,                location:"美麗華高爾夫", chair:"本社高球主委", time:"06:00-14:00", type:"社內高球", fee:"NT$1,800" }
     ];
 }
@@ -2196,9 +2198,7 @@ function clickMenuItem(itemName, key) {
                         <button onclick="selectEvent(${ev.id})" class="flex-1 bg-blue-600 text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1 btn-3d btn-3d-primary">
                             <i class="fa-solid fa-hand-pointer"></i> 帶入首頁查看與報名
                         </button>
-                        <button onclick="event.stopPropagation(); openBulletinPdf()" class="bg-red-600 text-white font-bold py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center gap-1 btn-3d btn-3d-danger">
-                            <i class="fa-solid fa-file-pdf"></i> PDF
-                        </button>
+                        ${eventPdfButtonHTML(ev)}
                     </div>
                 </div>`;
             });
@@ -2277,12 +2277,50 @@ async function clickEbook(name) {
     setTimeout(() => addChatMessage("bot", `📖 《${name}》電子書建置中，上線後即可於此線上翻閱。`), 400);
 }
 
-// 行事曆例會卡的 PDF 鈕：開啟主委發布的最新社刊（唯讀線上版 bulletin.html?view=1）。
+// 行事曆活動卡的 PDF 鈕路由：
+//  ・例會   → 開啟本社最新社刊（openBulletinPdf）。
+//  ・其他活動 → 開啟該活動上傳到 Google Drive 的 PDF（事件的 pdf_url 欄位）。
+//  ・非例會且尚未附上 pdf_url → 顯示停用的「PDF準備中」。
+function isRegularMeeting(ev) {
+    // 只有「本社例會」連到社刊；地區活動（含地區月例會）一律走各自上傳到 Drive 的 PDF。
+    return systemScope !== 'district' && !!(ev && ev.type && ev.type.includes('例會'));
+}
+
+function eventPdfButtonHTML(ev) {
+    const base = 'font-bold py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center gap-1';
+    if (isRegularMeeting(ev)) {
+        return `<button onclick="event.stopPropagation(); openBulletinPdf()" class="bg-red-600 text-white ${base} btn-3d btn-3d-danger">
+                    <i class="fa-solid fa-file-pdf"></i> PDF
+                </button>`;
+    }
+    if (ev && ev.pdf_url) {
+        return `<button onclick="event.stopPropagation(); openEventPdf(${ev.id})" class="bg-red-600 text-white ${base} btn-3d btn-3d-danger">
+                    <i class="fa-solid fa-file-pdf"></i> PDF
+                </button>`;
+    }
+    return `<button disabled class="bg-gray-300 text-gray-400 ${base} cursor-not-allowed">
+                <i class="fa-solid fa-file-pdf"></i> PDF準備中
+            </button>`;
+}
+
+// 例會的 PDF：開啟主委發布的最新社刊（唯讀線上版 bulletin.html?view=1）。
 // 該頁會向後端載入主委發布的內容並排版呈現，社員可直接閱覽，或按「下載 PDF」用瀏覽器
 // 原生列印引擎另存成文字可選取的向量 PDF。
 function openBulletinPdf() {
     const url = new URL('bulletin.html?view=1', location.href).href;
     // external:true 走裝置的預設瀏覽器(Safari/Chrome)，其「列印→另存為 PDF」比 LINE 內建瀏覽器可靠。
+    if (liff.isInClient()) liff.openWindow({ url, external: true });
+    else window.open(url, '_blank');
+}
+
+// 其他活動的 PDF：以事件 id 查回 pdf_url（Google Drive 分享連結）後開啟。用 id 查表而非把
+// 網址塞進 onclick 字串，避免連結內含引號時破壞屬性。
+function openEventPdf(id) {
+    // 涵蓋即時資料與桌機/離線的預設樣本，兩處都找一遍才不會漏。
+    const pool = [...getActiveEventsData(), ...getAllCombinedEvents()];
+    const ev = pool.find(e => e.id === id);
+    const url = ev && ev.pdf_url;
+    if (!url) { showAlert('尚無 PDF', '此活動的 PDF 尚未上傳。'); return; }
     if (liff.isInClient()) liff.openWindow({ url, external: true });
     else window.open(url, '_blank');
 }
