@@ -2342,8 +2342,9 @@ async function clickEbook(name) {
         } else {
             readOnly = false;
         }
-        // 進編輯器時把主委 userId 帶給 bulletin.html，讓它按「產生 PDF」時能發布社刊。
-        const params = readOnly ? '?view=1'
+        // 社刊分社：唯讀者帶自己的社 (?club=) 讀該社社刊；主委帶 uid，發布時後端依 uid 判定社別。
+        const clubQ = myClubName ? '&club=' + encodeURIComponent(myClubName) : '';
+        const params = readOnly ? ('?view=1' + clubQ)
             : (lineProfile?.userId ? '?uid=' + encodeURIComponent(lineProfile.userId) : '');
         const url = new URL(page + params, location.href).href;
         if (liff.isInClient()) liff.openWindow({ url, external: false });
@@ -2383,7 +2384,9 @@ function eventPdfButtonHTML(ev) {
 // 該頁會向後端載入主委發布的內容並排版呈現，社員可直接閱覽，或按「下載 PDF」用瀏覽器
 // 原生列印引擎另存成文字可選取的向量 PDF。
 function openBulletinPdf() {
-    const url = new URL('bulletin.html?view=1', location.href).href;
+    // 社刊分社：帶上讀者所屬的社，開啟該社的社刊。
+    const clubQ = myClubName ? '&club=' + encodeURIComponent(myClubName) : '';
+    const url = new URL('bulletin.html?view=1' + clubQ, location.href).href;
     // external:true 走裝置的預設瀏覽器(Safari/Chrome)，其「列印→另存為 PDF」比 LINE 內建瀏覽器可靠。
     if (liff.isInClient()) liff.openWindow({ url, external: true });
     else window.open(url, '_blank');

@@ -1349,6 +1349,9 @@
         // 交給後端驗證是否為白名單主委。
         const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
         const EDITOR_UID = new URLSearchParams(location.search).get('uid') || '';
+        // 社刊分社：開啟者（index.html）以 ?club= 帶入讀者所屬的社，載入該社的社刊。
+        // 主委發布時社別由後端依 uid 判定，不靠這個參數。
+        const CLUB = new URLSearchParams(location.search).get('club') || '';
 
         // 把主委編輯好的「社刊內容」序列化成 JSON：四頁成品 HTML + 品牌色。
         // 存的是內容本身（不是點陣 PDF），社員載入後即可線上閱覽，並自行列印成向量 PDF。
@@ -1393,8 +1396,9 @@
         // 社員唯讀模式：載入主委發布的最新社刊內容。失敗時 loadedPages 維持 null，退回預設範本。
         async function loadBulletinContent() {
             try {
-                const res = await fetch(API_BASE + '/bulletin/content', {
-                    headers: { 'ngrok-skip-browser-warning': '1' },
+                const q = CLUB ? '?club=' + encodeURIComponent(CLUB) : '';
+                const res = await fetch(API_BASE + '/bulletin/content' + q, {
+                    headers: { 'ngrok-skip-browser-warning': '1', 'X-Line-UserId': EDITOR_UID },
                 });
                 if (!res.ok) return;
                 applyBulletinContent(await res.json());
