@@ -1332,10 +1332,13 @@ async def bulletin_can_edit(request: Request):
 @app.post("/bulletin/content")
 async def publish_bulletin_content(request: Request):
     """社刊主委按『產生 PDF』時發布成品內容（四頁 HTML + 品牌色，JSON）。
-    社員之後 GET /bulletin/content 取得此版，線上閱覽並自行列印成向量 PDF。"""
+    社刊分社：以發布者所屬的社（get_user_club）為 key，只發布到自己社的社刊。"""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_bulletin_editor(uid):
         raise HTTPException(status_code=403, detail="Not a bulletin editor")
+    club = db.get_user_club(uid)
+    if not club:
+        raise HTTPException(status_code=400, detail="發布者沒有對應的社別，無法發布社刊")
     raw = (await request.body()).decode("utf-8")
     if not raw.strip():
         raise HTTPException(status_code=400, detail="Empty content body")
@@ -1343,14 +1346,18 @@ async def publish_bulletin_content(request: Request):
         json.loads(raw)  # 僅驗證為合法 JSON，實際原文照存（內含 base64 圖片）
     except ValueError:
         raise HTTPException(status_code=400, detail="Body is not valid JSON")
-    db.save_bulletin_content(raw)
-    return {"status": "ok"}
+    db.save_bulletin_content(club, raw)
+    return {"status": "ok", "club": club}
 
 
 @app.get("/bulletin/content")
-async def get_bulletin_content():
-    """社員唯讀版載入主委發布的最新社刊內容；尚未發布時回 404，前端退回預設範本。"""
-    raw = db.get_bulletin_content()
+async def get_bulletin_content(request: Request, club: str = ""):
+    """社員唯讀版載入該社最新社刊；社別由 ?club= 帶入，未帶則用呼叫者自己的社。
+    尚未發布時回 404，前端退回預設範本。"""
+    if not club:
+        uid = request.headers.get("X-Line-UserId", "")
+        club = db.get_user_club(uid) if uid else ""
+    raw = db.get_bulletin_content(club) if club else None
     if raw is None:
         raise HTTPException(status_code=404, detail="No bulletin published yet")
     return Response(content=raw, media_type="application/json")

@@ -422,35 +422,44 @@ def list_bulletin_editors() -> list[dict]:
     return query("SELECT line_user_id, name FROM bulletin_editors ORDER BY created_at")
 
 
-# ── Published bulletin content ──────────────────────────────────────────────────
-# The 社刊 is now published as *content* (the four finished pages' HTML + theme),
-# not a rasterised PDF — members load it, view it live, and print their own vector
-# PDF via the browser. Stored as the raw JSON string (payloads embed base64 images,
-# so we keep them verbatim in a TEXT column rather than re-encoding through JSONB).
+# ── Published bulletin content (per club) ────────────────────────────────────────
+# The 社刊 is published as *content* (the four finished pages' HTML + theme), not a
+# rasterised PDF — members load it, view it live, and print their own vector PDF.
+# Stored per club (club_name is the key) so each 社的主委 publishes their own 社刊.
+# Raw JSON string kept verbatim in a TEXT column (payloads embed base64 images).
 def ensure_bulletin_content_table() -> None:
     execute("""
         CREATE TABLE IF NOT EXISTS bulletin_content (
-            id         INT PRIMARY KEY DEFAULT 1,
+            club_name  TEXT,
             data       TEXT NOT NULL,
-            updated_at TIMESTAMPTZ DEFAULT NOW(),
-            CONSTRAINT bulletin_content_singleton CHECK (id = 1)
+            updated_at TIMESTAMPTZ DEFAULT NOW()
         )
     """)
+    # Migrate the old singleton schema (id INT PK, one shared 社刊) to per-club keying.
+    # Idempotent: safe to run every startup whether the table is old, new, or absent.
+    execute("ALTER TABLE bulletin_content ADD COLUMN IF NOT EXISTS club_name TEXT")
+    execute("ALTER TABLE bulletin_content DROP CONSTRAINT IF EXISTS bulletin_content_singleton")
+    execute("UPDATE bulletin_content SET club_name = '' WHERE club_name IS NULL")
+    execute("ALTER TABLE bulletin_content ALTER COLUMN club_name SET DEFAULT ''")
+    execute("ALTER TABLE bulletin_content DROP CONSTRAINT IF EXISTS bulletin_content_pkey")
+    execute("ALTER TABLE bulletin_content DROP COLUMN IF EXISTS id")
+    execute("CREATE UNIQUE INDEX IF NOT EXISTS bulletin_content_club_key "
+            "ON bulletin_content (club_name)")
 
 
-def save_bulletin_content(raw: str) -> None:
+def save_bulletin_content(club_name: str, raw: str) -> None:
     execute(
         """
-        INSERT INTO bulletin_content (id, data, updated_at)
-        VALUES (1, %s, NOW())
-        ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+        INSERT INTO bulletin_content (club_name, data, updated_at)
+        VALUES (%s, %s, NOW())
+        ON CONFLICT (club_name) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
         """,
-        (raw,),
+        (club_name, raw),
     )
 
 
-def get_bulletin_content() -> str | None:
-    rows = query("SELECT data FROM bulletin_content WHERE id = 1")
+def get_bulletin_content(club_name: str) -> str | None:
+    rows = query("SELECT data FROM bulletin_content WHERE club_name = %s", (club_name,))
     if not rows or rows[0]["data"] is None:
         return None
     return rows[0]["data"]
