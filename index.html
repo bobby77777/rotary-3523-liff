@@ -1914,12 +1914,12 @@ function renderAdminMenu() {
     const mini = (onclick, icon, label) => `<button onclick="${onclick}" class="bg-white/10 text-white py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-dark"><i class="fa-solid ${icon}"></i>${label}</button>`;
 
     if (isClub) {
-        c.innerHTML = `<div class="col-span-3 grid grid-cols-2 gap-2 h-full" style="grid-auto-rows:minmax(0,1fr)">
+        c.innerHTML = `<div class="col-span-3 grid grid-cols-2 gap-2 h-full" style="grid-template-rows:1fr 1fr auto">
             ${_adminTile("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率')}
             ${_adminTile('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')}
             ${_adminTile('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區')}
             ${_adminTile('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費')}
-            ${_adminTile('openEventAdminModal()', 'fa-calendar-days', 'bg-indigo-100 text-indigo-600', '行事曆管理')}
+            <button onclick="openEventAdminModal()" class="col-span-2 bg-indigo-600 text-white rounded-xl py-1.5 flex items-center justify-center gap-2 text-[11px] font-bold btn-3d btn-3d-primary"><i class="fa-solid fa-calendar-days"></i> 行事曆管理</button>
         </div>`;
         return;
     }
