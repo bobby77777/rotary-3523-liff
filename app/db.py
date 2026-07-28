@@ -456,6 +456,130 @@ def get_bulletin_content() -> str | None:
     return rows[0]["data"]
 
 
+# ── Events (行事曆) ──────────────────────────────────────────────────────────────
+# Editable event schedule so the 執秘 can maintain the calendar from the admin panel
+# instead of us hardcoding it. scope ∈ {district, club}; club_name '' = shared by all
+# clubs. weekday is derived from the date, so the editor only picks a date.
+_WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+_EVENT_FIELDS = ("scope", "club_name", "date", "title", "location",
+                 "chair", "time", "type", "fee", "pdf_url")
+
+
+def ensure_events_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id         SERIAL PRIMARY KEY,
+            scope      TEXT NOT NULL DEFAULT 'district',
+            club_name  TEXT NOT NULL DEFAULT '',
+            date       DATE,
+            title      TEXT NOT NULL DEFAULT '',
+            location   TEXT NOT NULL DEFAULT '',
+            chair      TEXT NOT NULL DEFAULT '',
+            time       TEXT NOT NULL DEFAULT '',
+            type       TEXT NOT NULL DEFAULT '',
+            fee        TEXT NOT NULL DEFAULT '',
+            pdf_url    TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def events_count() -> int:
+    rows = query("SELECT COUNT(*) AS n FROM events")
+    return rows[0]["n"] if rows else 0
+
+
+def seed_events(rows: list[dict]) -> None:
+    """One-time migration of the previously-hardcoded schedule, preserving ids."""
+    for e in rows:
+        execute(
+            """
+            INSERT INTO events (id, scope, club_name, date, title, location,
+                                chair, time, type, fee, pdf_url)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (e.get("id"), e.get("scope", "district"), e.get("club_name", ""),
+             e.get("date") or None, e.get("title", ""), e.get("location", ""),
+             e.get("chair", ""), e.get("time", ""), e.get("type", ""),
+             e.get("fee", ""), e.get("pdf_url", "")),
+        )
+    # Keep the SERIAL sequence above the highest explicit id we just inserted.
+    execute("SELECT setval(pg_get_serial_sequence('events','id'), "
+            "GREATEST((SELECT MAX(id) FROM events), 1))")
+
+
+def _row_to_event(r: dict) -> dict:
+    d = r.get("date")
+    iso = d.isoformat() if d else ""
+    return {
+        "id": r["id"], "scope": r["scope"], "club_name": r["club_name"],
+        "date": iso, "displayDate": iso,
+        "weekday": _WEEKDAYS[d.weekday()] if d else "",
+        "title": r["title"], "location": r["location"], "chair": r["chair"],
+        "time": r["time"], "type": r["type"], "fee": r["fee"],
+        "pdf_url": r["pdf_url"],
+    }
+
+
+def list_events(scope: str = "", club_name: str = "") -> list[dict]:
+    if scope == "club":
+        rows = query("SELECT * FROM events WHERE scope='club' "
+                     "AND (club_name='' OR club_name=%s) ORDER BY date", (club_name,))
+    elif scope == "district":
+        rows = query("SELECT * FROM events WHERE scope='district' ORDER BY date")
+    else:
+        rows = query("SELECT * FROM events ORDER BY date")
+    return [_row_to_event(r) for r in rows]
+
+
+def get_event(event_id: int) -> dict | None:
+    rows = query("SELECT * FROM events WHERE id = %s", (event_id,))
+    return _row_to_event(rows[0]) if rows else None
+
+
+def create_event(data: dict) -> dict:
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO events (scope, club_name, date, title, location,
+                                    chair, time, type, fee, pdf_url)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                RETURNING *
+                """,
+                (data.get("scope", "district"), data.get("club_name", ""),
+                 data.get("date") or None, data.get("title", ""), data.get("location", ""),
+                 data.get("chair", ""), data.get("time", ""), data.get("type", ""),
+                 data.get("fee", ""), data.get("pdf_url", "")),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return _row_to_event(dict(row))
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def update_event(event_id: int, data: dict) -> dict | None:
+    fields = [f for f in _EVENT_FIELDS if f in data]  # whitelist → safe to interpolate
+    if not fields:
+        return get_event(event_id)
+    sets = ", ".join(f"{f} = %s" for f in fields) + ", updated_at = NOW()"
+    vals = [(data[f] or None) if f == "date" else data[f] for f in fields]
+    vals.append(event_id)
+    execute(f"UPDATE events SET {sets} WHERE id = %s", vals)
+    return get_event(event_id)
+
+
+def delete_event(event_id: int) -> None:
+    execute("DELETE FROM events WHERE id = %s", (event_id,))
+
+
 def ensure_user_state_table() -> None:
     execute("""
         CREATE TABLE IF NOT EXISTS user_state (

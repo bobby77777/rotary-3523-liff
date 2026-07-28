@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from . import db, line_api
+from . import db, event_pdfs, line_api
 from .config import APP_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
 
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +35,10 @@ async def lifespan(app: FastAPI):
     db.ensure_club_dues_table()
     db.ensure_bulletin_editors_table()
     db.ensure_bulletin_content_table()
+    db.ensure_events_table()
+    # First run: migrate the previously-hardcoded schedule into the editable table.
+    if db.events_count() == 0:
+        db.seed_events(list(_EVENT_SCHEDULE) + _club_events("本社"))
     db.ensure_personal_information_columns()
     yield
 
@@ -163,9 +168,9 @@ def _club_events(club_name: str) -> list[dict]:
 
 
 def _events_for_scope(scope: str, club_name: str = "") -> list[dict]:
-    if scope == "club":
-        return _club_events(club_name)
-    return _EVENT_SCHEDULE
+    # Events now live in an editable DB table (seeded from the lists above); the
+    # 執秘 maintains them from the admin panel. All lookups go through here / db.
+    return db.list_events(scope, club_name)
 
 
 def _current_event(user_id: str) -> dict | None:
@@ -182,18 +187,14 @@ def _current_event(user_id: str) -> dict | None:
 
 
 def _lookup_event(user_id: str, ev_id: int) -> dict | None:
-    """Find an event by id across both district schedule and the user's club schedule."""
-    ev = next((e for e in _EVENT_SCHEDULE if e["id"] == ev_id), None)
-    if ev:
-        return ev
-    club_evs = _club_events(db.get_user_club(user_id))
-    return next((e for e in club_evs if e["id"] == ev_id), None)
+    """Find an event by id (ids are unique across district + club schedules)."""
+    return db.get_event(ev_id)
 
 
 # ── Flex Message builders ─────────────────────────────────────────────────────
 
 def _event_sorted(events: list[dict] | None = None) -> list[dict]:
-    src = events if events is not None else _EVENT_SCHEDULE
+    src = events if events is not None else db.list_events()
     today = date.today().isoformat()
     upcoming = sorted([e for e in src if e["date"] >= today], key=lambda e: e["date"])
     past     = sorted([e for e in src if e["date"] <  today], key=lambda e: e["date"], reverse=True)
@@ -425,7 +426,7 @@ def _build_profile_card(user_info: dict | None, reg_count: int) -> dict:
 
 
 def _build_registrations_carousel(registrations: list[dict]) -> dict:
-    ev_map = {e["id"]: e for e in _EVENT_SCHEDULE}
+    ev_map = {e["id"]: e for e in db.list_events()}
     bubbles = []
     for reg in registrations:
         ev = ev_map.get(reg["event_id"])
@@ -809,7 +810,7 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
         if not unpaid:
             line_api.reply_text(reply_token, "✅ 目前沒有待繳費項目。")
         else:
-            ev_map = {e["id"]: e for e in _EVENT_SCHEDULE}
+            ev_map = {e["id"]: e for e in db.list_events()}
             lines = [f"💰 待繳費：{len(unpaid)} 筆\n"]
             for r in unpaid:
                 ev = ev_map.get(r["event_id"])
@@ -910,14 +911,15 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
 
     # ── Calendar (backward-compat) ─────────────────────────────────────────────
     elif action == "calendar":
-        line_api.reply_flex(reply_token, "📅 3523 地區年度行事曆", _build_event_list_carousel())
+        line_api.reply_flex(reply_token, "📅 3523 地區年度行事曆",
+                            _build_event_list_carousel(db.list_events("district")))
 
     elif data.startswith("action=event_detail&id="):
         try:
             ev_id = int(data.split("id=")[1])
         except (ValueError, IndexError):
             ev_id = 0
-        ev = next((e for e in _EVENT_SCHEDULE if e["id"] == ev_id), None)
+        ev = db.get_event(ev_id)
         if ev:
             is_reg = db.get_registration(user_id, ev_id) is not None
             line_api.reply_flex(reply_token, ev["title"], _build_event_detail_bubble(ev, is_reg))
@@ -1226,7 +1228,82 @@ async def events(request: Request, scope: str = ""):
         scope = db.get_user_scope(uid) if uid else "district"
     club = db.get_user_club(uid) if uid else ""
     evs = _events_for_scope(scope, club)
+    # 執秘 上傳到 Drive 資料夾的活動 PDF：有對應檔案就把 pdf_url 指到後端代理串流端點
+    # （GET /events/{id}/pdf）。沒檔案則維持原本的 pdf_url（多半為空 → 前端顯示「PDF準備中」）。
+    pmap = await run_in_threadpool(event_pdfs.event_pdf_map)
+    evs = [{**e, "pdf_url": f"{APP_BASE_URL}/events/{e['id']}/pdf"} if e.get("id") in pmap else e
+           for e in evs]
     return {"status": "ok", "scope": scope, "events": evs}
+
+
+@app.get("/events/{event_id}/pdf")
+async def event_pdf(event_id: int):
+    """代理串流某活動的 PDF：從 Drive 讀出 執秘 上傳的檔案回傳，檔案保持私有，
+    不需逐檔設定共用權限。前端活動卡的 PDF 鈕直接開這個網址。"""
+    file_id = event_pdfs.get_pdf_file_id(event_id)
+    if not file_id:
+        raise HTTPException(status_code=404, detail="No PDF uploaded for this event")
+    data = await run_in_threadpool(event_pdfs.download_pdf, file_id)
+    if data is None:
+        raise HTTPException(status_code=502, detail="Failed to fetch PDF from Drive")
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="event-{event_id}.pdf"',
+            "Cache-Control": "public, max-age=300",
+        },
+    )
+
+
+def _clean_event_payload(data: dict) -> dict:
+    """Keep only editable event fields; drop an invalid scope so a default/existing
+    value stands. Field-level validation stays light — this is an admin-only panel."""
+    out = {k: data[k] for k in db._EVENT_FIELDS if k in data}
+    if out.get("scope") not in ("club", "district"):
+        out.pop("scope", None)
+    return out
+
+
+@app.get("/events/can_edit")
+async def events_can_edit(request: Request):
+    """Whether the caller may edit the calendar — gated by the admin role (執秘 等)."""
+    uid = request.headers.get("X-Line-UserId", "")
+    return {"status": "ok", "can_edit": db.is_admin(uid)}
+
+
+@app.post("/admin/events")
+async def admin_create_event(request: Request):
+    """執秘 從管理面板新增活動。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    data = _clean_event_payload(await request.json())
+    if not data.get("title"):
+        raise HTTPException(status_code=400, detail="活動標題必填")
+    return {"status": "ok", "event": db.create_event(data)}
+
+
+@app.put("/admin/events/{event_id}")
+async def admin_update_event(event_id: int, request: Request):
+    """執秘 從管理面板修改活動。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    ev = db.update_event(event_id, _clean_event_payload(await request.json()))
+    if ev is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return {"status": "ok", "event": ev}
+
+
+@app.delete("/admin/events/{event_id}")
+async def admin_delete_event(event_id: int, request: Request):
+    """執秘 從管理面板刪除活動。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    db.delete_event(event_id)
+    return {"status": "ok"}
 
 
 @app.get("/me")
