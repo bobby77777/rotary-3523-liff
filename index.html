@@ -434,6 +434,80 @@
     </div>
 </div>
 
+<!-- Event (行事曆) Admin Modal (執秘 新增/修改活動) -->
+<div id="modal-event-admin" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <div class="bg-gradient-to-r from-indigo-800 via-indigo-700 to-indigo-800 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-calendar-days text-indigo-200"></i></div>
+                <div><h3 class="font-extrabold text-base">行事曆管理</h3><p class="text-[10px] text-indigo-200">執秘專屬 · 新增／修改活動</p></div>
+            </div>
+            <button onclick="closeModal('modal-event-admin')" class="text-indigo-200 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="overflow-y-auto p-5 flex-1 bg-gray-50 no-scrollbar">
+            <!-- LIST VIEW -->
+            <div id="event-admin-list-view">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex bg-gray-200 rounded-lg p-0.5 text-[11px] font-bold">
+                        <button id="event-admin-tab-club" onclick="setEventAdminScope('club')" class="px-3 py-1 rounded-md">本社</button>
+                        <button id="event-admin-tab-district" onclick="setEventAdminScope('district')" class="px-3 py-1 rounded-md">地區</button>
+                    </div>
+                    <button onclick="openEventForm()" class="bg-indigo-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 btn-3d btn-3d-primary"><i class="fa-solid fa-plus"></i> 新增活動</button>
+                </div>
+                <div id="event-admin-list" class="space-y-2"></div>
+            </div>
+            <!-- FORM VIEW -->
+            <div id="event-admin-form-view" class="hidden space-y-3">
+                <input type="hidden" id="event-form-id">
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 mb-1">範圍</label>
+                    <select id="event-form-scope" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs font-bold shadow-sm">
+                        <option value="club">本社活動</option>
+                        <option value="district">地區活動</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 mb-1">日期</label>
+                    <input type="date" id="event-form-date" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs font-bold shadow-sm">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 mb-1">活動標題 <span class="text-rose-500">*</span></label>
+                    <input id="event-form-title" placeholder="例：第 1234 次例會 · 專題演講" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 mb-1">地點</label>
+                    <input id="event-form-location" placeholder="例：本社例會餐廳" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-1">時間</label>
+                        <input id="event-form-time" placeholder="12:00-14:00" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-1">費用</label>
+                        <input id="event-form-fee" placeholder="NT$300" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-1">類型</label>
+                        <input id="event-form-type" placeholder="社內例會 / 社內旅遊…" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-1">主持／主委</label>
+                        <input id="event-form-chair" placeholder="本社社長" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                    </div>
+                </div>
+                <p class="text-[10px] text-gray-400 leading-relaxed">提示：類型含「例會」的本社活動，PDF 鈕會連到社刊；其他活動的 PDF 由執秘上傳到 Google Drive 資料夾（檔名以活動編號開頭）。</p>
+                <div class="flex gap-2 pt-1">
+                    <button onclick="closeEventForm()" class="flex-1 bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg text-xs">取消</button>
+                    <button onclick="saveEventForm()" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-lg text-xs btn-3d btn-3d-primary">儲存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Club Dues Management Modal (社友社費管理) -->
 <div id="modal-club-dues" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
@@ -1840,11 +1914,12 @@ function renderAdminMenu() {
     const mini = (onclick, icon, label) => `<button onclick="${onclick}" class="bg-white/10 text-white py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-dark"><i class="fa-solid ${icon}"></i>${label}</button>`;
 
     if (isClub) {
-        c.innerHTML = `<div class="col-span-3 grid grid-cols-2 grid-rows-2 gap-2 h-full">
+        c.innerHTML = `<div class="col-span-3 grid grid-cols-2 gap-2 h-full" style="grid-auto-rows:minmax(0,1fr)">
             ${_adminTile("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率')}
             ${_adminTile('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')}
             ${_adminTile('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區')}
             ${_adminTile('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費')}
+            ${_adminTile('openEventAdminModal()', 'fa-calendar-days', 'bg-indigo-100 text-indigo-600', '行事曆管理')}
         </div>`;
         return;
     }
@@ -1872,7 +1947,8 @@ function renderAdminMenu() {
             `<button onclick="openStatisticsModal(event)" class="w-full bg-yellow-500 text-slate-900 py-2 rounded-xl flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-warning">進入看板 <i class="fa-solid fa-chart-line"></i></button>`);
         rightTop = scanner('現場相機');
     }
-    c.innerHTML = left + `<div class="grid grid-rows-2 gap-2">${rightTop}${support}</div>`;
+    const calMini = mini('openEventAdminModal()', 'fa-calendar-days', '行事曆管理');
+    c.innerHTML = left + `<div class="grid grid-rows-3 gap-2">${rightTop}${calMini}${support}</div>`;
 }
 
 // ============================================================
@@ -2323,6 +2399,113 @@ function openEventPdf(id) {
     if (!url) { showAlert('尚無 PDF', '此活動的 PDF 尚未上傳。'); return; }
     if (liff.isInClient()) liff.openWindow({ url, external: true });
     else window.open(url, '_blank');
+}
+
+// ============================================================
+//  EVENT (行事曆) ADMIN — 執秘 新增/修改/刪除活動
+// ============================================================
+let eventAdminScope = 'club';
+let eventAdminCache = {};   // { id: event } for the currently listed scope
+
+function openEventAdminModal() {
+    openModal('modal-event-admin');
+    closeEventForm();                       // always start on the list view
+    setEventAdminScope(eventAdminScope);
+}
+
+function setEventAdminScope(scope) {
+    eventAdminScope = scope;
+    const on = 'px-3 py-1 rounded-md bg-white text-indigo-700 shadow';
+    const off = 'px-3 py-1 rounded-md text-gray-500';
+    document.getElementById('event-admin-tab-club').className = scope === 'club' ? on : off;
+    document.getElementById('event-admin-tab-district').className = scope === 'district' ? on : off;
+    loadEventAdminList();
+}
+
+async function loadEventAdminList() {
+    const box = document.getElementById('event-admin-list');
+    box.innerHTML = '<p class="text-center text-gray-400 text-xs py-6">載入中…</p>';
+    try {
+        const data = await apiFetch('/events?scope=' + eventAdminScope);
+        const evs = (data.events || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        eventAdminCache = {};
+        evs.forEach(ev => { eventAdminCache[ev.id] = ev; });
+        if (!evs.length) {
+            box.innerHTML = '<p class="text-center text-gray-400 text-xs py-6">目前沒有活動，按「新增活動」建立。</p>';
+            return;
+        }
+        box.innerHTML = evs.map(ev => `
+            <div class="bg-white rounded-xl border border-gray-200 p-3 flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <p class="text-xs font-bold text-gray-800 truncate">${ev.title || '(未命名)'}</p>
+                    <p class="text-[10px] text-gray-500 mt-0.5 truncate">${ev.date || '—'}${ev.time ? ' · ' + ev.time : ''}${ev.type ? ' · ' + ev.type : ''}</p>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                    <button onclick="editEventFromList(${ev.id})" class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><i class="fa-solid fa-pen text-xs"></i></button>
+                    <button onclick="deleteEventFromList(${ev.id})" class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center"><i class="fa-solid fa-trash text-xs"></i></button>
+                </div>
+            </div>`).join('');
+    } catch (e) {
+        box.innerHTML = `<p class="text-center text-rose-500 text-xs py-6">載入失敗：${e.message}</p>`;
+    }
+}
+
+function openEventForm(ev) {
+    ev = ev || {};
+    document.getElementById('event-form-id').value = ev.id || '';
+    document.getElementById('event-form-scope').value = ev.scope || eventAdminScope;
+    document.getElementById('event-form-date').value = ev.date || '';
+    document.getElementById('event-form-title').value = ev.title || '';
+    document.getElementById('event-form-location').value = ev.location || '';
+    document.getElementById('event-form-time').value = ev.time || '';
+    document.getElementById('event-form-fee').value = ev.fee || '';
+    document.getElementById('event-form-type').value = ev.type || '';
+    document.getElementById('event-form-chair').value = ev.chair || '';
+    document.getElementById('event-admin-list-view').classList.add('hidden');
+    document.getElementById('event-admin-form-view').classList.remove('hidden');
+}
+
+function editEventFromList(id) { openEventForm(eventAdminCache[id]); }
+
+function closeEventForm() {
+    document.getElementById('event-admin-form-view').classList.add('hidden');
+    document.getElementById('event-admin-list-view').classList.remove('hidden');
+}
+
+async function saveEventForm() {
+    const id = document.getElementById('event-form-id').value;
+    const payload = {
+        scope: document.getElementById('event-form-scope').value,
+        date: document.getElementById('event-form-date').value,
+        title: document.getElementById('event-form-title').value.trim(),
+        location: document.getElementById('event-form-location').value.trim(),
+        time: document.getElementById('event-form-time').value.trim(),
+        fee: document.getElementById('event-form-fee').value.trim(),
+        type: document.getElementById('event-form-type').value.trim(),
+        chair: document.getElementById('event-form-chair').value.trim(),
+    };
+    if (!payload.title) { showAlert('缺少標題', '請輸入活動標題。'); return; }
+    try {
+        if (id) await apiFetch('/admin/events/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+        else await apiFetch('/admin/events', { method: 'POST', body: JSON.stringify(payload) });
+        await loadEvents(payload.scope);    // refresh the app's calendar cache
+        closeEventForm();
+        loadEventAdminList();
+    } catch (e) {
+        showAlert('儲存失敗', e.message);
+    }
+}
+
+async function deleteEventFromList(id) {
+    const ev = eventAdminCache[id];
+    if (!confirm(`確定刪除「${ev && ev.title ? ev.title : '此活動'}」？此動作無法復原。`)) return;
+    try {
+        await apiFetch('/admin/events/' + id, { method: 'DELETE' });
+        await loadEvents(eventAdminScope);
+        loadEventAdminList();
+    } catch (e) {
+        showAlert('刪除失敗', e.message);
+    }
 }
 
 // ============================================================
