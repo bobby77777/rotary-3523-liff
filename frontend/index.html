@@ -701,14 +701,48 @@
         <div class="p-6 flex flex-col space-y-4 bg-slate-50">
             <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-xs text-indigo-800 leading-relaxed shadow-sm">
                 <i class="fa-solid fa-circle-info mr-1"></i>
-                請描述您需要的產業、產品或服務，AI 將自地區 80 社的 LIFF 資料庫中，為您找出最精準的社友與專屬優惠！
+                請描述您需要的產業、產品或服務，系統會從社友的職業名片中，為您找出最相關的社友與專屬優惠！
             </div>
+            <button onclick="openMyBusinessModal()" class="text-[11px] text-indigo-600 font-bold underline text-left self-start"><i class="fa-solid fa-id-card mr-1"></i>填寫 / 編輯我的職業名片（填了才會被媒合到）</button>
             <div>
                 <textarea id="matchmaking-query" rows="3" class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="例如：公司要搬家，需要找辦公室裝潢與水電工程..."></textarea>
             </div>
             <div class="flex gap-2 w-full pt-2">
                 <button onclick="closeModal('modal-matchmaking')" class="w-1/2 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-600 text-sm bg-white hover:bg-gray-50 transition-colors btn-3d btn-3d-white mb-1">取消</button>
                 <button onclick="submitMatchmakingQuery()" class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1 transition-all btn-3d btn-3d-indigo mb-1"><i class="fa-solid fa-magnifying-glass"></i> AI 尋找</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- My Business Card Modal (職業名片，供 AI 產業媒合搜尋) -->
+<div id="modal-my-business" class="fixed inset-0 bg-black/80 backdrop-blur-md z-[60] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+        <div class="px-6 py-4 bg-gradient-to-r from-indigo-800 to-blue-700 flex justify-between items-center text-white">
+            <div class="flex items-center gap-2"><i class="fa-solid fa-id-card text-yellow-300"></i><h3 class="font-bold text-base">我的職業名片</h3></div>
+            <button onclick="closeModal('modal-my-business')" class="text-white/70 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div class="p-6 space-y-3 bg-slate-50">
+            <p class="text-[11px] text-gray-500 leading-relaxed">填寫後，其他社友用「AI 產業媒合」搜尋相關需求時就能找到您。</p>
+            <div>
+                <label class="block text-[10px] font-bold text-gray-500 mb-1">職業分類</label>
+                <input id="biz-industry" placeholder="如：室內裝潢設計、會計師、保險" class="w-full bg-white border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-gray-500 mb-1">公司名稱</label>
+                <input id="biz-company" placeholder="如：綠境室內裝修" class="w-full bg-white border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-gray-500 mb-1">公司簡介</label>
+                <textarea id="biz-intro" rows="3" placeholder="專長、經驗、服務項目…" class="w-full bg-white border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"></textarea>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-gray-500 mb-1">社友專屬優惠（選填）</label>
+                <input id="biz-offer" placeholder="如：出示數位社友卡享 95 折" class="w-full bg-white border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+            </div>
+            <div class="flex gap-2 pt-1">
+                <button onclick="closeModal('modal-my-business')" class="w-1/3 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-xl text-sm border border-gray-200">取消</button>
+                <button onclick="saveMyBusiness()" class="w-2/3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm btn-3d btn-3d-indigo mb-1">儲存名片</button>
             </div>
         </div>
     </div>
@@ -1340,32 +1374,76 @@ function openMatchmakingModal() {
     openModal('modal-matchmaking');
 }
 
-function submitMatchmakingQuery() {
+function _escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+async function submitMatchmakingQuery() {
     const query = document.getElementById('matchmaking-query').value.trim();
     if (!query) {
-        showAlert('請輸入需求', '請告訴 AI 助理您需要尋找什麼產業或服務喔！');
+        showAlert('請輸入需求', '請告訴助理您需要尋找什麼產業或服務喔！');
         return;
     }
     closeModal('modal-matchmaking');
-    addChatMessage("user", `AI 產業媒合：${query}`);
-    setTimeout(() => {
-        addChatMessage("bot", `🤖 <b>AI 助理分析中...</b><br>正在檢索地區內 80 社社友的 LIFF 職業資料庫，尋找符合「${query}」的專業社友...`);
-        setTimeout(() => {
-            let response = `✅ <b>【AI 產業媒合結果】</b><br>`;
-            response += `為您找到高度相關的社友資訊：<br><br>`;
-            response += `<div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg mb-2 shadow-sm">`;
-            response += `<p class="font-bold text-indigo-900 text-sm mb-1"><i class="fa-solid fa-building text-indigo-500"></i> 綠境室內裝修設計</p>`;
-            response += `<p class="text-xs text-gray-700">👤 <b>林建國 社友</b> (台北松青社)</p>`;
-            response += `<p class="text-xs text-gray-700">💼 <b>職業分類：</b>室內裝潢設計</p>`;
-            response += `<p class="text-xs text-gray-700 mt-1">📝 <b>公司簡介：</b><br>20年商辦與住宅設計經驗，自有專業工班，專攻企業總部與高階住宅，品質保證。</p>`;
-            response += `<div class="mt-2 bg-yellow-100 border border-yellow-300 p-1.5 rounded text-yellow-800 text-[10px] font-bold">`;
-            response += `🎁 <b>社友專屬優惠：</b><br>出示 LIFF 數位社友卡，享免初步提案費，總工程款 95 折！`;
-            response += `</div>`;
-            response += `<a href="#" class="mt-2 block text-center bg-white border border-indigo-200 text-indigo-600 py-1.5 rounded-lg shadow-sm text-xs font-bold hover:bg-indigo-100 transition-colors mt-2">瀏覽數位名片</a>`;
-            response += `</div>`;
-            addChatMessage("bot", response);
-        }, 1500);
-    }, 500);
+    addChatMessage("user", `產業媒合：${query}`);
+    addChatMessage("bot", `🤖 <b>分析中...</b><br>正在檢索社友職業名片，尋找符合「${_escHtml(query)}」的專業社友...`);
+    try {
+        const data = await apiFetch('/matchmaking?q=' + encodeURIComponent(query));
+        if (data.status !== 'ok' || !data.count) {
+            addChatMessage("bot", `😅 目前查無符合「${_escHtml(query)}」的社友職業名片。<br><span class="text-[11px] text-gray-500">歡迎社友到「AI 產業媒合 → 填寫我的職業名片」建立資料，讓彼此更容易媒合！</span>`);
+            return;
+        }
+        let html = `✅ <b>【產業媒合結果】</b><br>為您找到 ${data.count} 位相關社友：<br><br>`;
+        html += data.matches.map(m => {
+            const title = _escHtml(m.company || m.industry || '社友');
+            const club = m.club ? ` (${_escHtml(m.club)})` : '';
+            const industry = m.industry ? `<p class="text-xs text-gray-700">💼 <b>職業分類：</b>${_escHtml(m.industry)}</p>` : '';
+            const intro = m.intro ? `<p class="text-xs text-gray-700 mt-1">📝 <b>公司簡介：</b><br>${_escHtml(m.intro)}</p>` : '';
+            const offer = m.offer ? `<div class="mt-2 bg-yellow-100 border border-yellow-300 p-1.5 rounded text-yellow-800 text-[10px] font-bold">🎁 <b>社友專屬優惠：</b><br>${_escHtml(m.offer)}</div>` : '';
+            return `<div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg mb-2 shadow-sm">
+                <p class="font-bold text-indigo-900 text-sm mb-1"><i class="fa-solid fa-building text-indigo-500"></i> ${title}</p>
+                <p class="text-xs text-gray-700">👤 <b>${_escHtml(m.name)}</b>${club}</p>
+                ${industry}${intro}${offer}
+            </div>`;
+        }).join('');
+        addChatMessage("bot", html);
+    } catch (e) {
+        addChatMessage("bot", "⚠️ 產業媒合暫時無法使用，請稍後再試。");
+    }
+}
+
+async function openMyBusinessModal() {
+    ['biz-industry', 'biz-company', 'biz-intro', 'biz-offer'].forEach(id => document.getElementById(id).value = '');
+    openModal('modal-my-business');
+    try {
+        const r = await apiFetch('/me/business');
+        const b = r.business || {};
+        document.getElementById('biz-industry').value = b.industry || '';
+        document.getElementById('biz-company').value = b.company || '';
+        document.getElementById('biz-intro').value = b.intro || '';
+        document.getElementById('biz-offer').value = b.offer || '';
+    } catch (e) { /* none yet */ }
+}
+
+async function saveMyBusiness() {
+    const payload = {
+        industry: document.getElementById('biz-industry').value.trim(),
+        company: document.getElementById('biz-company').value.trim(),
+        intro: document.getElementById('biz-intro').value.trim(),
+        offer: document.getElementById('biz-offer').value.trim(),
+    };
+    if (!payload.industry && !payload.company) {
+        showAlert('請填寫', '至少填「職業分類」或「公司名稱」，才能被媒合到。');
+        return;
+    }
+    try {
+        const r = await apiFetch('/me/business', { method: 'POST', body: JSON.stringify(payload) });
+        if (r.status !== 'ok') { showAlert('儲存失敗', r.message || '請稍後再試。'); return; }
+        closeModal('modal-my-business');
+        addChatMessage("system", "✅ 職業名片已儲存，其他社友即可透過「AI 產業媒合」找到您。");
+    } catch (e) {
+        showAlert('儲存失敗', e.message);
+    }
 }
 
 // ---- LBS 定位防弊地圖 ----
