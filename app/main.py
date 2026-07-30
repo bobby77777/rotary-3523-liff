@@ -15,7 +15,8 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from . import db, event_pdfs, line_api
-from .config import APP_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
+from urllib.parse import quote
+from .config import APP_BASE_URL, BULLETIN_BASE_URL, CALENDAR_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -927,10 +928,49 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
 
 # ── Text message state machine ────────────────────────────────────────────────
 
+def _reply_bulletin_link(reply_token: str, user_id: str) -> None:
+    """Reply with a link to bulletin.html. 社刊主委 gets the editor link (?uid=) —
+    best opened in a computer browser to edit — other 社員 get the read-only view."""
+    if db.is_bulletin_editor(user_id):
+        url = f"{BULLETIN_BASE_URL}?uid={user_id}"
+        text = ("📖 社刊編輯器\n建議用電腦瀏覽器打開下面連結，滑鼠鍵盤編輯最方便；"
+                "完成後按「產生 PDF」即會發布為貴社最新社刊。\n\n" + url)
+        label = "✏️ 編輯社刊"
+    else:
+        club = db.get_user_club(user_id)
+        url = f"{BULLETIN_BASE_URL}?view=1" + (f"&club={quote(club)}" if club else "")
+        text = "📖 本社最新社刊\n點開即可線上閱覽並下載 PDF。"
+        label = "📖 閱覽社刊"
+    items = [{"type": "action", "action": {"type": "uri", "label": label, "uri": url}}]
+    line_api.reply_text_with_quick_reply(reply_token, text, items)
+
+
+def _reply_calendar_link(reply_token: str, user_id: str) -> None:
+    """Reply with a link to the calendar + agenda editor (calendar.html). 管理員 gets
+    the editor link (?uid=) — best opened in a computer browser — others read-only."""
+    if db.is_admin(user_id):
+        url = f"{CALENDAR_BASE_URL}?uid={user_id}"
+        text = ("🗓️ 行事曆與議程編輯器\n建議用電腦瀏覽器打開下面連結，可新增/修改活動、"
+                "編排議程並匯出議程 PDF。\n\n" + url)
+        label = "✏️ 編輯行事曆"
+    else:
+        url = CALENDAR_BASE_URL
+        text = "🗓️ 年度行事曆\n點開即可檢視近期活動與議程。"
+        label = "🗓️ 檢視行事曆"
+    items = [{"type": "action", "action": {"type": "uri", "label": label, "uri": url}}]
+    line_api.reply_text_with_quick_reply(reply_token, text, items)
+
+
 def _handle_text(reply_token: str, user_id: str, text: str) -> None:
     stripped = text.strip()
     if stripped in ("得獎查詢", "得獎", "查獎", "獎項", "查詢得獎"):
         _handle_postback(reply_token, user_id, "action=award_search")
+        return
+    if stripped in ("社刊", "社刊編輯", "編輯社刊", "每週社刊", "週報"):
+        _reply_bulletin_link(reply_token, user_id)
+        return
+    if stripped in ("行事曆", "行事曆管理", "編輯行事曆", "議程", "活動議程"):
+        _reply_calendar_link(reply_token, user_id)
         return
 
     state = db.get_user_state(user_id)
@@ -1259,7 +1299,7 @@ async def event_pdf(event_id: int):
 def _clean_event_payload(data: dict) -> dict:
     """Keep only editable event fields; drop an invalid scope so a default/existing
     value stands. Field-level validation stays light — this is an admin-only panel."""
-    out = {k: data[k] for k in db._EVENT_FIELDS if k in data}
+    out = {k: data[k] for k in db._EVENT_FIELDS + ("agenda",) if k in data}
     if out.get("scope") not in ("club", "district"):
         out.pop("scope", None)
     return out

@@ -470,8 +470,9 @@ def get_bulletin_content(club_name: str) -> str | None:
 # instead of us hardcoding it. scope ∈ {district, club}; club_name '' = shared by all
 # clubs. weekday is derived from the date, so the editor only picks a date.
 _WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+# Simple scalar text/date fields (agenda is handled separately as a JSON string).
 _EVENT_FIELDS = ("scope", "club_name", "date", "title", "location",
-                 "chair", "time", "type", "fee", "pdf_url")
+                 "chair", "time", "type", "fee", "pdf_url", "start_time", "mc")
 
 
 def ensure_events_table() -> None:
@@ -492,6 +493,10 @@ def ensure_events_table() -> None:
             updated_at TIMESTAMPTZ DEFAULT NOW()
         )
     """)
+    # 議程編輯器（calendar.html）需要的欄位：開始時間、司儀、以及議程流程表(JSON 字串)。
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS start_time TEXT NOT NULL DEFAULT ''")
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS mc TEXT NOT NULL DEFAULT ''")
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS agenda TEXT NOT NULL DEFAULT '[]'")
 
 
 def events_count() -> int:
@@ -522,6 +527,10 @@ def seed_events(rows: list[dict]) -> None:
 def _row_to_event(r: dict) -> dict:
     d = r.get("date")
     iso = d.isoformat() if d else ""
+    try:
+        agenda = json.loads(r.get("agenda") or "[]")
+    except (ValueError, TypeError):
+        agenda = []
     return {
         "id": r["id"], "scope": r["scope"], "club_name": r["club_name"],
         "date": iso, "displayDate": iso,
@@ -529,6 +538,9 @@ def _row_to_event(r: dict) -> dict:
         "title": r["title"], "location": r["location"], "chair": r["chair"],
         "time": r["time"], "type": r["type"], "fee": r["fee"],
         "pdf_url": r["pdf_url"],
+        "start_time": r.get("start_time") or "",
+        "mc": r.get("mc") or "",
+        "agenda": agenda,
     }
 
 
@@ -555,14 +567,17 @@ def create_event(data: dict) -> dict:
             cur.execute(
                 """
                 INSERT INTO events (scope, club_name, date, title, location,
-                                    chair, time, type, fee, pdf_url)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                    chair, time, type, fee, pdf_url,
+                                    start_time, mc, agenda)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
                 """,
                 (data.get("scope", "district"), data.get("club_name", ""),
                  data.get("date") or None, data.get("title", ""), data.get("location", ""),
                  data.get("chair", ""), data.get("time", ""), data.get("type", ""),
-                 data.get("fee", ""), data.get("pdf_url", "")),
+                 data.get("fee", ""), data.get("pdf_url", ""),
+                 data.get("start_time", ""), data.get("mc", ""),
+                 json.dumps(data.get("agenda") or [])),
             )
             row = cur.fetchone()
         conn.commit()
@@ -576,12 +591,15 @@ def create_event(data: dict) -> dict:
 
 def update_event(event_id: int, data: dict) -> dict | None:
     fields = [f for f in _EVENT_FIELDS if f in data]  # whitelist → safe to interpolate
-    if not fields:
-        return get_event(event_id)
-    sets = ", ".join(f"{f} = %s" for f in fields) + ", updated_at = NOW()"
+    sets = [f"{f} = %s" for f in fields]
     vals = [(data[f] or None) if f == "date" else data[f] for f in fields]
+    if "agenda" in data:  # stored as a JSON string
+        sets.append("agenda = %s")
+        vals.append(json.dumps(data["agenda"] or []))
+    if not sets:
+        return get_event(event_id)
     vals.append(event_id)
-    execute(f"UPDATE events SET {sets} WHERE id = %s", vals)
+    execute(f"UPDATE events SET {', '.join(sets)}, updated_at = NOW() WHERE id = %s", vals)
     return get_event(event_id)
 
 

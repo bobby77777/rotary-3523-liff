@@ -15,3 +15,11 @@ GOOGLE_DRIVE_FOLDER_ID    = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
 EVENT_PDF_FOLDER_ID       = os.environ.get("EVENT_PDF_FOLDER_ID", "")
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
 LIFF_URL     = os.environ.get("LIFF_URL", "https://liff.line.me/2010535285-kh8rJmpS")
+# Public URL of the bulletin editor/viewer (GitHub Pages). Used for the LINE "社刊"
+# keyword reply so 主委 can open it in a computer browser to edit.
+BULLETIN_BASE_URL = os.environ.get(
+    "BULLETIN_BASE_URL", "https://bobby77777.github.io/rotary-3523-liff/bulletin.html")
+# Public URL of the calendar + agenda editor (GitHub Pages). Used for the LINE
+# "行事曆" keyword reply so 執秘/管理員 can open it in a computer browser to edit.
+CALENDAR_BASE_URL = os.environ.get(
+    "CALENDAR_BASE_URL", "https://bobby77777.github.io/rotary-3523-liff/calendar.html")
