@@ -115,7 +115,7 @@
                 <i class="fa-solid fa-book-open mr-0.5"></i>刊物
             </button>
             <button onclick="switchTab('admin')" id="tab-admin" class="py-3 text-gray-500 relative flex items-center justify-center gap-0.5 transition-all">
-                <i class="fa-solid fa-star text-yellow-500"></i>主委
+                <i class="fa-solid fa-star text-yellow-500"></i><span id="tab-admin-label">主委</span>
             </button>
         </div>
 
@@ -1040,8 +1040,15 @@ async function apiFetch(path, options = {}) {
 // ============================================================
 //  APP INIT
 // ============================================================
+// 後台分頁名稱：社內顯示「社長」、地區顯示「主委」。
+function updateAdminTabLabel() {
+    const el = document.getElementById('tab-admin-label');
+    if (el) el.textContent = systemScope === 'club' ? '社長' : '主委';
+}
+
 function initApp() {
     currentActiveEvent = findClosestUpcomingEvent();
+    updateAdminTabLabel();
     updateBanner();
     renderEbooksMenu();
     renderProfileMenu();
@@ -1057,6 +1064,7 @@ function initApp() {
 async function toggleSystemScope() {
     systemScope = (systemScope === 'district') ? 'club' : 'district';
     const clubLabel = myClubName || '本社';
+    updateAdminTabLabel();
     await loadEvents(systemScope);
 
     if (systemScope === 'district') {
@@ -2887,6 +2895,7 @@ function showAlert(title, msg) {
 // ============================================================
 // Re-render scope-dependent menus after a deep link changes systemScope.
 async function applyScopeTheme() {
+    updateAdminTabLabel();
     await loadEvents(systemScope);
     currentActiveEvent = findClosestUpcomingEvent();
     updateBanner();
