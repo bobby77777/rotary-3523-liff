@@ -2819,30 +2819,28 @@ function executeGroupSwap() {
     addChatMessage("bot", `✅ <b>即時調組成功</b><br>${document.getElementById('swap-player-a').value} ↔ ${document.getElementById('swap-player-b').value} 已完成調換。`);
 }
 
-// 新新貝利亞抽洞：主委隨機抽出 6 個隱藏洞（前9/後9 各 3 個）。Mock，尚未串接後端淨桿重算。
+// 新貝利亞抽洞：主委隨機抽出 6 個隱藏洞（前9/後9 各 3 個），存到後端並用於淨桿重算。
 function openDrawHolesModal() {
-    if (isNewNewPeoriaDrawn) {
-        showAlert('已完成抽洞', `系統已抽出隱藏洞：\nH${drawnHiddenHoles.map(h => h + 1).join('、H')}`);
-        return;
-    }
     openModal('modal-draw-holes');
 }
 
-function executeDrawHoles() {
-    const pick = (base) => {
-        const out = [];
-        while (out.length < 3) {
-            const r = Math.floor(Math.random() * 9) + base;
-            if (!out.includes(r)) out.push(r);
-        }
-        return out;
-    };
-    drawnHiddenHoles = [...pick(0), ...pick(9)].sort((a, b) => a - b);
-    isNewNewPeoriaDrawn = true;
-    closeModal('modal-draw-holes');
-    const holes = drawnHiddenHoles.map(h => h + 1).join('、H');
-    addChatMessage('bot', `🎲 <b>【新新貝利亞抽洞完成】</b><br><br>系統已隨機抽出 6 個隱藏洞：<br><b class="text-emerald-600">H${holes}</b><br><br>👉 隱藏洞已歸檔，主委可於賽事成績看板檢視淨桿排行。`);
-    sendLineMessage(`🎲 新新貝利亞抽洞完成，隱藏洞：H${holes}`);
+async function executeDrawHoles() {
+    const evId = currentActiveEvent?.id;
+    try {
+        const data = await apiFetch('/golf/draw_holes', {
+            method: 'POST', body: JSON.stringify({ event_id: evId }),
+        });
+        if (data.status !== 'ok') { showAlert('抽洞失敗', data.message || '找不到對應賽事，請稍後再試。'); return; }
+        drawnHiddenHoles = data.holes;          // 0-based
+        isNewNewPeoriaDrawn = true;
+        closeModal('modal-draw-holes');
+        const holes = data.holes.map(h => h + 1).join('、H');
+        const note = data.already ? '（先前已抽出，維持不變）' : '';
+        addChatMessage('bot', `🎲 <b>【新貝利亞抽洞完成】</b>${note}<br><br>隱藏洞：<br><b class="text-emerald-600">H${holes}</b><br><br>👉 淨桿排行已依此 6 洞重新結算，主委可於賽事成績看板檢視。`);
+        sendLineMessage(`🎲 新貝利亞抽洞完成，隱藏洞：H${holes}`);
+    } catch (e) {
+        showAlert('抽洞失敗', e.message);
+    }
 }
 
 // 待繳費明細：從統計看板的「待繳費」KPI 點入，列出各社欠費筆數並可一鍵催繳。
