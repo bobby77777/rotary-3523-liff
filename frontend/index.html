@@ -2522,15 +2522,42 @@ async function deleteEventFromList(id) {
 // ============================================================
 //  AWARDS
 // ============================================================
-function clickMyAwards() {
-    addChatMessage("user", "我得什麼獎");
-    setTimeout(() => addChatMessage("bot", `🏆 <b>個人得獎查詢</b><br>恭喜 <b>${lineProfile?.displayName || '社友'}</b>！<br>1. 保羅哈里斯捐獻者 (PHF)<br>2. 尊會會員貢獻獎<br><br>👉 請於 14:30 前往舞台左側受獎人報到區準備！`), 500);
+function _awardLine(a) {
+    const who = a['姓名'] || a['Nickname'] || '';
+    const slot = a['頒獎時段'] ? `　<span class="text-gray-400">${a['頒獎時段']}</span>` : '';
+    const note = a['備註'] ? `<br><span class="text-[11px] text-gray-400 ml-4">${a['備註']}</span>` : '';
+    return `• <b>${a['獎項'] || '—'}</b>${who ? '　' + who : ''}${slot}${note}`;
 }
 
-function clickClubAwards() {
+async function clickMyAwards() {
+    addChatMessage("user", "我得什麼獎");
+    try {
+        const data = await apiFetch('/awards/me');
+        if (data.status !== 'ok' || !data.count) {
+            addChatMessage("bot", `🏆 <b>個人得獎查詢</b><br>${lineProfile?.displayName || '社友'} 您好，目前查無您的得獎紀錄。<br><small class="text-gray-400">若您剛更新資料，請稍後再查，或確認個人資料的姓名 / Nickname 與頒獎名單一致。</small>`);
+            return;
+        }
+        const list = data.awards.map(_awardLine).join('<br>');
+        addChatMessage("bot", `🏆 <b>個人得獎查詢</b><br>恭喜 <b>${data.name || lineProfile?.displayName || '社友'}</b>，共 ${data.count} 項：<br><br>${list}`);
+    } catch (e) {
+        addChatMessage("bot", "⚠️ 得獎查詢暫時無法使用，請稍後再試。");
+    }
+}
+
+async function clickClubAwards() {
     addChatMessage("user", "社內得獎名單");
-    const myClub = clubsData.find(c => c.id === currentUserClubId);
-    setTimeout(() => addChatMessage("bot", `🏅 <b>【${myClub?.name || '本社'} - 總得獎名單】</b><br>共 5 位社友獲獎。詳細名單已同步發送至社內群組。`), 500);
+    try {
+        const data = await apiFetch('/awards/club');
+        const clubName = data.club || myClubName || '本社';
+        if (data.status !== 'ok' || !data.count) {
+            addChatMessage("bot", `🏅 <b>【${clubName} - 得獎名單】</b><br>目前查無得獎紀錄。`);
+            return;
+        }
+        const list = data.awards.map(_awardLine).join('<br>');
+        addChatMessage("bot", `🏅 <b>【${clubName} - 得獎名單】</b><br>共 ${data.count} 項：<br><br>${list}`);
+    } catch (e) {
+        addChatMessage("bot", "⚠️ 得獎查詢暫時無法使用，請稍後再試。");
+    }
 }
 
 // ============================================================
