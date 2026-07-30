@@ -1422,57 +1422,72 @@ function runAnnualLbsGate(onPass) {
 }
 
 // ---- 社務對帳與請款系統 (finance + Gmail) ----
-function openClubFinanceModal() {
-    document.getElementById('finance-rent').value = 20000;
-    document.getElementById('finance-salary').value = 35000;
+let financeMembers = [];   // 真實社員名單（代墊人下拉用）
+let financeMonth = '';
+
+async function openClubFinanceModal() {
+    financeMonth = new Date().toISOString().slice(0, 7);   // YYYY-MM
     document.querySelectorAll('.fixed-item-row').forEach(row => row.remove());
     document.getElementById('finance-advances-container').innerHTML = `<div class="text-xs text-gray-400 italic text-center py-2" id="no-advance-msg">本月尚無任何社友代墊款</div>`;
-    calcFinanceTotal();
+    document.getElementById('finance-rent').value = 20000;
+    document.getElementById('finance-salary').value = 35000;
     openModal('modal-club-finance');
+
+    try {
+        const m = await apiFetch('/admin/club_members?club=' + encodeURIComponent(myClubName || ''));
+        financeMembers = (m.members || []).map(x => x.full_name || x.nickname).filter(Boolean);
+    } catch (e) { financeMembers = []; }
+    try {
+        const r = await apiFetch('/club/finance?month=' + financeMonth);
+        if (r.status === 'ok' && r.data) {
+            document.getElementById('finance-rent').value = r.data.rent ?? 20000;
+            document.getElementById('finance-salary').value = r.data.salary ?? 35000;
+            (r.data.fixed || []).forEach(f => addFinanceFixedRow(f.name, f.amount));
+            (r.data.advances || []).forEach(a => addFinanceAdvanceRow(a.member, a.detail, a.amount));
+        }
+    } catch (e) { /* none saved yet → defaults */ }
+    calcFinanceTotal();
 }
 
-function addFinanceFixedRow() {
+function addFinanceFixedRow(name = '', amount = '') {
+    const esc = s => String(s).replace(/"/g, '&quot;');
     const container = document.getElementById('finance-fixed-container');
     const div = document.createElement('div');
     div.className = "flex justify-between items-center gap-2 fixed-item-row mt-2 pt-2 border-t border-dashed border-gray-200";
     div.innerHTML = `
-        <input type="text" class="fixed-item-name flex-1 bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 px-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="如: 水電費、郵資">
+        <input type="text" class="fixed-item-name flex-1 bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 px-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="如: 水電費、郵資" value="${name ? esc(name) : ''}">
         <div class="relative w-1/3 shrink-0">
             <span class="absolute left-2 top-1.5 text-xs text-gray-400 pointer-events-none">$</span>
-            <input type="number" class="fixed-item-amount w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-5 pr-1 text-sm text-right font-bold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="0" oninput="calcFinanceTotal()" onfocus="this.select()">
+            <input type="number" class="fixed-item-amount w-full bg-white border border-gray-300 text-gray-900 rounded-lg py-1.5 pl-5 pr-1 text-sm text-right font-bold focus:outline-none focus:ring-1 focus:ring-green-500 transition-all" placeholder="0" value="${amount || ''}" oninput="calcFinanceTotal()" onfocus="this.select()">
         </div>
         <button onclick="this.parentElement.remove(); calcFinanceTotal();" class="text-red-400 hover:text-red-600 transition-colors p-1"><i class="fa-solid fa-trash-can"></i></button>
     `;
     container.appendChild(div);
 }
 
-function addFinanceAdvanceRow(memberId = null, eventName = '', amount = '') {
+function addFinanceAdvanceRow(member = '', detail = '', amount = '') {
+    const esc = s => String(s).replace(/"/g, '&quot;');
     const noMsg = document.getElementById('no-advance-msg');
     if (noMsg) noMsg.remove();
-    const clubId = currentUserClubId;
-    let optionsHtml = `<option value="m_${clubId}_0" ${memberId === `m_${clubId}_0` ? 'selected' : ''}>王大同 (本人)</option>`;
-    for (let i = 1; i <= 9; i++) {
-        let currentOptionId = `m_${clubId}_${i}`;
-        optionsHtml += `<option value="${currentOptionId}" ${memberId === currentOptionId ? 'selected' : ''}>社友 ${i}</option>`;
-    }
+    const names = financeMembers.slice();
+    if (member && !names.includes(member)) names.unshift(member);
+    let optionsHtml = names.map(n => `<option value="${esc(n)}" ${n === member ? 'selected' : ''}>${n}</option>`).join('');
+    if (!optionsHtml) optionsHtml = `<option value="">（尚無社員資料）</option>`;
     const container = document.getElementById('finance-advances-container');
     const div = document.createElement('div');
     div.className = "advance-row flex flex-col gap-1.5 p-2 bg-emerald-50/50 border border-emerald-100 rounded-lg relative";
-    const gmailBadge = memberId ? `<span class="absolute top-1 left-2 text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 font-bold"><i class="fa-brands fa-google mr-0.5"></i>Gmail 自動解析匯入</span>` : '';
-    const ptClass = memberId ? 'pt-5' : '';
     div.innerHTML = `
-        ${gmailBadge}
         <button onclick="this.parentElement.remove(); calcFinanceTotal();" class="absolute top-1 right-1.5 text-red-400 hover:text-red-600 p-0.5"><i class="fa-solid fa-xmark"></i></button>
-        <div class="flex items-center gap-2 pr-4 ${ptClass}">
+        <div class="flex items-center gap-2 pr-4">
             <span class="text-[10px] font-bold text-gray-500 w-10 shrink-0">代墊人</span>
             <select class="advance-member w-full bg-white border border-gray-300 text-gray-800 rounded py-1 px-1.5 text-xs font-bold focus:ring-1 focus:ring-green-500">${optionsHtml}</select>
         </div>
         <div class="flex items-center gap-2">
             <span class="text-[10px] font-bold text-gray-500 w-10 shrink-0">明細</span>
-            <input type="text" class="advance-event flex-1 bg-white border border-gray-300 rounded py-1 px-1.5 text-xs focus:ring-1 focus:ring-green-500" placeholder="如: 跨社活動報名費" value="${eventName}">
+            <input type="text" class="advance-event flex-1 bg-white border border-gray-300 rounded py-1 px-1.5 text-xs focus:ring-1 focus:ring-green-500" placeholder="如: 跨社活動報名費" value="${detail ? esc(detail) : ''}">
             <div class="relative w-20 shrink-0">
                 <span class="absolute left-1 top-1 text-[10px] text-gray-400">$</span>
-                <input type="number" class="advance-amount w-full bg-white border border-gray-300 text-gray-900 rounded py-1 pl-4 pr-1 text-xs text-right font-bold focus:ring-1 focus:ring-green-500" placeholder="0" oninput="calcFinanceTotal()" value="${amount === 0 ? '' : amount}">
+                <input type="number" class="advance-amount w-full bg-white border border-gray-300 text-gray-900 rounded py-1 pl-4 pr-1 text-xs text-right font-bold focus:ring-1 focus:ring-green-500" placeholder="0" oninput="calcFinanceTotal()" value="${amount || ''}">
             </div>
         </div>
     `;
@@ -1483,9 +1498,9 @@ function addFinanceAdvanceRow(memberId = null, eventName = '', amount = '') {
 function fetchGmailAdvances() {
     addChatMessage("system", "📧 <b>系統同步中：</b><br>正在連接信箱伺服器，運用 AI 解析近期的跨社活動繳費通知信...");
     setTimeout(() => {
-        const clubId = currentUserClubId;
-        addFinanceAdvanceRow(`m_${clubId}_0`, "民生社35週年社慶活動餐費", 2000);
-        addChatMessage("bot", `✅ <b>【信件解析完成】</b><br>已從友社報名確認函中成功解析出 1 筆代墊費用：<br><br><div class="bg-gray-100 p-2 rounded text-xs text-gray-700 border border-gray-200">👤 對象：王大同<br>📌 項目：民生社35週年社慶活動餐費<br>💰 金額：$2,000</div><br>👉 資料已自動為您匯入「社友代墊款」表單中，您可檢視確認或再手動修改！`);
+        const who = financeMembers[0] || '本人';
+        addFinanceAdvanceRow(who, "民生社35週年社慶活動餐費", 2000);
+        addChatMessage("bot", `✅ <b>【信件解析完成】</b><br>已從友社報名確認函中成功解析出 1 筆代墊費用：<br><br><div class="bg-gray-100 p-2 rounded text-xs text-gray-700 border border-gray-200">👤 對象：${who}<br>📌 項目：民生社35週年社慶活動餐費<br>💰 金額：$2,000</div><br>👉 資料已自動為您匯入「社友代墊款」表單中，您可檢視確認或再手動修改！`);
         const container = document.getElementById('finance-advances-container');
         container.lastElementChild.classList.add('ring-2', 'ring-red-400', 'transition-all');
         setTimeout(() => { container.lastElementChild.classList.remove('ring-2', 'ring-red-400'); }, 1500);
@@ -1501,21 +1516,36 @@ function calcFinanceTotal() {
     document.getElementById('finance-total-amount').innerText = total.toLocaleString();
 }
 
-function submitClubFinance() {
-    let advanceCount = 0;
-    document.querySelectorAll('.advance-row').forEach(row => {
-        const memberId = row.querySelector('.advance-member').value;
-        const evtName = row.querySelector('.advance-event').value.trim();
-        const amt = parseInt(row.querySelector('.advance-amount').value) || 0;
-        if (memberId && evtName && amt > 0) advanceCount++;
+async function submitClubFinance() {
+    const fixed = [];
+    document.querySelectorAll('.fixed-item-row').forEach(row => {
+        const name = row.querySelector('.fixed-item-name').value.trim();
+        const amt = parseInt(row.querySelector('.fixed-item-amount').value) || 0;
+        if (name) fixed.push({ name, amount: amt });
     });
-    const total = document.getElementById('finance-total-amount').innerText;
-    closeModal('modal-club-finance');
-    let msg = `✅ <b>【社務請款單已送出】</b><br>已向社長呈報本期固定支出與代墊款，請款總額：<b class="text-green-600">NT$ ${total}</b>。`;
-    if (advanceCount > 0) {
-        msg += `<br><br><span class="text-indigo-600 font-bold"><i class="fa-solid fa-link"></i> 系統智慧連動：</span><br><span class="text-[11px] text-gray-600">偵測到 ${advanceCount} 筆社友代墊款，已自動分發寫入對應社友的「社費帳單」中。</span>`;
+    const advances = [];
+    document.querySelectorAll('.advance-row').forEach(row => {
+        const member = row.querySelector('.advance-member').value;
+        const detail = row.querySelector('.advance-event').value.trim();
+        const amt = parseInt(row.querySelector('.advance-amount').value) || 0;
+        if (member && detail && amt > 0) advances.push({ member, detail, amount: amt });
+    });
+    const payload = {
+        month: financeMonth || new Date().toISOString().slice(0, 7),
+        rent: parseInt(document.getElementById('finance-rent').value) || 0,
+        salary: parseInt(document.getElementById('finance-salary').value) || 0,
+        fixed, advances,
+    };
+    try {
+        const r = await apiFetch('/club/finance', { method: 'POST', body: JSON.stringify(payload) });
+        if (r.status !== 'ok') { showAlert('儲存失敗', r.message || '請稍後再試。'); return; }
+        closeModal('modal-club-finance');
+        let msg = `✅ <b>【社務對帳已儲存】</b><br>${r.month} 本期請款總額：<b class="text-green-600">NT$ ${(r.total || 0).toLocaleString()}</b>。`;
+        if (r.advance_count > 0) msg += `<br><span class="text-[11px] text-gray-600">含 ${r.advance_count} 筆社友代墊款，已一併存檔。</span>`;
+        addChatMessage("system", msg);
+    } catch (e) {
+        showAlert('儲存失敗', e.message);
     }
-    addChatMessage("system", msg);
 }
 
 // ---- 報名專區 (survey + report to president) ----
