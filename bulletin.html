@@ -37,9 +37,11 @@
         .tool-tab:hover { color: var(--canva-ui-text); background-color: rgba(255,255,255,0.05); }
         .tool-tab.active { color: var(--canva-ui-text); border-bottom-color: var(--canva-accent); }
         .tool-tab svg { width: 18px; height: 18px; fill: currentColor; }
-        /* 匯出鍵：手機把工具列橫向捲動時，用 sticky 讓它固定在右緣不被捲走 */
-        .export-tab { margin-left: auto; background: var(--canva-accent); color: #fff; border-radius: 6px; padding: 8px 16px; height: 34px; border: none; flex-shrink: 0; }
-        .export-tab:hover { background: #7A33E6; color: #fff; }
+        /* 發布社刊（主要動作）＋ 下載 PDF（次要）。發布鍵靠 margin-left:auto 把兩顆推到右緣。 */
+        .publish-tab { margin-left: auto; background: var(--canva-accent); color: #fff; border-radius: 6px; padding: 8px 16px; height: 34px; border: none; flex-shrink: 0; }
+        .publish-tab:hover { background: #7A33E6; color: #fff; }
+        .export-tab { margin-left: 8px; background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.35); border-radius: 6px; padding: 8px 16px; height: 34px; flex-shrink: 0; }
+        .export-tab:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
         /* --- 第二層功能控制列 --- */
         .sub-panel-container { background-color: var(--canva-ui-panel); color: var(--canva-ui-text); z-index: 19; box-shadow: 0 4px 10px rgba(0,0,0,0.1); flex-shrink: 0; }
@@ -295,7 +297,9 @@
         body.view-mode .sub-panel-container { display: none; }
         body.view-mode .canvas-stage { display: none; }
         body.view-mode .workspace { flex-direction: column; align-items: center; padding-top: 28px; }
-        body.view-mode .export-tab { margin-left: auto; }
+        /* 唯讀模式社員只有這顆，做成實心主要鍵。 */
+        body.view-mode .export-tab { margin-left: auto; background: var(--canva-accent); border: none; }
+        body.view-mode .export-tab:hover { background: #7A33E6; }
 
         .reader { display: none; }
         body.view-mode .reader { display: flex; flex-direction: column; align-items: center; gap: 30px; width: 100%; padding-bottom: 40px; }
@@ -372,8 +376,11 @@
             <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg> 自由文字
         </div>
 
+        <div class="tool-tab publish-tab" onclick="publishBulletin()">
+            <svg viewBox="0 0 24 24" style="fill: white; width: 16px; height: 16px;"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg> 發布社刊
+        </div>
         <div class="tool-tab export-tab" onclick="showExportModal()">
-            <svg viewBox="0 0 24 24" style="fill: white; width: 16px; height: 16px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> 產生 PDF
+            <svg viewBox="0 0 24 24" style="fill: white; width: 16px; height: 16px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> 下載 PDF
         </div>
     </div>
 
@@ -501,7 +508,7 @@
             </div>
             <div class="modal-footer">
                 <button class="modal-btn modal-btn-cancel" onclick="hideExportModal()">取消</button>
-                <button class="modal-btn modal-btn-confirm" onclick="startPDFExport()">產生 PDF</button>
+                <button class="modal-btn modal-btn-confirm" onclick="startPDFExport()">下載 PDF</button>
             </div>
         </div>
     </div>
@@ -1256,7 +1263,7 @@
             }
 
             hideExportModal();
-            exportPDF(pagesToExport);
+            downloadPDF(pagesToExport);
         }
 
         // 社員從後端載到的成品頁面 HTML（唯讀模式用）。null 代表沒有雲端版本，退回預設範本。
@@ -1312,23 +1319,31 @@
             setTimeout(cleanup, 60000); // 保險：某些行動瀏覽器不觸發 afterprint
         }
 
-        // 主委按「產生 PDF」：先把完整四頁成品發布為本社最新社刊（社員才能線上閱覽/列印），
-        // 再開啟列印視窗讓自己另存 PDF。唯讀模式（社員）只列印、不發布。
-        async function exportPDF(pages) {
+        // 主委按「發布社刊」：只把完整四頁成品發布為本社最新社刊，一鍵完成、不跳列印視窗。
+        // 社員即可線上閱覽並自行下載 PDF。
+        let publishBusy = false;
+        async function publishBulletin() {
+            if (publishBusy) return;
+            publishBusy = true;
+            if (document.activeElement) document.activeElement.blur();
+            showToast("⏳ 正在發布為本週社刊…");
+            try {
+                await publishBulletinContent(serializeBulletin());
+                showToast("✅ 已發布為本週社刊，社員可線上閱覽並下載 PDF。");
+            } catch (e) {
+                console.warn('社刊發布失敗', e);
+                showToast("⚠️ 發布失敗，請稍後再試一次。");
+            } finally {
+                publishBusy = false;
+            }
+        }
+
+        // 「下載 PDF」：只開啟列印視窗讓使用者另存向量 PDF，不發布（發布是另一顆按鈕）。
+        async function downloadPDF(pages) {
             if (pdfBusy) return;
             pdfBusy = true;
             if (document.activeElement) document.activeElement.blur();
             try {
-                if (!FORCE_VIEW) {
-                    showToast("⏳ 正在發布為本週社刊…");
-                    try {
-                        await publishBulletinContent(serializeBulletin());
-                        showToast("✅ 已發布為本週社刊，社員可線上閱覽並下載 PDF。");
-                    } catch (e) {
-                        console.warn('社刊發布失敗', e);
-                        showToast("⚠️ 發布到雲端失敗，社員暫時看不到最新版；您仍可在列印視窗另存 PDF。");
-                    }
-                }
                 showToast("🖨️ 開啟列印視窗，請於目的地選擇「另存為 PDF」。");
                 await printPages(pages);
             } catch (e) {
