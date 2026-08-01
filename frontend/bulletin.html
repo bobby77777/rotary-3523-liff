@@ -1287,10 +1287,19 @@
         }
 
         // 取得目前四頁的成品 HTML：優先用雲端載入的版本（社員），否則即時由編輯內容組出（主委）。
+        // 存檔用：保留「可編輯」的原始 HTML（contenteditable、圖片 onclick、item-controls 都留著），
+        // 只拿掉會由 addTouchHandles() 重新產生的縮放握把，避免載回編輯器時重複。閱覽/列印再另外 clean。
+        function editablePageHTML(html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            tmp.querySelectorAll('.touch-resize-handle').forEach(n => n.remove());
+            return tmp.innerHTML;
+        }
+
         function currentPagesHTML() {
             if (loadedPages) return loadedPages.slice();
             stashCurrentPage();
-            return [1, 2, 3, 4].map(n => cleanPageHTML(buildPageInnerHTML(n)));
+            return [1, 2, 3, 4].map(n => editablePageHTML(buildPageInnerHTML(n)));
         }
 
         // 產生真正的向量 PDF：把選定頁面放進列印專用區，交給瀏覽器原生列印引擎「另存為 PDF」。
@@ -1305,7 +1314,7 @@
                 wrap.className = 'print-page';
                 const cv = document.createElement('div');
                 cv.className = 'canvas';
-                cv.innerHTML = allPages[pageNum - 1] || '';
+                cv.innerHTML = cleanPageHTML(allPages[pageNum - 1] || '');   // 列印用乾淨版
                 wrap.appendChild(cv);
                 zone.appendChild(wrap);
             });
@@ -1400,6 +1409,7 @@
                     secondary: rootStyle.getPropertyValue('--c-secondary').trim(),
                     bg: rootStyle.getPropertyValue('--c-bg').trim(),
                 },
+                layouts: { ...state.layouts },
                 pages: currentPagesHTML(),
             };
         }
@@ -1416,15 +1426,60 @@
         }
 
         // 套用載入的社刊內容：還原品牌色，並把四頁成品交給閱覽/列印使用。
+        function applyTheme(theme) {
+            if (!theme) return;
+            const s = document.documentElement.style;
+            if (theme.primary) s.setProperty('--c-primary', theme.primary);
+            if (theme.secondary) s.setProperty('--c-secondary', theme.secondary);
+            if (theme.bg) s.setProperty('--c-bg', theme.bg);
+        }
+
+        // 唯讀模式用：套用主題並把成品頁交給 renderReader/printPages（顯示時再 clean）。
         function applyBulletinContent(data) {
-            if (data && data.theme) {
-                const s = document.documentElement.style;
-                if (data.theme.primary) s.setProperty('--c-primary', data.theme.primary);
-                if (data.theme.secondary) s.setProperty('--c-secondary', data.theme.secondary);
-                if (data.theme.bg) s.setProperty('--c-bg', data.theme.bg);
-            }
+            applyTheme(data && data.theme);
             if (data && Array.isArray(data.pages) && data.pages.length) {
                 loadedPages = data.pages;
+            }
+        }
+
+        // 編輯模式用：把上次發布的內容載回編輯器（可繼續編輯），不設 loadedPages，
+        // 這樣重新發布時是抓「編輯後」的 DOM，而不是原本載入的版本。
+        function loadIntoEditor(data) {
+            const pages = data.pages;
+            if (!Array.isArray(pages) || pages.length < 4) return;
+            applyTheme(data.theme);
+            if (data.layouts) state.layouts = { ...state.layouts, ...data.layouts };
+            const parse = html => { const d = document.createElement('div'); d.innerHTML = html; return d; };
+            // 頁首（含期數/日期）與頁尾在各頁共用，取自第 1 頁還原到編輯畫布。
+            const p1 = parse(pages[0]);
+            const liveHeader = document.querySelector('#canvas .page-header');
+            const srcHeader = p1.querySelector('.page-header');
+            if (liveHeader && srcHeader) liveHeader.innerHTML = srcHeader.innerHTML;
+            const liveFooter = document.querySelector('#canvas .page-footer');
+            const srcFooter = p1.querySelector('.page-footer');
+            if (liveFooter && srcFooter) liveFooter.innerHTML = srcFooter.innerHTML;
+            // 四頁的內文放進 pageCache（依各頁的版型 key），renderCanvas 就會顯示載入的內容。
+            [1, 2, 3, 4].forEach(n => {
+                const pc = parse(pages[n - 1]).querySelector('.page-content');
+                if (pc) pageCache[pageKey(n, state.layouts[n])] = pc.innerHTML;
+            });
+            state.page = 1;
+            document.getElementById('page-number').innerText = 'PAGE 01';
+            renderLayoutSelector();
+            renderCanvas();
+        }
+
+        // 編輯模式開啟時：抓本社上次發布的社刊載回編輯器（沒發布過就維持預設範本）。
+        async function loadPublishedIntoEditor() {
+            try {
+                const res = await fetch(API_BASE + '/bulletin/content', {
+                    headers: { 'ngrok-skip-browser-warning': '1', 'X-Line-UserId': EDITOR_UID },
+                });
+                if (!res.ok) return;            // 尚未發布過 → 用預設範本
+                loadIntoEditor(await res.json());
+                showToast('📄 已載入上次發布的社刊，可繼續編輯。');
+            } catch (e) {
+                console.warn('載入上次社刊失敗，改用預設範本', e);
             }
         }
 
@@ -1446,7 +1501,9 @@
             const reader = document.getElementById('reader');
             reader.innerHTML = '';
             // 優先呈現主委發布到雲端的成品；沒有雲端版本時，退回即時組出的預設範本。
-            const pagesHTML = loadedPages || [1, 2, 3, 4].map(n => cleanPageHTML(buildPageInnerHTML(n)));
+            // 存的是「可編輯」版本，閱覽時 clean 掉編輯用的握把與 contenteditable。
+            const src = loadedPages || [1, 2, 3, 4].map(n => buildPageInnerHTML(n));
+            const pagesHTML = src.map(cleanPageHTML);
             pagesHTML.forEach(html => {
                 const item = document.createElement('div');
                 item.className = 'reader-item';
@@ -1485,8 +1542,9 @@
                 await loadBulletinContent();
                 renderReader();
             } else {
-                // 編輯模式：用 LINE 登入取得開啟者本人身分（發布社刊時當作 X-Line-UserId）。
+                // 編輯模式：先 LINE 登入取得身分，再把本社上次發布的社刊載回編輯器可繼續編輯。
                 await ensureLineLogin();
+                await loadPublishedIntoEditor();
             }
         })();
     </script>
