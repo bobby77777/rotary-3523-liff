@@ -278,7 +278,10 @@
             .nav-logo { font-size: 0; margin-right: 12px; flex-shrink: 0; }
             .nav-logo span { font-size: 12px; }
             .tool-tab { padding: 12px 12px; font-size: 12px; flex-shrink: 0; white-space: nowrap; }
-            .export-tab { position: sticky; right: 0; margin-left: 8px; padding: 8px 12px; box-shadow: -8px 0 8px var(--canva-ui-bg); }
+            /* 手機版工具列橫向捲動：發布/下載鍵不再用 sticky 浮在最右（會蓋到分頁），改成
+               一般項目跟著捲到最後，避免重疊。 */
+            .publish-tab { padding: 8px 12px; white-space: nowrap; }
+            .export-tab { margin-left: 8px; padding: 8px 12px; white-space: nowrap; }
 
             /* 控制列吃掉太多高度會讓畫布無處容身，設上限並允許內部捲動 */
             .sub-panel-container { max-height: 32vh; overflow-y: auto; }
