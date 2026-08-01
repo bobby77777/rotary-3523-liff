@@ -334,11 +334,14 @@
       };
       try {
         await apiFetch('/admin/events/' + activeEvent.id, { method: 'PUT', body: JSON.stringify(payload) });
+        // 存檔的同時產生議程 PDF 並掛到此活動（失敗不影響議程已存）
+        let pdfOk = true;
+        try { await uploadAgendaPdf(activeEvent); } catch (e) { pdfOk = false; console.warn('議程 PDF 上傳失敗', e); }
         // 同步回本地清單
         const idx = events.findIndex(e => e.id === activeEvent.id);
         if (idx >= 0) events[idx] = JSON.parse(JSON.stringify(activeEvent));
-        btn.innerHTML = '<i data-lucide="check" class="w-5 h-5"></i> 已儲存'; lucide.createIcons();
-        setTimeout(() => { btn.innerHTML = original; lucide.createIcons(); }, 1500);
+        btn.innerHTML = `<i data-lucide="check" class="w-5 h-5"></i> ${pdfOk ? '已儲存＋PDF' : '已儲存(PDF失敗)'}`; lucide.createIcons();
+        setTimeout(() => { btn.innerHTML = original; lucide.createIcons(); }, 1800);
       } catch (e) {
         btn.innerHTML = original; lucide.createIcons();
         alert('儲存失敗：' + e.message);
@@ -545,13 +548,9 @@
       lucide.createIcons();
     }
 
-    function generateSpecificEventPDF(eventId) {
-      const evt = events.find(e => e.id === eventId);
-      if (!evt) return;
+    // 產生議程 PDF 的 DOM 與選項（下載與「存檔時上傳」共用）。
+    function _buildAgendaPdf(evt) {
       const agenda = Array.isArray(evt.agenda) ? evt.agenda : [];
-      if (agenda.length === 0) { alert('此活動尚無建立任何議程資料，無法匯出。'); return; }
-
-      // 計算議程時間字串
       let cur = evt.start_time ? evt.start_time.split(':').reduce((h, m) => h * 60 + Number(m)) : 0;
       const rows = agenda.map(item => {
         const sh = Math.floor(cur / 60) % 24, sm = cur % 60;
@@ -600,7 +599,27 @@
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
       };
+      return { el, opt };
+    }
+
+    function generateSpecificEventPDF(eventId) {
+      const evt = events.find(e => e.id === eventId);
+      if (!evt) return;
+      if (!(evt.agenda || []).length) { alert('此活動尚無建立任何議程資料，無法匯出。'); return; }
+      const { el, opt } = _buildAgendaPdf(evt);
       html2pdf().set(opt).from(el).save().catch(err => { console.error(err); alert('產生 PDF 失敗。'); });
+    }
+
+    // 存檔時自動產生議程 PDF 並上傳，掛到該活動（社員即可從活動卡的 PDF 鈕開啟）。
+    async function uploadAgendaPdf(evt) {
+      const { el, opt } = _buildAgendaPdf(evt);
+      const blob = await html2pdf().set(opt).from(el).outputPdf('blob');
+      const res = await fetch(API_BASE + '/admin/events/' + evt.id + '/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/pdf', 'X-Line-UserId': UID, 'ngrok-skip-browser-warning': '1' },
+        body: blob,
+      });
+      if (!res.ok) throw new Error('PDF ' + res.status);
     }
 
     function escapeHtml(s) {
