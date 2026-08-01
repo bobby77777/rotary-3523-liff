@@ -1442,6 +1442,17 @@
             }
         }
 
+        // 還原「可編輯」：把 contenteditable 打開、補回圖片的 onclick。
+        // 相容改版前用「乾淨版」存的舊社刊（那時 contenteditable 被設成 false、圖片 onclick 被移除）。
+        function reEnableEditing(root) {
+            root.querySelectorAll('[contenteditable]').forEach(e => e.setAttribute('contenteditable', 'true'));
+            // 頁首/頁尾外框本來就不可編輯，只有裡面的文字可編。
+            root.querySelectorAll('.page-header, .page-footer').forEach(e => e.setAttribute('contenteditable', 'false'));
+            root.querySelectorAll('.editable-image').forEach(img => {
+                if (!img.getAttribute('onclick')) img.setAttribute('onclick', 'uploadImage(this)');
+            });
+        }
+
         // 編輯模式用：把上次發布的內容載回編輯器（可繼續編輯），不設 loadedPages，
         // 這樣重新發布時是抓「編輯後」的 DOM，而不是原本載入的版本。
         function loadIntoEditor(data) {
@@ -1449,7 +1460,7 @@
             if (!Array.isArray(pages) || pages.length < 4) return;
             applyTheme(data.theme);
             if (data.layouts) state.layouts = { ...state.layouts, ...data.layouts };
-            const parse = html => { const d = document.createElement('div'); d.innerHTML = html; return d; };
+            const parse = html => { const d = document.createElement('div'); d.innerHTML = html; reEnableEditing(d); return d; };
             // 頁首（含期數/日期）與頁尾在各頁共用，取自第 1 頁還原到編輯畫布。
             const p1 = parse(pages[0]);
             const liveHeader = document.querySelector('#canvas .page-header');
