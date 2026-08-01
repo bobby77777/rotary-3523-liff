@@ -390,14 +390,14 @@
       };
       try {
         await apiFetch('/admin/events/' + activeEvent.id, { method: 'PUT', body: JSON.stringify(payload) });
-        // 存檔的同時產生議程 PDF 並掛到此活動（失敗不影響議程已存）
-        let pdfOk = true;
-        try { await uploadAgendaPdf(activeEvent); } catch (e) { pdfOk = false; console.warn('議程 PDF 上傳失敗', e); }
         // 同步回本地清單
         const idx = events.findIndex(e => e.id === activeEvent.id);
         if (idx >= 0) events[idx] = JSON.parse(JSON.stringify(activeEvent));
-        btn.innerHTML = `<i data-lucide="check" class="w-5 h-5"></i> ${pdfOk ? '已儲存＋PDF' : '已儲存(PDF失敗)'}`; lucide.createIcons();
-        setTimeout(() => { btn.innerHTML = original; lucide.createIcons(); }, 1800);
+        btn.innerHTML = '<i data-lucide="check" class="w-5 h-5"></i> 已儲存'; lucide.createIcons();
+        setTimeout(() => { btn.innerHTML = original; lucide.createIcons(); }, 1500);
+        // 議程 PDF 改成「背景」產生+上傳，不擋存檔按鈕（失敗也不影響議程已存）。
+        const snapshot = JSON.parse(JSON.stringify(activeEvent));
+        uploadAgendaPdf(snapshot).catch(e => console.warn('議程 PDF 背景上傳失敗', e));
       } catch (e) {
         btn.innerHTML = original; lucide.createIcons();
         alert('儲存失敗：' + e.message);
@@ -651,9 +651,9 @@
       const opt = {
         margin: 0.5,
         filename: `議程_${evt.title}_${(evt.date || '').replace(/-/g, '')}.pdf`,
-        // 用無損 PNG + 高解析度截圖，文字比 jpeg/scale2 清楚很多（中文向量 PDF 需內嵌 CJK 字型，成本高）。
-        image: { type: 'png' },
-        html2canvas: { scale: 4, useCORS: true, backgroundColor: '#ffffff' },
+        // 掛在活動上的備援用；解析度取中間值（要清晰請用「下載 PDF」的向量版）。
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
       };
       return { el, opt };
