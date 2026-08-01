@@ -3,6 +3,7 @@ import hmac
 import base64
 import json
 import logging
+import random
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -36,7 +37,10 @@ async def lifespan(app: FastAPI):
     db.ensure_club_dues_table()
     db.ensure_bulletin_editors_table()
     db.ensure_bulletin_content_table()
+    db.ensure_club_finance_table()
+    db.ensure_member_business_table()
     db.ensure_events_table()
+    db.ensure_event_pdf_table()
     # First run: migrate the previously-hardcoded schedule into the editable table.
     if db.events_count() == 0:
         db.seed_events(list(_EVENT_SCHEDULE) + _club_events("本社"))
@@ -82,15 +86,29 @@ _EVENT_SCHEDULE = [
 
 # ── Golf (新貝利亞 / New Peoria) ──────────────────────────────────────────────
 GOLF_PARS = [4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4]  # par 72
-# New Peoria: 6 visible holes, the other 12 are "hidden" and drive the handicap.
+# Default hidden holes when no draw has happened: 12 hidden (6 visible), i.e. Double
+# Peoria. After a draw, an event stores its own hidden-hole set (e.g. 6 holes).
 _GOLF_VISIBLE = {2, 5, 8, 11, 14, 17}  # 0-indexed (holes 3,6,9,12,15,18)
+_DEFAULT_HIDDEN = set(range(18)) - _GOLF_VISIBLE
 
 
-def _new_peoria(scores: list[int]) -> dict:
+def _event_hidden_holes(ev: dict | None) -> set[int]:
+    """The hidden holes to score by: the event's drawn set if any, else the default."""
+    holes = (ev or {}).get("golf_holes")
+    if isinstance(holes, list) and holes:
+        s = {int(h) for h in holes if isinstance(h, (int, float)) and 0 <= int(h) < 18}
+        if s:
+            return s
+    return _DEFAULT_HIDDEN
+
+
+def _new_peoria(scores: list[int], hidden: set[int] | None = None) -> dict:
+    hidden = hidden or _DEFAULT_HIDDEN
     gross = sum(scores)
-    hidden_sum = sum(s for i, s in enumerate(scores) if i not in _GOLF_VISIBLE)
+    hidden_sum = sum(s for i, s in enumerate(scores) if i in hidden)
     par_total = sum(GOLF_PARS)
-    handicap = max(0.0, round(hidden_sum * 1.5 - par_total, 1))
+    # handicap = (sum of hidden holes, scaled to 18 holes) − par. 12 hidden → ×1.5, 6 → ×3.
+    handicap = max(0.0, round(hidden_sum * (18 / len(hidden)) - par_total, 1))
     return {
         "gross": gross,
         "out": sum(scores[:9]),
@@ -1130,7 +1148,7 @@ async def golf_scores_submit(request: Request):
 
     name = _member_name(uid)
     db.upsert_golf_score(ev["id"], uid, name, scores)
-    result = _new_peoria(scores)
+    result = _new_peoria(scores, _event_hidden_holes(ev))
     return {"status": "ok", "event_title": ev["title"], **result}
 
 
@@ -1154,12 +1172,13 @@ async def golf_leaderboard(request: Request, event: int | None = None):
     if ev is None:
         return {"status": "no_event", "players": []}
     rows = db.get_golf_scores(ev["id"])
+    hidden = _event_hidden_holes(ev)
     players = []
     for r in rows:
         scores = r["scores"]
         if not isinstance(scores, list) or len(scores) != 18:
             continue
-        calc = _new_peoria(scores)
+        calc = _new_peoria(scores, hidden)
         players.append({
             "name": r.get("full_name") or r.get("player_name") or "選手",
             "club": r.get("club_name") or "",
@@ -1171,6 +1190,29 @@ async def golf_leaderboard(request: Request, event: int | None = None):
     for i, p in enumerate(players, start=1):
         p["rank"] = i
     return {"status": "ok", "event_title": ev["title"], "players": players}
+
+
+@app.post("/golf/draw_holes")
+async def golf_draw_holes(request: Request):
+    """高球主委抽出新貝利亞隱藏洞：前 9、後 9 各隨機 3 洞，存到該賽事並用於淨桿重算。
+    已抽過就回傳原本的（避免出分後被改），除非帶 redraw=true。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    body = await request.json()
+    event_id = body.get("event_id")
+    ev = _lookup_event(uid, int(event_id)) if event_id else _current_event(uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應賽事"}
+
+    existing = ev.get("golf_holes")
+    if isinstance(existing, list) and existing and not body.get("redraw"):
+        return {"status": "ok", "already": True, "event_title": ev["title"],
+                "holes": sorted(int(h) for h in existing)}
+
+    holes = sorted(random.sample(range(0, 9), 3) + random.sample(range(9, 18), 3))
+    db.save_golf_holes(ev["id"], holes)
+    return {"status": "ok", "already": False, "event_title": ev["title"], "holes": holes}
 
 
 # ── Club dues (社友社費) ───────────────────────────────────────────────────────
@@ -1268,30 +1310,47 @@ async def events(request: Request, scope: str = ""):
         scope = db.get_user_scope(uid) if uid else "district"
     club = db.get_user_club(uid) if uid else ""
     evs = _events_for_scope(scope, club)
-    # 執秘 上傳到 Drive 資料夾的活動 PDF：有對應檔案就把 pdf_url 指到後端代理串流端點
-    # （GET /events/{id}/pdf）。沒檔案則維持原本的 pdf_url（多半為空 → 前端顯示「PDF準備中」）。
+    # 活動 PDF 兩個來源：(1) 議程編輯器存進 DB 的議程 PDF；(2) 執秘上傳到 Drive 資料夾的檔案。
+    # 任一存在就把 pdf_url 指到後端代理串流端點（GET /events/{id}/pdf）。
     pmap = await run_in_threadpool(event_pdfs.event_pdf_map)
-    evs = [{**e, "pdf_url": f"{APP_BASE_URL}/events/{e['id']}/pdf"} if e.get("id") in pmap else e
+    stored = db.event_pdf_ids()
+    evs = [{**e, "pdf_url": f"{APP_BASE_URL}/events/{e['id']}/pdf"}
+           if (e.get("id") in stored or e.get("id") in pmap) else e
            for e in evs]
     return {"status": "ok", "scope": scope, "events": evs}
 
 
+@app.post("/admin/events/{event_id}/pdf")
+async def admin_save_event_pdf(event_id: int, request: Request):
+    """儲存某活動的 PDF（議程編輯器存檔時自動產生的議程 PDF）。Body 為 PDF 位元組。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty PDF body")
+    db.save_event_pdf(event_id, data)
+    return {"status": "ok"}
+
+
 @app.get("/events/{event_id}/pdf")
 async def event_pdf(event_id: int):
-    """代理串流某活動的 PDF：從 Drive 讀出 執秘 上傳的檔案回傳，檔案保持私有，
-    不需逐檔設定共用權限。前端活動卡的 PDF 鈕直接開這個網址。"""
-    file_id = event_pdfs.get_pdf_file_id(event_id)
-    if not file_id:
-        raise HTTPException(status_code=404, detail="No PDF uploaded for this event")
-    data = await run_in_threadpool(event_pdfs.download_pdf, file_id)
+    """某活動的 PDF：優先回傳議程編輯器存進 DB 的議程 PDF；否則代理串流 執秘
+    上傳到 Drive 的檔案。前端活動卡的 PDF 鈕直接開這個網址。"""
+    data = db.get_event_pdf(event_id)
     if data is None:
-        raise HTTPException(status_code=502, detail="Failed to fetch PDF from Drive")
+        file_id = event_pdfs.get_pdf_file_id(event_id)
+        if not file_id:
+            raise HTTPException(status_code=404, detail="No PDF for this event")
+        data = await run_in_threadpool(event_pdfs.download_pdf, file_id)
+        if data is None:
+            raise HTTPException(status_code=502, detail="Failed to fetch PDF from Drive")
     return Response(
         content=data,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'inline; filename="event-{event_id}.pdf"',
-            "Cache-Control": "public, max-age=300",
+            "Cache-Control": "no-cache",
         },
     )
 
@@ -1360,6 +1419,113 @@ async def me(request: Request):
         "is_admin": db.is_admin(uid),
         "name": _member_name(uid),
     }
+
+
+@app.get("/awards/me")
+async def awards_me(request: Request):
+    """This member's own awards (matched by their 姓名 / Nickname)."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user", "awards": [], "count": 0}
+    awards = db.get_member_awards(uid)
+    return {"status": "ok", "name": _member_name(uid), "awards": awards, "count": len(awards)}
+
+
+@app.get("/awards/club")
+async def awards_club(request: Request, club: str = ""):
+    """All awards for a club (defaults to the caller's own club)."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not club:
+        club = db.get_user_club(uid) if uid else ""
+    awards = db.get_club_awards(club)
+    return {"status": "ok", "club": club, "awards": awards, "count": len(awards)}
+
+
+@app.get("/club/finance")
+async def club_finance_get(request: Request, month: str = ""):
+    """Load a club's monthly finance sheet (admin). Defaults to the caller's club
+    and the current month; returns empty defaults when nothing is saved yet."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    month = month or date.today().strftime("%Y-%m")
+    data = db.get_club_finance(club, month) or {"rent": 20000, "salary": 35000,
+                                                "fixed": [], "advances": []}
+    return {"status": "ok", "club": club, "month": month, "data": data}
+
+
+@app.post("/club/finance")
+async def club_finance_save(request: Request):
+    """Save a club's monthly finance sheet (admin)."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    body = await request.json()
+    month = body.get("month") or date.today().strftime("%Y-%m")
+    data = {
+        "rent": int(body.get("rent") or 0),
+        "salary": int(body.get("salary") or 0),
+        "fixed": [{"name": str(f.get("name", "")), "amount": int(f.get("amount") or 0)}
+                  for f in body.get("fixed", []) if f.get("name")],
+        "advances": [{"member": str(a.get("member", "")), "detail": str(a.get("detail", "")),
+                      "amount": int(a.get("amount") or 0)}
+                     for a in body.get("advances", []) if a.get("amount")],
+    }
+    db.save_club_finance(club, month, data)
+    total = data["rent"] + data["salary"] + sum(f["amount"] for f in data["fixed"]) \
+        + sum(a["amount"] for a in data["advances"])
+    return {"status": "ok", "month": month, "total": total, "advance_count": len(data["advances"])}
+
+
+@app.get("/me/business")
+async def my_business_get(request: Request):
+    """The caller's own business card (職業名片)."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user", "business": None}
+    b = db.get_member_business(uid) or {"industry": "", "company": "", "intro": "", "offer": ""}
+    return {"status": "ok", "business": b}
+
+
+@app.post("/me/business")
+async def my_business_save(request: Request):
+    """Save the caller's own business card."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user", "message": "尚未登入"}
+    body = await request.json()
+    db.save_member_business(
+        uid,
+        str(body.get("industry", "")).strip(),
+        str(body.get("company", "")).strip(),
+        str(body.get("intro", "")).strip(),
+        str(body.get("offer", "")).strip(),
+    )
+    return {"status": "ok"}
+
+
+@app.get("/matchmaking")
+async def matchmaking(request: Request, q: str = ""):
+    """Industry matchmaking: find fellow Rotarians whose business card matches a need."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not q.strip():
+        return {"status": "empty", "matches": [], "count": 0}
+    rows = db.search_business(q, exclude_uid=uid, limit=8)
+    matches = [{
+        "name": r.get("full_name") or r.get("nickname") or "社友",
+        "club": r.get("club_name") or "",
+        "industry": r.get("industry") or "",
+        "company": r.get("company") or "",
+        "intro": r.get("intro") or "",
+        "offer": r.get("offer") or "",
+    } for r in rows]
+    return {"status": "ok", "query": q, "matches": matches, "count": len(matches)}
 
 
 @app.get("/bulletin/can_edit")

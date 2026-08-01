@@ -1,4 +1,5 @@
 import json
+import re
 import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
@@ -174,6 +175,52 @@ def search_awards(keyword: str, limit: int = 12) -> list[dict]:
         LIMIT %s
         """,
         (like, like, like, limit),
+    )
+
+
+_AWARD_COLS = """row_data->>'分區'     AS "分區",
+                 row_data->>'社名'     AS "社名",
+                 row_data->>'姓名'     AS "姓名",
+                 row_data->>'Nickname' AS "Nickname",
+                 row_data->>'獎項'     AS "獎項",
+                 row_data->>'頒獎時段' AS "頒獎時段",
+                 row_data->>'備註'     AS "備註" """
+
+
+def get_member_awards(line_user_id: str) -> list[dict]:
+    """This member's own awards — matched by their 姓名 / Nickname from their profile."""
+    pi = query("SELECT full_name, nickname FROM personal_information WHERE line_user_id = %s",
+               (line_user_id,))
+    if not pi:
+        return []
+    name = (pi[0].get("full_name") or "").strip()
+    nick = (pi[0].get("nickname") or "").strip()
+    if not name and not nick:
+        return []
+    return query(
+        f"""
+        SELECT {_AWARD_COLS}
+        FROM document_rows
+        WHERE (%s <> '' AND row_data->>'姓名' = %s)
+           OR (%s <> '' AND row_data->>'Nickname' = %s)
+        ORDER BY row_data->>'頒獎時段'
+        """,
+        (name, name, nick, nick),
+    )
+
+
+def get_club_awards(club_name: str) -> list[dict]:
+    """All awards for a club — 社名 matched leniently (e.g. '松山' ⊂ '台北松山扶輪社')."""
+    if not club_name:
+        return []
+    return query(
+        f"""
+        SELECT {_AWARD_COLS}
+        FROM document_rows
+        WHERE row_data->>'社名' ILIKE %s
+        ORDER BY row_data->>'姓名'
+        """,
+        (f"%{club_name}%",),
     )
 
 
@@ -465,6 +512,115 @@ def get_bulletin_content(club_name: str) -> str | None:
     return rows[0]["data"]
 
 
+# ── Club finance sheet (社務對帳) ─────────────────────────────────────────────────
+# One monthly finance sheet per club: fixed expenses (rent/salary/custom) + 社友代墊款.
+# Stored as a JSON string keyed by (club_name, month 'YYYY-MM').
+def ensure_club_finance_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS club_finance (
+            club_name  TEXT NOT NULL,
+            month      TEXT NOT NULL,
+            data       TEXT NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (club_name, month)
+        )
+    """)
+
+
+def get_club_finance(club_name: str, month: str) -> dict | None:
+    rows = query("SELECT data FROM club_finance WHERE club_name = %s AND month = %s",
+                 (club_name, month))
+    if not rows or not rows[0]["data"]:
+        return None
+    try:
+        return json.loads(rows[0]["data"])
+    except (ValueError, TypeError):
+        return None
+
+
+def save_club_finance(club_name: str, month: str, data: dict) -> None:
+    execute(
+        """
+        INSERT INTO club_finance (club_name, month, data, updated_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (club_name, month) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+        """,
+        (club_name, month, json.dumps(data)),
+    )
+
+
+# ── Member business cards (AI 產業媒合) ───────────────────────────────────────────
+# Each member's own professional card (industry / company / intro / 社友優惠). Members
+# fill it in; industry matchmaking searches these to connect fellow Rotarians.
+def ensure_member_business_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS member_business (
+            line_user_id TEXT PRIMARY KEY,
+            industry     TEXT NOT NULL DEFAULT '',
+            company      TEXT NOT NULL DEFAULT '',
+            intro        TEXT NOT NULL DEFAULT '',
+            offer        TEXT NOT NULL DEFAULT '',
+            updated_at   TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def get_member_business(line_user_id: str) -> dict | None:
+    rows = query("SELECT industry, company, intro, offer FROM member_business "
+                 "WHERE line_user_id = %s", (line_user_id,))
+    return rows[0] if rows else None
+
+
+def save_member_business(line_user_id: str, industry: str, company: str,
+                         intro: str, offer: str) -> None:
+    execute(
+        """
+        INSERT INTO member_business (line_user_id, industry, company, intro, offer, updated_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (line_user_id) DO UPDATE SET
+            industry = EXCLUDED.industry, company = EXCLUDED.company,
+            intro = EXCLUDED.intro, offer = EXCLUDED.offer, updated_at = NOW()
+        """,
+        (line_user_id, industry, company, intro, offer),
+    )
+
+
+def search_business(q: str, exclude_uid: str = "", limit: int = 10) -> list[dict]:
+    """Match a free-text need against members' industry / company / intro. Uses Chinese
+    bigrams (no word-segmenter needed) so '需要辦公室裝潢' still finds '室內裝潢設計';
+    candidates are ranked by how many distinct bigrams they hit."""
+    clean = re.sub(r"[\s,，、。;；:：/\\!！?？.\-（）()]+", "", q or "")
+    grams = {clean[i:i + 2] for i in range(len(clean) - 1)}
+    if not grams:
+        grams = {clean} if clean else set()
+    grams = list(grams)[:30]
+    if not grams:
+        return []
+    conds, params = [], []
+    for g in grams:
+        like = f"%{g}%"
+        conds.append("(b.industry ILIKE %s OR b.company ILIKE %s OR b.intro ILIKE %s)")
+        params += [like, like, like]
+    params += [exclude_uid]
+    rows = query(
+        f"""
+        SELECT b.industry, b.company, b.intro, b.offer,
+               p.full_name, p.nickname, p.club_name
+        FROM member_business b
+        JOIN personal_information p ON b.line_user_id = p.line_user_id
+        WHERE ({' OR '.join(conds)}) AND b.line_user_id <> %s
+        """,
+        params,
+    )
+
+    def _score(r: dict) -> int:
+        text = f"{r.get('industry','')}{r.get('company','')}{r.get('intro','')}"
+        return sum(1 for g in grams if g in text)
+
+    rows.sort(key=_score, reverse=True)
+    return rows[:limit]
+
+
 # ── Events (行事曆) ──────────────────────────────────────────────────────────────
 # Editable event schedule so the 執秘 can maintain the calendar from the admin panel
 # instead of us hardcoding it. scope ∈ {district, club}; club_name '' = shared by all
@@ -497,6 +653,8 @@ def ensure_events_table() -> None:
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS start_time TEXT NOT NULL DEFAULT ''")
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS mc TEXT NOT NULL DEFAULT ''")
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS agenda TEXT NOT NULL DEFAULT '[]'")
+    # 高球抽洞：主委抽出的隱藏洞（0-based index 的 JSON 陣列），空 = 尚未抽、用預設。
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS golf_holes TEXT NOT NULL DEFAULT '[]'")
 
 
 def events_count() -> int:
@@ -531,6 +689,10 @@ def _row_to_event(r: dict) -> dict:
         agenda = json.loads(r.get("agenda") or "[]")
     except (ValueError, TypeError):
         agenda = []
+    try:
+        golf_holes = json.loads(r.get("golf_holes") or "[]")
+    except (ValueError, TypeError):
+        golf_holes = []
     return {
         "id": r["id"], "scope": r["scope"], "club_name": r["club_name"],
         "date": iso, "displayDate": iso,
@@ -541,7 +703,14 @@ def _row_to_event(r: dict) -> dict:
         "start_time": r.get("start_time") or "",
         "mc": r.get("mc") or "",
         "agenda": agenda,
+        "golf_holes": golf_holes,
     }
+
+
+def save_golf_holes(event_id: int, holes: list) -> None:
+    """Store the drawn hidden holes (0-based indices) for a golf event."""
+    execute("UPDATE events SET golf_holes = %s, updated_at = NOW() WHERE id = %s",
+            (json.dumps(list(holes)), event_id))
 
 
 def list_events(scope: str = "", club_name: str = "") -> list[dict]:
@@ -605,6 +774,40 @@ def update_event(event_id: int, data: dict) -> dict | None:
 
 def delete_event(event_id: int) -> None:
     execute("DELETE FROM events WHERE id = %s", (event_id,))
+    execute("DELETE FROM event_pdf WHERE event_id = %s", (event_id,))
+
+
+# ── Per-event stored PDF ─────────────────────────────────────────────────────────
+# The agenda PDF generated in calendar.html on save is stored here (bytes), so the
+# event's PDF button (GET /events/{id}/pdf) can serve it without Google Drive.
+def ensure_event_pdf_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS event_pdf (
+            event_id   INT PRIMARY KEY,
+            data       BYTEA NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def save_event_pdf(event_id: int, data: bytes) -> None:
+    execute(
+        """
+        INSERT INTO event_pdf (event_id, data, updated_at)
+        VALUES (%s, %s, NOW())
+        ON CONFLICT (event_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+        """,
+        (event_id, psycopg2.Binary(data)),
+    )
+
+
+def get_event_pdf(event_id: int) -> bytes | None:
+    rows = query("SELECT data FROM event_pdf WHERE event_id = %s", (event_id,))
+    return bytes(rows[0]["data"]) if rows and rows[0]["data"] is not None else None
+
+
+def event_pdf_ids() -> set[int]:
+    return {r["event_id"] for r in query("SELECT event_id FROM event_pdf")}
 
 
 def ensure_user_state_table() -> None:
