@@ -237,7 +237,15 @@
       let html = '';
       events.forEach((evt, index) => {
         const deleteBtn = editable ? `<button onclick="deleteEvent(${evt.id})" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>` : '';
-        const editBtnText = editable ? '<i data-lucide="file-edit" class="w-4 h-4 pointer-events-none"></i> 編輯議程' : '<i data-lucide="eye" class="w-4 h-4 pointer-events-none"></i> 檢視議程';
+        // 例會：改成「編輯社刊」並連到 bulletin.html；其他活動：編輯/檢視議程。
+        let actionBtn;
+        if ((evt.type || '').includes('例會')) {
+          const t = editable ? '編輯社刊' : '檢視社刊';
+          actionBtn = `<button onclick="openBulletinEditor()" class="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-600 hover:text-white rounded transition-colors text-sm font-medium"><i data-lucide="newspaper" class="w-4 h-4 pointer-events-none"></i> ${t}</button>`;
+        } else {
+          const t = editable ? '<i data-lucide="file-edit" class="w-4 h-4 pointer-events-none"></i> 編輯議程' : '<i data-lucide="eye" class="w-4 h-4 pointer-events-none"></i> 檢視議程';
+          actionBtn = `<button onclick="openAgenda(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded transition-colors text-sm font-medium">${t}</button>`;
+        }
         html += `
           <tr class="hover:bg-blue-50/50 transition-colors group">
             <td class="py-4 px-6 text-center font-mono text-slate-500">${index + 1}</td>
@@ -245,7 +253,7 @@
             <td class="py-4 px-6 text-slate-600 font-mono">${evt.date || '未定'}</td>
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-3">
-                <button onclick="openAgenda(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded transition-colors text-sm font-medium">${editBtnText}</button>
+                ${actionBtn}
                 ${deleteBtn}
               </div>
             </td>
@@ -281,6 +289,14 @@
         await apiFetch('/admin/events/' + id, { method: 'DELETE' });
         await loadEvents();
       } catch (e) { alert('刪除失敗：' + e.message); }
+    }
+
+    // 例會 → 開社刊編輯器（bulletin.html）。管理員帶 uid 進編輯器；其他人開唯讀版。
+    function openBulletinEditor() {
+      const url = canEdit()
+        ? 'bulletin.html?uid=' + encodeURIComponent(UID)
+        : 'bulletin.html?view=1' + (me.club ? '&club=' + encodeURIComponent(me.club) : '');
+      window.open(url, '_blank');
     }
 
     // ==================== 議程編輯 ====================
