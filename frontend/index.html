@@ -2475,8 +2475,10 @@ async function clickEbook(name) {
 //  ・其他活動 → 開啟該活動上傳到 Google Drive 的 PDF（事件的 pdf_url 欄位）。
 //  ・非例會且尚未附上 pdf_url → 顯示停用的「PDF準備中」。
 function isRegularMeeting(ev) {
-    // 只有「本社例會」連到社刊；地區活動（含地區月例會）一律走各自上傳到 Drive 的 PDF。
-    return systemScope !== 'district' && !!(ev && ev.type && ev.type.includes('例會'));
+    // 只有「本社例會」連到社刊；活動內容或類型含「例會」即算（快速新增的活動可能沒填 type）。
+    // 地區活動一律走各自上傳到 Drive 的 PDF。
+    return systemScope !== 'district'
+        && !!(ev && (((ev.type || '').includes('例會')) || ((ev.title || '').includes('例會'))));
 }
 
 function eventPdfButtonHTML(ev) {

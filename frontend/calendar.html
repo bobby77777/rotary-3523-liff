@@ -253,9 +253,9 @@
       let html = '';
       events.forEach((evt, index) => {
         const deleteBtn = editable ? `<button onclick="deleteEvent(${evt.id})" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>` : '';
-        // 例會：改成「編輯社刊」並連到 bulletin.html；其他活動：編輯/檢視議程。
+        // 例會（活動內容或類型含「例會」）：改成「編輯社刊」並連到 bulletin.html；其他：編輯/檢視議程。
         let actionBtn;
-        if ((evt.type || '').includes('例會')) {
+        if ((evt.title || '').includes('例會') || (evt.type || '').includes('例會')) {
           const t = editable ? '編輯社刊' : '檢視社刊';
           actionBtn = `<button onclick="openBulletinEditor()" class="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-600 hover:text-white rounded transition-colors text-sm font-medium"><i data-lucide="newspaper" class="w-4 h-4 pointer-events-none"></i> ${t}</button>`;
         } else {
