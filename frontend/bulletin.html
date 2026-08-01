@@ -1396,9 +1396,10 @@
                 console.warn('LINE 登入略過（逾時或失敗），改用網址 uid（若有）', e);
             }
         }
-        // 社刊分社：開啟者（index.html）以 ?club= 帶入讀者所屬的社，載入該社的社刊。
-        // 主委發布時社別由後端依 uid 判定，不靠這個參數。
+        // 社刊分社：開啟者（index.html）以 ?club= 帶入讀者所屬的社，載入該社最新一份社刊。
         const CLUB = new URLSearchParams(location.search).get('club') || '';
+        // 社刊改成「每個例會活動一份」：?event= 指定是哪一場例會的社刊（編輯與該場閱覽都用它）。
+        const EVENT_ID = new URLSearchParams(location.search).get('event') || '';
 
         // 把主委編輯好的「社刊內容」序列化成 JSON：四頁成品 HTML + 品牌色。
         // 存的是內容本身（不是點陣 PDF），社員載入後即可線上閱覽，並自行列印成向量 PDF。
@@ -1420,7 +1421,8 @@
         // 發布為本社「最新社刊」：POST /bulletin/content（JSON）。
         // 後端依 X-Line-UserId 驗證主委身分（非主委回 403），之後社員 GET /bulletin/content 取得此版。
         async function publishBulletinContent(payload) {
-            const res = await fetch(API_BASE + '/bulletin/content', {
+            if (!EVENT_ID) throw new Error('缺少活動 id，無法發布（請從行事曆的例會「編輯社刊」開啟）');
+            const res = await fetch(API_BASE + '/bulletin/content?event=' + encodeURIComponent(EVENT_ID), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Line-UserId': EDITOR_UID },
                 body: JSON.stringify(payload),
@@ -1485,13 +1487,14 @@
 
         // 編輯模式開啟時：抓本社上次發布的社刊載回編輯器（沒發布過就維持預設範本）。
         async function loadPublishedIntoEditor() {
+            if (!EVENT_ID) return;   // 沒指定例會就從空白範本開始
             try {
-                const res = await fetch(API_BASE + '/bulletin/content', {
+                const res = await fetch(API_BASE + '/bulletin/content?event=' + encodeURIComponent(EVENT_ID), {
                     headers: { 'ngrok-skip-browser-warning': '1', 'X-Line-UserId': EDITOR_UID },
                 });
-                if (!res.ok) return;            // 尚未發布過 → 用預設範本
+                if (!res.ok) return;            // 這場例會尚未發布過 → 用預設範本
                 loadIntoEditor(await res.json());
-                showToast('📄 已載入上次發布的社刊，可繼續編輯。');
+                showToast('📄 已載入這場例會上次發布的社刊，可繼續編輯。');
             } catch (e) {
                 console.warn('載入上次社刊失敗，改用預設範本', e);
             }
@@ -1500,7 +1503,9 @@
         // 社員唯讀模式：載入主委發布的最新社刊內容。失敗時 loadedPages 維持 null，退回預設範本。
         async function loadBulletinContent() {
             try {
-                const q = CLUB ? '?club=' + encodeURIComponent(CLUB) : '';
+                // 有指定例會就讀那場的社刊；否則讀該社最新一份（每週社刊磚）。
+                const q = EVENT_ID ? '?event=' + encodeURIComponent(EVENT_ID)
+                                   : (CLUB ? '?club=' + encodeURIComponent(CLUB) : '');
                 const res = await fetch(API_BASE + '/bulletin/content' + q, {
                     headers: { 'ngrok-skip-browser-warning': '1', 'X-Line-UserId': EDITOR_UID },
                 });

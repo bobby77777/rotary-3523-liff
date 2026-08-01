@@ -1536,15 +1536,14 @@ async def bulletin_can_edit(request: Request):
 
 
 @app.post("/bulletin/content")
-async def publish_bulletin_content(request: Request):
-    """社刊主委按『產生 PDF』時發布成品內容（四頁 HTML + 品牌色，JSON）。
-    社刊分社：以發布者所屬的社（get_user_club）為 key，只發布到自己社的社刊。"""
+async def publish_bulletin_content(request: Request, event: int | None = None):
+    """發布某場例會的社刊（四頁 HTML + 品牌色，JSON）。每個例會活動一份，以 ?event= 指定。"""
     uid = request.headers.get("X-Line-UserId", "")
-    if not db.is_bulletin_editor(uid):
-        raise HTTPException(status_code=403, detail="Not a bulletin editor")
+    if not (db.is_bulletin_editor(uid) or db.is_admin(uid)):
+        raise HTTPException(status_code=403, detail="Not allowed to edit bulletin")
+    if not event:
+        raise HTTPException(status_code=400, detail="缺少活動 id（?event=），無法發布社刊")
     club = db.get_user_club(uid)
-    if not club:
-        raise HTTPException(status_code=400, detail="發布者沒有對應的社別，無法發布社刊")
     raw = (await request.body()).decode("utf-8")
     if not raw.strip():
         raise HTTPException(status_code=400, detail="Empty content body")
@@ -1552,18 +1551,21 @@ async def publish_bulletin_content(request: Request):
         json.loads(raw)  # 僅驗證為合法 JSON，實際原文照存（內含 base64 圖片）
     except ValueError:
         raise HTTPException(status_code=400, detail="Body is not valid JSON")
-    db.save_bulletin_content(club, raw)
-    return {"status": "ok", "club": club}
+    db.save_bulletin_content(event, club, raw)
+    return {"status": "ok", "event": event, "club": club}
 
 
 @app.get("/bulletin/content")
-async def get_bulletin_content(request: Request, club: str = ""):
-    """社員唯讀版載入該社最新社刊；社別由 ?club= 帶入，未帶則用呼叫者自己的社。
+async def get_bulletin_content(request: Request, event: int | None = None, club: str = ""):
+    """讀社刊：帶 ?event= 取該場例會的社刊；否則帶 ?club=（或用呼叫者的社）取該社最新一份。
     尚未發布時回 404，前端退回預設範本。"""
-    if not club:
-        uid = request.headers.get("X-Line-UserId", "")
-        club = db.get_user_club(uid) if uid else ""
-    raw = db.get_bulletin_content(club) if club else None
+    if event:
+        raw = db.get_bulletin_content(event)
+    else:
+        if not club:
+            uid = request.headers.get("X-Line-UserId", "")
+            club = db.get_user_club(uid) if uid else ""
+        raw = db.get_club_latest_bulletin(club) if club else None
     if raw is None:
         raise HTTPException(status_code=404, detail="No bulletin published yet")
     return Response(content=raw, media_type="application/json")

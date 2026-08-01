@@ -280,7 +280,7 @@
         let actionBtn;
         if ((evt.title || '').includes('例會') || (evt.type || '').includes('例會')) {
           const t = editable ? '編輯社刊' : '檢視社刊';
-          actionBtn = `<button onclick="openBulletinEditor()" class="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-600 hover:text-white rounded transition-colors text-sm font-medium"><i data-lucide="newspaper" class="w-4 h-4 pointer-events-none"></i> ${t}</button>`;
+          actionBtn = `<button onclick="openBulletinEditor(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-600 hover:text-white rounded transition-colors text-sm font-medium"><i data-lucide="newspaper" class="w-4 h-4 pointer-events-none"></i> ${t}</button>`;
         } else {
           const t = editable ? '<i data-lucide="file-edit" class="w-4 h-4 pointer-events-none"></i> 編輯議程' : '<i data-lucide="eye" class="w-4 h-4 pointer-events-none"></i> 檢視議程';
           actionBtn = `<button onclick="openAgenda(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded transition-colors text-sm font-medium">${t}</button>`;
@@ -330,12 +330,11 @@
       } catch (e) { alert('刪除失敗：' + e.message); }
     }
 
-    // 例會 → 開社刊編輯器（bulletin.html）。管理員帶 uid 進編輯器；其他人開唯讀版。
-    function openBulletinEditor() {
-      // 編輯模式自行 LINE 登入，不帶 uid；唯讀模式帶社別看該社社刊。
-      const url = canEdit()
-        ? 'bulletin.html'
-        : 'bulletin.html?view=1' + (me.club ? '&club=' + encodeURIComponent(me.club) : '');
+    // 例會 → 開「這場例會」的社刊編輯器（每場例會各自一份，用 event id 區分）。
+    function openBulletinEditor(eventId) {
+      const ev = 'event=' + encodeURIComponent(eventId);
+      // 編輯模式自行 LINE 登入，不帶 uid；唯讀模式看該場例會的社刊。
+      const url = canEdit() ? ('bulletin.html?' + ev) : ('bulletin.html?view=1&' + ev);
       window.open(url, '_blank');
     }
 

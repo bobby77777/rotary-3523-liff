@@ -2449,20 +2449,10 @@ async function clickEbook(name) {
     addChatMessage("user", name);
     const page = EBOOK_PAGES[name];
     if (page) {
-        // 社刊：編輯白名單（社刊主委）存在後端 DB。只有 can_edit 才進編輯器，
-        // 其餘一律開唯讀閱覽版（可下載 PDF）。查詢失敗時安全預設為唯讀。
-        let readOnly = true;
-        if (name === '本社社刊') {
-            try { readOnly = (await apiFetch('/bulletin/can_edit')).can_edit !== true; }
-            catch (e) { readOnly = true; }
-        } else {
-            readOnly = false;
-        }
-        // 社刊分社：唯讀者帶自己的社 (?club=) 讀該社社刊；主委帶 uid，發布時後端依 uid 判定社別。
+        // 社刊改成「每個例會一份」：編輯是從行事曆的例會列開啟。這個「每週社刊」磚一律開
+        // 唯讀，顯示本社最新發布的那份例會社刊（帶 ?club= 讓後端回最新一份）。
         const clubQ = myClubName ? '&club=' + encodeURIComponent(myClubName) : '';
-        // 編輯模式：bulletin.html 自行 LINE 登入取得身分，不帶 uid（分享連結不外洩身分）。
-        const params = readOnly ? ('?view=1' + clubQ) : '';
-        const url = new URL(page + params, location.href).href;
+        const url = new URL(page + '?view=1' + clubQ, location.href).href;
         if (liff.isInClient()) liff.openWindow({ url, external: false });
         else window.open(url, '_blank');
         return;
@@ -2484,7 +2474,7 @@ function isRegularMeeting(ev) {
 function eventPdfButtonHTML(ev) {
     const base = 'font-bold py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center gap-1';
     if (isRegularMeeting(ev)) {
-        return `<button onclick="event.stopPropagation(); openBulletinPdf()" class="bg-red-600 text-white ${base} btn-3d btn-3d-danger">
+        return `<button onclick="event.stopPropagation(); openBulletinPdf(${ev.id})" class="bg-red-600 text-white ${base} btn-3d btn-3d-danger">
                     <i class="fa-solid fa-file-pdf"></i> PDF
                 </button>`;
     }
@@ -2501,10 +2491,9 @@ function eventPdfButtonHTML(ev) {
 // 例會的 PDF：開啟主委發布的最新社刊（唯讀線上版 bulletin.html?view=1）。
 // 該頁會向後端載入主委發布的內容並排版呈現，社員可直接閱覽，或按「下載 PDF」用瀏覽器
 // 原生列印引擎另存成文字可選取的向量 PDF。
-function openBulletinPdf() {
-    // 社刊分社：帶上讀者所屬的社，開啟該社的社刊。
-    const clubQ = myClubName ? '&club=' + encodeURIComponent(myClubName) : '';
-    const url = new URL('bulletin.html?view=1' + clubQ, location.href).href;
+function openBulletinPdf(eventId) {
+    // 每個例會一份社刊：帶 ?event= 開啟這一場例會的社刊（唯讀）。
+    const url = new URL('bulletin.html?view=1&event=' + encodeURIComponent(eventId), location.href).href;
     // external:true 走裝置的預設瀏覽器(Safari/Chrome)，其「列印→另存為 PDF」比 LINE 內建瀏覽器可靠。
     if (liff.isInClient()) liff.openWindow({ url, external: true });
     else window.open(url, '_blank');

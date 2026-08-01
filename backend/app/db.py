@@ -469,47 +469,52 @@ def list_bulletin_editors() -> list[dict]:
     return query("SELECT line_user_id, name FROM bulletin_editors ORDER BY created_at")
 
 
-# ── Published bulletin content (per club) ────────────────────────────────────────
-# The 社刊 is published as *content* (the four finished pages' HTML + theme), not a
-# rasterised PDF — members load it, view it live, and print their own vector PDF.
-# Stored per club (club_name is the key) so each 社的主委 publishes their own 社刊.
-# Raw JSON string kept verbatim in a TEXT column (payloads embed base64 images).
+# ── Published bulletin content (per 例會 event) ───────────────────────────────────
+# Each 例會 activity has its own 社刊 (content = four finished pages' HTML + theme).
+# Keyed by event_id; club_name is kept so we can show a club's latest bulletin.
 def ensure_bulletin_content_table() -> None:
     execute("""
         CREATE TABLE IF NOT EXISTS bulletin_content (
-            club_name  TEXT,
+            event_id   INT,
+            club_name  TEXT NOT NULL DEFAULT '',
             data       TEXT NOT NULL,
             updated_at TIMESTAMPTZ DEFAULT NOW()
         )
     """)
-    # Migrate the old singleton schema (id INT PK, one shared 社刊) to per-club keying.
-    # Idempotent: safe to run every startup whether the table is old, new, or absent.
-    execute("ALTER TABLE bulletin_content ADD COLUMN IF NOT EXISTS club_name TEXT")
-    execute("ALTER TABLE bulletin_content DROP CONSTRAINT IF EXISTS bulletin_content_singleton")
-    execute("UPDATE bulletin_content SET club_name = '' WHERE club_name IS NULL")
-    execute("ALTER TABLE bulletin_content ALTER COLUMN club_name SET DEFAULT ''")
+    # Migrate: earlier the 社刊 was one-per-club (no event_id). That doesn't map to the
+    # new per-event model, so drop those legacy rows and re-key on event_id.
+    execute("ALTER TABLE bulletin_content ADD COLUMN IF NOT EXISTS event_id INT")
+    execute("ALTER TABLE bulletin_content ADD COLUMN IF NOT EXISTS club_name TEXT NOT NULL DEFAULT ''")
+    execute("DELETE FROM bulletin_content WHERE event_id IS NULL")
+    execute("DROP INDEX IF EXISTS bulletin_content_club_key")
     execute("ALTER TABLE bulletin_content DROP CONSTRAINT IF EXISTS bulletin_content_pkey")
     execute("ALTER TABLE bulletin_content DROP COLUMN IF EXISTS id")
-    execute("CREATE UNIQUE INDEX IF NOT EXISTS bulletin_content_club_key "
-            "ON bulletin_content (club_name)")
+    execute("CREATE UNIQUE INDEX IF NOT EXISTS bulletin_content_event_key "
+            "ON bulletin_content (event_id)")
 
 
-def save_bulletin_content(club_name: str, raw: str) -> None:
+def save_bulletin_content(event_id: int, club_name: str, raw: str) -> None:
     execute(
         """
-        INSERT INTO bulletin_content (club_name, data, updated_at)
-        VALUES (%s, %s, NOW())
-        ON CONFLICT (club_name) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+        INSERT INTO bulletin_content (event_id, club_name, data, updated_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (event_id) DO UPDATE SET
+            data = EXCLUDED.data, club_name = EXCLUDED.club_name, updated_at = NOW()
         """,
-        (club_name, raw),
+        (event_id, club_name, raw),
     )
 
 
-def get_bulletin_content(club_name: str) -> str | None:
-    rows = query("SELECT data FROM bulletin_content WHERE club_name = %s", (club_name,))
-    if not rows or rows[0]["data"] is None:
-        return None
-    return rows[0]["data"]
+def get_bulletin_content(event_id: int) -> str | None:
+    rows = query("SELECT data FROM bulletin_content WHERE event_id = %s", (event_id,))
+    return rows[0]["data"] if rows and rows[0]["data"] is not None else None
+
+
+def get_club_latest_bulletin(club_name: str) -> str | None:
+    """The club's most recently published 例會 社刊 (for the 每週社刊 tile)."""
+    rows = query("SELECT data FROM bulletin_content WHERE club_name = %s "
+                 "ORDER BY updated_at DESC LIMIT 1", (club_name,))
+    return rows[0]["data"] if rows and rows[0]["data"] is not None else None
 
 
 # ── Club finance sheet (社務對帳) ─────────────────────────────────────────────────
