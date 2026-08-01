@@ -16,6 +16,15 @@
     .readonly-input { background-color: transparent !important; border-color: transparent !important; cursor: default; }
     .readonly-input:focus { outline: none !important; box-shadow: none !important; }
     .line-bg { background-color: #8da4bc; }
+
+    /* 議程 PDF：用瀏覽器原生列印引擎輸出「向量 PDF」(文字清晰、可選取、可搜尋)。 */
+    #agenda-print-zone { display: none; }
+    @media print {
+      body { background: #fff !important; }
+      body > *:not(#agenda-print-zone) { display: none !important; }
+      #agenda-print-zone { display: block !important; }
+      @page { size: A4 portrait; margin: 12mm; }
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
@@ -117,6 +126,7 @@
               <p class="text-sm text-slate-500 mb-1">預計結束時間</p>
               <p class="text-3xl font-bold text-blue-600" id="end-time-display">--:--</p>
             </div>
+            <button onclick="downloadAgendaPdf()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-colors"><i data-lucide="file-down" class="w-5 h-5"></i> 下載 PDF</button>
             <button id="btn-save-agenda" onclick="saveAgenda()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-colors"><i data-lucide="save" class="w-5 h-5"></i> 儲存</button>
           </div>
         </div>
@@ -163,6 +173,9 @@
       </div>
     </div>
   </div>
+
+  <!-- 議程向量 PDF 的列印專用區（平時隱藏，列印時只顯示這塊） -->
+  <div id="agenda-print-zone"></div>
 
   <script>
     // ==================== 後端連線 ====================
@@ -628,8 +641,9 @@
       const opt = {
         margin: 0.5,
         filename: `議程_${evt.title}_${(evt.date || '').replace(/-/g, '')}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        // 用無損 PNG + 高解析度截圖，文字比 jpeg/scale2 清楚很多（中文向量 PDF 需內嵌 CJK 字型，成本高）。
+        image: { type: 'png' },
+        html2canvas: { scale: 4, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
       };
       return { el, opt };
@@ -641,6 +655,21 @@
       if (!(evt.agenda || []).length) { alert('此活動尚無建立任何議程資料，無法匯出。'); return; }
       const { el, opt } = _buildAgendaPdf(evt);
       html2pdf().set(opt).from(el).save().catch(err => { console.error(err); alert('產生 PDF 失敗。'); });
+    }
+
+    // 下載「向量」議程 PDF：用瀏覽器原生列印引擎（文字清晰、可選取），請於目的地選「另存為 PDF」。
+    async function downloadAgendaPdf() {
+      if (!activeEvent) return;
+      if (!(activeEvent.agenda || []).length) { alert('此活動尚無議程資料，無法匯出。'); return; }
+      const { el } = _buildAgendaPdf(activeEvent);
+      const zone = document.getElementById('agenda-print-zone');
+      zone.innerHTML = '';
+      zone.appendChild(el);
+      if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+      const cleanup = () => { zone.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
+      window.addEventListener('afterprint', cleanup);
+      window.print();
+      setTimeout(cleanup, 60000);
     }
 
     // 存檔時自動產生議程 PDF 並上傳，掛到該活動（社員即可從活動卡的 PDF 鈕開啟）。
