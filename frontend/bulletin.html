@@ -1385,12 +1385,15 @@
         // 電腦瀏覽器會導去 LINE 登入再回來。取得後覆蓋 EDITOR_UID（真實身分優先於網址 uid）。
         async function ensureLineLogin() {
             try {
-                await liff.init({ liffId: LIFF_ID });
+                await Promise.race([
+                    liff.init({ liffId: LIFF_ID }),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('liff init timeout')), 5000)),
+                ]);
                 if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
                 const p = await liff.getProfile();
                 if (p && p.userId) EDITOR_UID = p.userId;
             } catch (e) {
-                console.warn('LINE 登入失敗，改用網址 uid（若有）', e);
+                console.warn('LINE 登入略過（逾時或失敗），改用網址 uid（若有）', e);
             }
         }
         // 社刊分社：開啟者（index.html）以 ?club= 帶入讀者所屬的社，載入該社的社刊。

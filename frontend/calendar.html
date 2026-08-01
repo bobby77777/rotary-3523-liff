@@ -187,22 +187,32 @@
     // 用 LIFF 取得開啟者本人的 userId。LINE 內建瀏覽器自動登入；電腦瀏覽器導去 LINE 登入再回來。
     async function ensureLineLogin() {
       try {
-        await liff.init({ liffId: LIFF_ID });
+        await Promise.race([
+          liff.init({ liffId: LIFF_ID }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('liff init timeout')), 5000)),
+        ]);
         if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
         const p = await liff.getProfile();
         if (p && p.userId) UID = p.userId;
       } catch (e) {
-        console.warn('LINE 登入失敗，改用網址 uid（若有）', e);
+        console.warn('LINE 登入略過（逾時或失敗），改用網址 uid（若有）', e);
       }
     }
 
     async function apiFetch(path, opts = {}) {
-      const res = await fetch(API_BASE + path, {
-        headers: { 'Content-Type': 'application/json', 'X-Line-UserId': UID, 'ngrok-skip-browser-warning': '1' },
-        ...opts,
-      });
-      if (!res.ok) throw new Error('API ' + path + ' → ' + res.status);
-      return res.json();
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 12000);   // 12s 逾時，避免後端慢時無限等
+      try {
+        const res = await fetch(API_BASE + path, {
+          headers: { 'Content-Type': 'application/json', 'X-Line-UserId': UID, 'ngrok-skip-browser-warning': '1' },
+          signal: ctrl.signal,
+          ...opts,
+        });
+        if (!res.ok) throw new Error('API ' + path + ' → ' + res.status);
+        return res.json();
+      } finally {
+        clearTimeout(t);
+      }
     }
 
     // ==================== 狀態 ====================
