@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- LINE 登入：用 LIFF 取得「開啟者本人」身分，網址不必帶 uid（分享連結不會外洩身分）。 -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
   <style>
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
@@ -165,8 +167,21 @@
   <script>
     // ==================== 後端連線 ====================
     const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
-    // 開啟者（LINE 選單或社刊/行事曆連結）以 ?uid= 帶入身分，交後端驗證是否為管理員。
-    const UID = new URLSearchParams(location.search).get('uid') || '';
+    const LIFF_ID = '2010535285-kh8rJmpS';
+    // 身分優先用 LINE 登入（見 ensureLineLogin）；網址的 ?uid= 僅作為登入不可用時的退路。
+    let UID = new URLSearchParams(location.search).get('uid') || '';
+
+    // 用 LIFF 取得開啟者本人的 userId。LINE 內建瀏覽器自動登入；電腦瀏覽器導去 LINE 登入再回來。
+    async function ensureLineLogin() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+        const p = await liff.getProfile();
+        if (p && p.userId) UID = p.userId;
+      } catch (e) {
+        console.warn('LINE 登入失敗，改用網址 uid（若有）', e);
+      }
+    }
 
     async function apiFetch(path, opts = {}) {
       const res = await fetch(API_BASE + path, {
@@ -191,6 +206,7 @@
     async function init() {
       lucide.createIcons();
       setupGlobalAgendaListeners();
+      await ensureLineLogin();   // 取得開啟者本人身分（決定是否為管理員）
       try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '', scope: 'district' }; }
       currentScope = me.club ? 'club' : 'district';
       buildViewSelector();
@@ -293,8 +309,9 @@
 
     // 例會 → 開社刊編輯器（bulletin.html）。管理員帶 uid 進編輯器；其他人開唯讀版。
     function openBulletinEditor() {
+      // 編輯模式自行 LINE 登入，不帶 uid；唯讀模式帶社別看該社社刊。
       const url = canEdit()
-        ? 'bulletin.html?uid=' + encodeURIComponent(UID)
+        ? 'bulletin.html'
         : 'bulletin.html?view=1' + (me.club ? '&club=' + encodeURIComponent(me.club) : '');
       window.open(url, '_blank');
     }

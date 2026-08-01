@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>扶輪社刊</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    <!-- LINE 登入：編輯模式用 LIFF 取得「開啟者本人」身分，網址不必帶 uid（分享連結不會外洩身分）。 -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
 
     <!-- PDF 產生：改用瀏覽器原生列印引擎輸出「真正的向量 PDF」(文字可選取、可搜尋、放大不糊)，
          不再用 html2canvas 拍成點陣圖。詳見下方 @media print 與 printPages()。 -->
@@ -1366,7 +1368,22 @@
         // 編輯者身分由開啟者（index.html）以 ?uid= 帶進來，發布社刊時當作 X-Line-UserId
         // 交給後端驗證是否為白名單主委。
         const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
-        const EDITOR_UID = new URLSearchParams(location.search).get('uid') || '';
+        const LIFF_ID = '2010535285-kh8rJmpS';
+        // 身分優先用 LINE 登入（見 ensureLineLogin）；網址的 ?uid= 僅作為 LINE 登入不可用時的退路。
+        let EDITOR_UID = new URLSearchParams(location.search).get('uid') || '';
+
+        // 編輯模式：用 LIFF 取得開啟者本人的 userId 當發布身分。LINE 內建瀏覽器會自動登入；
+        // 電腦瀏覽器會導去 LINE 登入再回來。取得後覆蓋 EDITOR_UID（真實身分優先於網址 uid）。
+        async function ensureLineLogin() {
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+                const p = await liff.getProfile();
+                if (p && p.userId) EDITOR_UID = p.userId;
+            } catch (e) {
+                console.warn('LINE 登入失敗，改用網址 uid（若有）', e);
+            }
+        }
         // 社刊分社：開啟者（index.html）以 ?club= 帶入讀者所屬的社，載入該社的社刊。
         // 主委發布時社別由後端依 uid 判定，不靠這個參數。
         const CLUB = new URLSearchParams(location.search).get('club') || '';
@@ -1463,10 +1480,13 @@
             renderLayoutSelector();
             renderCanvas();
             if (FORCE_VIEW) {
-                // 社員唯讀模式：先立刻切到閱覽外觀（隱藏編輯器），再向後端取最新社刊內容排版呈現。
+                // 社員唯讀模式：不需登入，用 ?club= 取該社社刊；先切閱覽外觀再排版呈現。
                 enterViewMode();
                 await loadBulletinContent();
                 renderReader();
+            } else {
+                // 編輯模式：用 LINE 登入取得開啟者本人身分（發布社刊時當作 X-Line-UserId）。
+                await ensureLineLogin();
             }
         })();
     </script>

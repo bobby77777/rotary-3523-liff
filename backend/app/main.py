@@ -950,9 +950,9 @@ def _reply_bulletin_link(reply_token: str, user_id: str) -> None:
     """Reply with a link to bulletin.html. 社刊主委 gets the editor link (?uid=) —
     best opened in a computer browser to edit — other 社員 get the read-only view."""
     if db.is_bulletin_editor(user_id):
-        url = f"{BULLETIN_BASE_URL}?uid={user_id}"
-        text = ("📖 社刊編輯器\n建議用電腦瀏覽器打開下面連結，滑鼠鍵盤編輯最方便；"
-                "完成後按「產生 PDF」即會發布為貴社最新社刊。\n\n" + url)
+        url = BULLETIN_BASE_URL  # 開啟後自行 LINE 登入取得身分，網址不帶 uid
+        text = ("📖 社刊編輯器\n建議用電腦瀏覽器打開下面連結（會請您用 LINE 登入），"
+                "滑鼠鍵盤編輯最方便；完成後按「產生 PDF」即會發布為貴社最新社刊。\n\n" + url)
         label = "✏️ 編輯社刊"
     else:
         club = db.get_user_club(user_id)
@@ -967,9 +967,9 @@ def _reply_calendar_link(reply_token: str, user_id: str) -> None:
     """Reply with a link to the calendar + agenda editor (calendar.html). 管理員 gets
     the editor link (?uid=) — best opened in a computer browser — others read-only."""
     if db.is_admin(user_id):
-        url = f"{CALENDAR_BASE_URL}?uid={user_id}"
-        text = ("🗓️ 行事曆與議程編輯器\n建議用電腦瀏覽器打開下面連結，可新增/修改活動、"
-                "編排議程並匯出議程 PDF。\n\n" + url)
+        url = CALENDAR_BASE_URL  # 開啟後自行 LINE 登入取得身分，網址不帶 uid
+        text = ("🗓️ 行事曆與議程編輯器\n建議用電腦瀏覽器打開下面連結（會請您用 LINE 登入），"
+                "可新增/修改活動、編排議程並匯出議程 PDF。\n\n" + url)
         label = "✏️ 編輯行事曆"
     else:
         url = CALENDAR_BASE_URL

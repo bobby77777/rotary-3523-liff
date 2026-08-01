@@ -2460,8 +2460,8 @@ async function clickEbook(name) {
         }
         // 社刊分社：唯讀者帶自己的社 (?club=) 讀該社社刊；主委帶 uid，發布時後端依 uid 判定社別。
         const clubQ = myClubName ? '&club=' + encodeURIComponent(myClubName) : '';
-        const params = readOnly ? ('?view=1' + clubQ)
-            : (lineProfile?.userId ? '?uid=' + encodeURIComponent(lineProfile.userId) : '');
+        // 編輯模式：bulletin.html 自行 LINE 登入取得身分，不帶 uid（分享連結不外洩身分）。
+        const params = readOnly ? ('?view=1' + clubQ) : '';
         const url = new URL(page + params, location.href).href;
         if (liff.isInClient()) liff.openWindow({ url, external: false });
         else window.open(url, '_blank');
