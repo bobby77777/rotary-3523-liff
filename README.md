@@ -19,6 +19,7 @@ rotary-3523-liff/
 │   │   ├── main.py           # Routes: webhook, /events, /admin/events, /bulletin/*, /me …
 │   │   ├── db.py             # psycopg2 pool + all SQL (Supabase Postgres)
 │   │   ├── event_pdfs.py     # Per-event PDFs resolved from a Google Drive folder
+│   │   ├── agenda_pdf.py     # 議程 → vector PDF (fpdf2 + embedded CJK font)
 │   │   ├── agent.py          # OpenAI tool-calling loop (award search / RAG)
 │   │   ├── tools.py          # Agent tools
 │   │   ├── line_api.py       # LINE Messaging API wrapper
@@ -26,6 +27,7 @@ rotary-3523-liff/
 │   ├── ingest.py             # Google Drive → Supabase RAG ingestion (standalone)
 │   ├── reauth_drive.py       # Re-mint Google OAuth token when it expires
 │   └── run.py                # Entry point: uvicorn app.main:app
+├── requirements.txt          # Python deps for the backend
 └── .github/workflows/pages.yml  # Publishes frontend/ to GitHub Pages
 ```
 
@@ -74,8 +76,7 @@ FastAPI service backing the LIFF app and the LINE bot.
 ### Setup
 
 ```bash
-cd backend
-pip install -r requirements.txt
+pip install -r requirements.txt   # at the repo root
 ```
 
 Create `backend/.env` (git-ignored):
