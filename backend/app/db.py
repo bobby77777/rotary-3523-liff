@@ -1190,6 +1190,124 @@ def add_event_guests(event_id: int, names: list[str], registered_by: str = "",
         _release_conn(conn)
 
 
+# ── 報名專區：活動意願調查 ──────────────────────────────────────────────────────
+
+def ensure_event_surveys_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS event_surveys (
+            id SERIAL PRIMARY KEY,
+            event_id     INTEGER NOT NULL,
+            line_user_id TEXT NOT NULL,
+            status       TEXT NOT NULL DEFAULT 'pending',   -- pending | attending | leave
+            reminded     BOOLEAN NOT NULL DEFAULT FALSE,
+            sent_at      TIMESTAMPTZ DEFAULT NOW(),
+            replied_at   TIMESTAMPTZ,
+            UNIQUE(event_id, line_user_id)
+        )
+    """)
+
+
+def add_survey_targets(event_id: int, uids: list[str]) -> int:
+    """Queue members as survey recipients. Re-sending to someone who already
+    replied leaves their answer alone. Returns how many rows were newly added."""
+    uids = [u for u in uids if u]
+    if not uids:
+        return 0
+    new_count = 0
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            for uid in uids:
+                cur.execute(
+                    """
+                    INSERT INTO event_surveys (event_id, line_user_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (event_id, line_user_id) DO NOTHING
+                    RETURNING id
+                    """,
+                    (event_id, uid),
+                )
+                if cur.fetchone() is not None:
+                    new_count += 1
+        conn.commit()
+        return new_count
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def get_survey(event_id: int, club_name: str = "") -> list[dict]:
+    """Everyone the survey was sent to, with their current answer."""
+    return query(
+        """
+        SELECT s.line_user_id, s.status, s.reminded,
+               COALESCE(pi.full_name, '') AS full_name,
+               COALESCE(pi.nickname, '')  AS nickname,
+               COALESCE(pi.club_name, '') AS club_name
+        FROM event_surveys s
+        LEFT JOIN personal_information pi ON pi.line_user_id = s.line_user_id
+        WHERE s.event_id = %s AND (%s = '' OR pi.club_name = %s)
+        ORDER BY s.status, pi.full_name
+        """,
+        (event_id, club_name, club_name),
+    )
+
+
+def set_survey_status(event_id: int, line_user_id: str, status: str) -> bool:
+    """Record a member's own answer. False when they were never surveyed."""
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE event_surveys
+                SET status = %s, replied_at = NOW()
+                WHERE event_id = %s AND line_user_id = %s
+                RETURNING id
+                """,
+                (status, event_id, line_user_id),
+            )
+            found = cur.fetchone() is not None
+        conn.commit()
+        return found
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def get_survey_pending(event_id: int, club_name: str = "") -> list[dict]:
+    return [r for r in get_survey(event_id, club_name) if r["status"] == "pending"]
+
+
+def mark_survey_reminded(event_id: int, uids: list[str]) -> None:
+    if not uids:
+        return
+    execute(
+        "UPDATE event_surveys SET reminded = TRUE "
+        "WHERE event_id = %s AND line_user_id = ANY(%s)",
+        (event_id, uids),
+    )
+
+
+def get_club_admins(club_name: str) -> list[str]:
+    """LINE ids of a club's 社長 / 秘書 — the people a report is escalated to."""
+    rows = query(
+        """
+        SELECT ur.line_user_id
+        FROM user_roles ur
+        LEFT JOIN personal_information pi ON pi.line_user_id = ur.line_user_id
+        WHERE ur.role = 'chair_club_admin'
+          AND COALESCE(NULLIF(ur.club_name, ''), pi.club_name, '') = %s
+        """,
+        (club_name,),
+    )
+    return [r["line_user_id"] for r in rows]
+
+
 def search_member(keyword: str) -> list[dict]:
     return query(
         """

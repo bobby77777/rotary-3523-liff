@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     db.ensure_event_guests_table()
     db.ensure_golf_scores_table()
     db.ensure_club_dues_table()
+    db.ensure_event_surveys_table()
     db.ensure_bulletin_editors_table()
     db.ensure_bulletin_content_table()
     db.ensure_club_finance_table()
@@ -381,6 +382,53 @@ def _build_registration_success(ev: dict) -> dict:
                 "action": {"type": "uri", "label": "📤 上傳匯款截圖", "uri": f"{LIFF_URL}?tab=profile&action=payment"},
                 "style": "primary", "color": "#1e3a5f", "height": "sm",
             }],
+        },
+    }
+
+
+def _build_survey_bubble(ev: dict, reminder: bool = False) -> dict:
+    """參加意願調查表 pushed by the 執秘 from 報名專區. Same bubble for everyone,
+    so it can go out as one multicast; the answer comes back as a postback."""
+    head_text  = "🔔 出席意願提醒" if reminder else "📋 活動出席調查"
+    head_color = "#f59e0b" if reminder else "#1e3a5f"
+    note = ("尚未收到您的回覆，麻煩撥空點選 🙏" if reminder
+            else "請點選下方按鈕回覆，秘書處將依此統計人數。")
+    return {
+        "type": "bubble",
+        "header": {
+            "type": "box", "layout": "vertical",
+            "backgroundColor": head_color, "paddingAll": "16px",
+            "contents": [
+                {"type": "text", "text": head_text, "size": "lg", "weight": "bold", "color": "#ffffff"},
+            ],
+        },
+        "body": {
+            "type": "box", "layout": "vertical", "spacing": "md", "paddingAll": "16px",
+            "contents": [
+                {"type": "text", "text": ev["title"], "size": "md", "weight": "bold", "color": "#1f2937", "wrap": True},
+                {"type": "text", "text": f"📅 {ev['date']}（{ev['weekday']}）{ev['time']}", "size": "sm", "color": "#4b5563", "wrap": True},
+                {"type": "text", "text": f"📍 {ev['location']}", "size": "sm", "color": "#4b5563", "wrap": True},
+                {"type": "text", "text": f"💰 費用：{ev['fee']}", "size": "sm", "color": "#4b5563"},
+                {"type": "separator", "margin": "md"},
+                {"type": "text", "text": note, "size": "xs", "color": "#6b7280", "wrap": True, "margin": "md"},
+            ],
+        },
+        "footer": {
+            "type": "box", "layout": "horizontal", "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button", "style": "primary", "color": "#10b981", "height": "sm",
+                    "action": {"type": "postback", "label": "✅ 參加",
+                               "data": f"action=survey_reply&id={ev['id']}&r=yes",
+                               "displayText": f"我要參加「{ev['title']}」"},
+                },
+                {
+                    "type": "button", "style": "primary", "color": "#9ca3af", "height": "sm",
+                    "action": {"type": "postback", "label": "❌ 請假",
+                               "data": f"action=survey_reply&id={ev['id']}&r=no",
+                               "displayText": f"「{ev['title']}」我要請假"},
+                },
+            ],
         },
     }
 
@@ -811,6 +859,25 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
                 line_api.reply_flex(reply_token, "✅ 報名成功", _build_registration_success(ev))
             else:
                 line_api.reply_text(reply_token, f"您已報名過「{ev['title']}」，無需重複報名。\n如有疑問請聯絡秘書處。")
+
+    elif action == "survey_reply":
+        ev_id = int(p.get("id", 0))
+        ev = _lookup_event(user_id, ev_id)
+        if ev is None:
+            line_api.reply_text(reply_token, "找不到活動資訊，請聯絡秘書處。")
+            return
+        attending = p.get("r") == "yes"
+        db.set_survey_status(ev_id, user_id, "attending" if attending else "leave")
+        if attending:
+            # 回覆「參加」即視同報名，秘書處看到的名單才會一致。
+            db.register_event(user_id, ev_id)
+            line_api.reply_flex(reply_token, "✅ 報名成功", _build_registration_success(ev))
+        else:
+            line_api.reply_text(
+                reply_token,
+                f"已為您登記請假：\n\n📅 {ev['title']}\n\n秘書處會在報名專區看到這筆回覆。"
+                "若之後改變主意，可從首頁重新報名。",
+            )
 
     # ── Profile flows ──────────────────────────────────────────────────────────
     elif action == "my_profile":
@@ -1673,6 +1740,128 @@ async def admin_club_attendance(request: Request, club: str = ""):
         "avg_rate": round(total_att / total_reg * 100) if total_reg else 0,
         "members": members,
     }
+
+
+# ── 報名專區：活動意願調查 ────────────────────────────────────────────────────
+
+def _survey_name(r: dict) -> str:
+    full = r.get("full_name") or ""
+    if not full:
+        return "（未填個人資料）"
+    return full + (f"（{r['nickname']}）" if r.get("nickname") else "")
+
+
+def _survey_payload(event_id: int, club: str) -> dict:
+    rows = db.get_survey(event_id, club)
+    targets = [
+        {
+            "uid": r["line_user_id"],
+            "name": _survey_name(r),
+            "status": r["status"],
+            "reminded": bool(r["reminded"]),
+        }
+        for r in rows
+    ]
+    return {
+        "status": "ok",
+        "event_id": event_id,
+        "sent_count": len(targets),
+        "attending": sum(1 for t in targets if t["status"] == "attending"),
+        "leave": sum(1 for t in targets if t["status"] == "leave"),
+        "pending": sum(1 for t in targets if t["status"] == "pending"),
+        "targets": targets,
+    }
+
+
+@app.get("/admin/survey")
+async def admin_survey_get(request: Request, event: int, club: str = ""):
+    """Current 意願調查 state for an event (admin only)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "targets": []}
+    club = club or db.get_user_club(admin_uid)
+    return _survey_payload(int(event), club)
+
+
+@app.post("/admin/survey/send")
+async def admin_survey_send(request: Request):
+    """Push the 參加意願調查表 to the selected members (admin only)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無發送權限"}
+    body = await request.json()
+    ev_id = int(body.get("event_id") or 0)
+    uids = [str(u) for u in body.get("uids", []) if u]
+    if not (ev_id and uids):
+        return {"status": "invalid", "message": "缺少活動或發送對象"}
+    ev = db.get_event(ev_id)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到該活動"}
+    added = db.add_survey_targets(ev_id, uids)
+    try:
+        line_api.multicast_flex(uids, f"📋 {ev['title']} 出席調查", _build_survey_bubble(ev))
+    except Exception:
+        logger.exception("survey multicast failed for event %s", ev_id)
+        return {"status": "push_failed", "message": "名單已建立，但 LINE 推播失敗，請稍後重送。"}
+    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    return {"sent": len(uids), "added": added, **_survey_payload(ev_id, club)}
+
+
+@app.post("/admin/survey/remind")
+async def admin_survey_remind(request: Request):
+    """Second push to everyone who has not answered yet (admin only)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無跟催權限"}
+    body = await request.json()
+    ev_id = int(body.get("event_id") or 0)
+    ev = db.get_event(ev_id) if ev_id else None
+    if ev is None:
+        return {"status": "no_event", "message": "找不到該活動"}
+    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    pending = db.get_survey_pending(ev_id, club)
+    uids = [r["line_user_id"] for r in pending]
+    if not uids:
+        return {**_survey_payload(ev_id, club), "status": "none_pending"}
+    try:
+        line_api.multicast_flex(uids, f"🔔 {ev['title']} 出席調查提醒",
+                                _build_survey_bubble(ev, reminder=True))
+    except Exception:
+        logger.exception("survey reminder failed for event %s", ev_id)
+        return {"status": "push_failed", "message": "跟催推播失敗，請稍後再試。"}
+    db.mark_survey_reminded(ev_id, uids)
+    return {"reminded": len(uids), **_survey_payload(ev_id, club)}
+
+
+@app.post("/admin/survey/report")
+async def admin_survey_report(request: Request):
+    """Send the not-yet-answered list to the club's 社長 / 秘書 (admin only)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無呈報權限"}
+    body = await request.json()
+    ev_id = int(body.get("event_id") or 0)
+    ev = db.get_event(ev_id) if ev_id else None
+    if ev is None:
+        return {"status": "no_event", "message": "找不到該活動"}
+    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    pending = db.get_survey_pending(ev_id, club)
+    names = [_survey_name(r) for r in pending]
+    if not names:
+        return {"status": "none_pending", "names": []}
+    presidents = db.get_club_admins(club)
+    # No 社長 on file → send it back to the 執秘 who asked, so nothing is lost.
+    recipients = presidents or [admin_uid]
+    text = (f"📄 【未回覆名單呈報】\n\n{ev['title']}\n{ev['date']}（{ev['weekday']}）\n\n"
+            f"尚未回覆出席意願：{len(names)} 位\n" + "\n".join(f"• {n}" for n in names))
+    sent = 0
+    for uid in set(recipients):
+        try:
+            line_api.push_text(uid, text)
+            sent += 1
+        except Exception:
+            logger.exception("survey report push failed for %s", uid)
+    return {"status": "ok", "names": names, "recipients": sent, "to_self": not presidents}
 
 
 @app.get("/admin/clubs")

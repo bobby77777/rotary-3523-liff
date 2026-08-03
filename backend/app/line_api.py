@@ -94,6 +94,27 @@ def push_flex(user_id: str, alt_text: str, contents: dict) -> None:
     )
 
 
+def multicast_flex(user_ids: list[str], alt_text: str, contents: dict) -> None:
+    """Same bubble to many members (LINE caps a multicast at 500 recipients)."""
+    import logging
+    if not user_ids:
+        return
+    for i in range(0, len(user_ids), 500):
+        resp = requests.post(
+            f"{_BASE}/message/multicast",
+            headers=_HEADERS,
+            json={
+                "to": user_ids[i : i + 500],
+                "messages": [{"type": "flex", "altText": alt_text, "contents": contents}],
+            },
+            timeout=30,
+        )
+        if not resp.ok:
+            logging.getLogger(__name__).error(
+                "multicast_flex failed: status=%d body=%s", resp.status_code, resp.text[:500]
+            )
+
+
 def multicast(user_ids: list[str], text: str) -> None:
     if not user_ids:
         return

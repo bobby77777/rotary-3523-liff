@@ -748,7 +748,7 @@
     </div>
 </div>
 
-<!-- ===== Ported from simulator: 社務對帳與請款系統 (finance + Gmail) ===== -->
+<!-- ===== 社務對帳與請款系統 ===== -->
 <div id="modal-club-finance" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transform scale-95 transition-all">
         <div class="bg-gradient-to-r from-green-700 via-emerald-600 to-green-700 px-6 py-4 text-white flex justify-between items-center shrink-0">
@@ -791,10 +791,7 @@
             <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div class="px-4 py-2 bg-emerald-50 flex items-center justify-between border-b border-emerald-100">
                     <span class="text-xs font-bold text-emerald-800"><i class="fa-solid fa-people-arrows text-emerald-500 mr-1"></i> 社友代墊款 (自動連動社費)</span>
-                    <div class="flex gap-1">
-                        <button onclick="fetchGmailAdvances()" class="text-[10px] bg-white border border-red-200 text-red-600 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-red-50 transition-colors flex items-center gap-1"><i class="fa-brands fa-google"></i> 抓取信件</button>
-                        <button onclick="addFinanceAdvanceRow()" class="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-emerald-100 transition-colors"><i class="fa-solid fa-plus"></i> 手動新增</button>
-                    </div>
+                    <button onclick="addFinanceAdvanceRow()" class="text-[10px] bg-white border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded shadow-sm font-bold hover:bg-emerald-100 transition-colors"><i class="fa-solid fa-plus"></i> 新增代墊款</button>
                 </div>
                 <div class="p-3 space-y-3" id="finance-advances-container">
                     <div class="text-xs text-gray-400 italic text-center py-2" id="no-advance-msg">本月尚無任何社友代墊款</div>
@@ -881,12 +878,12 @@
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200">
-                    <button onclick="simulateMemberReply()" class="col-span-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 font-bold py-2 rounded-xl text-[11px] transition-colors mb-2">
-                        <i class="fa-solid fa-users-viewfinder"></i> [模擬] 社友陸續點擊回覆...
+                    <button onclick="loadEventSurveyData()" class="col-span-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 font-bold py-2 rounded-xl text-[11px] transition-colors mb-2">
+                        <i class="fa-solid fa-rotate"></i> 重新整理回覆狀態
                     </button>
 
                     <button onclick="remindPendingMembers()" class="bg-amber-500 hover:bg-amber-600 text-yellow-950 font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 btn-3d btn-3d-warning mb-1 transition-all">
-                        <i class="fa-solid fa-bell"></i> 三天後自動跟催
+                        <i class="fa-solid fa-bell"></i> 跟催未回覆
                     </button>
                     <button onclick="reportToPresident()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 btn-3d btn-3d-dark mb-1 transition-all">
                         <i class="fa-solid fa-file-export"></i> 呈報未回覆名單
@@ -988,7 +985,6 @@ let userRole = 'member';      // 'member' | 'chairperson'
 let myClubName = '';          // set from backend /me
 let activeTab = 'home';
 let systemScope = 'district'; // 'district' | 'club'
-let currentUserClubId = 6;
 let currentActiveEvent = null;
 let isGolfCheckedIn = false;
 let isNewNewPeoriaDrawn = false;   // 新新貝利亞抽洞 state (mock, self-contained)
@@ -1357,9 +1353,6 @@ function adminStub(name) { showAlert(name, '此功能建置中，敬請期待。
 //  PORTED FROM SIMULATOR  (mock-style, self-contained)
 // ============================================================
 
-// In-memory survey store: { [eventId]: { [memberId]: {name, status} } }
-let clubSurveyDB = {};
-
 // Combined district + club events, tagged with a scope label for the survey picker.
 function getAllCombinedEvents() {
     const dist = (typeof districtEvents !== 'undefined' ? districtEvents : []).map(e => ({ ...e, scope: '地區' }));
@@ -1499,7 +1492,7 @@ function runAnnualLbsGate(onPass) {
     }
 }
 
-// ---- 社務對帳與請款系統 (finance + Gmail) ----
+// ---- 社務對帳與請款系統 ----
 let financeMembers = [];   // 真實社員名單（代墊人下拉用）
 let financeMonth = '';
 
@@ -1573,18 +1566,6 @@ function addFinanceAdvanceRow(member = '', detail = '', amount = '') {
     calcFinanceTotal();
 }
 
-function fetchGmailAdvances() {
-    addChatMessage("system", "📧 <b>系統同步中：</b><br>正在連接信箱伺服器，運用 AI 解析近期的跨社活動繳費通知信...");
-    setTimeout(() => {
-        const who = financeMembers[0] || '本人';
-        addFinanceAdvanceRow(who, "民生社35週年社慶活動餐費", 2000);
-        addChatMessage("bot", `✅ <b>【信件解析完成】</b><br>已從友社報名確認函中成功解析出 1 筆代墊費用：<br><br><div class="bg-gray-100 p-2 rounded text-xs text-gray-700 border border-gray-200">👤 對象：${who}<br>📌 項目：民生社35週年社慶活動餐費<br>💰 金額：$2,000</div><br>👉 資料已自動為您匯入「社友代墊款」表單中，您可檢視確認或再手動修改！`);
-        const container = document.getElementById('finance-advances-container');
-        container.lastElementChild.classList.add('ring-2', 'ring-red-400', 'transition-all');
-        setTimeout(() => { container.lastElementChild.classList.remove('ring-2', 'ring-red-400'); }, 1500);
-    }, 1200);
-}
-
 function calcFinanceTotal() {
     let total = 0;
     total += parseInt(document.getElementById('finance-rent').value) || 0;
@@ -1627,6 +1608,15 @@ async function submitClubFinance() {
 }
 
 // ---- 報名專區 (survey + report to president) ----
+// 名單來自 /admin/club_members，意願回覆存在後端 event_surveys，社友在 LINE 上
+// 點「參加 / 請假」即回寫；點「參加」同時完成報名。
+let surveyRoster = [];   // [{line_user_id, full_name, nickname}]
+let surveyState = null;  // 最近一次 /admin/survey 回傳
+
+function _surveyEventId() {
+    return document.getElementById('club-reg-event-select').value;
+}
+
 function openClubRegAdminModal() {
     const allEvents = getAllCombinedEvents();
     const selectEl = document.getElementById('club-reg-event-select');
@@ -1635,36 +1625,73 @@ function openClubRegAdminModal() {
         const prefix = e.scope === '地區' ? '🌐 ' : '🏠 ';
         selectEl.innerHTML += `<option value="${e.id}">${prefix}[${e.scope}] ${e.displayDate || e.date || ''} - ${e.title}</option>`;
     });
+    surveyState = null;
+    surveyRoster = [];   // 每次開啟都重抓，名單才不會停留在舊資料
     document.getElementById('club-reg-notice-section').classList.add('hidden');
     document.getElementById('club-reg-stats-section').classList.add('hidden');
     openModal('modal-club-reg-admin');
 }
 
-function loadEventSurveyData() {
-    const eventId = document.getElementById('club-reg-event-select').value;
+async function loadEventSurveyData() {
+    const eventId = _surveyEventId();
     if (!eventId) {
+        surveyState = null;
         document.getElementById('club-reg-notice-section').classList.add('hidden');
         document.getElementById('club-reg-stats-section').classList.add('hidden');
         return;
     }
     document.getElementById('club-reg-notice-section').classList.remove('hidden');
     const listContainer = document.getElementById('club-reg-member-list');
-    const clubId = currentUserClubId;
-    const members = [
-        { id: `m_${clubId}_1`, name: `李志明 社友` },
-        { id: `m_${clubId}_2`, name: `陳建國 社友` },
-        { id: `m_${clubId}_3`, name: `林永生 社友` },
-        { id: `m_${clubId}_4`, name: `張三明 社友` },
-        { id: `m_${clubId}_5`, name: `劉德華 社友` }
-    ];
-    listContainer.innerHTML = members.map(m => `
+    listContainer.innerHTML = `<div class="text-xs text-gray-400 italic text-center py-3">載入社友名單中…</div>`;
+
+    let survey = null;
+    try {
+        const [roster, s] = await Promise.all([
+            surveyRoster.length
+                ? Promise.resolve({ members: surveyRoster })
+                : apiFetch('/admin/club_members?club=' + encodeURIComponent(myClubName || '')),
+            apiFetch(`/admin/survey?event=${encodeURIComponent(eventId)}&club=${encodeURIComponent(myClubName || '')}`),
+        ]);
+        if (roster.status === 'forbidden' || s.status === 'forbidden') {
+            closeModal('modal-club-reg-admin');
+            showAlert('權限不足', '您沒有發送報名調查的權限。');
+            return;
+        }
+        surveyRoster = roster.members || [];
+        survey = s;
+    } catch (err) {
+        listContainer.innerHTML = `<div class="text-xs text-rose-500 text-center py-3">載入失敗：${_escHtml(err.message)}</div>`;
+        return;
+    }
+
+    surveyState = survey;
+    const answered = {};
+    (survey.targets || []).forEach(t => { answered[t.uid] = t; });
+
+    if (!surveyRoster.length) {
+        listContainer.innerHTML = `<div class="text-xs text-gray-400 italic text-center py-3">此社尚無社友資料（社友需先填寫個人資料）</div>`;
+    } else {
+        const badge = t => {
+            if (!t) return '';
+            if (t.status === 'attending') return `<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已回覆參加</span>`;
+            if (t.status === 'leave') return `<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">已請假</span>`;
+            return `<span class="text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold">${t.reminded ? '已跟催' : '已發送'}</span>`;
+        };
+        listContainer.innerHTML = surveyRoster.map(m => {
+            const name = _escHtml(m.full_name + (m.nickname ? `（${m.nickname}）` : ''));
+            const t = answered[m.line_user_id];
+            return `
         <label class="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors border border-transparent">
-            <input type="checkbox" value="${m.id}" data-name="${m.name}" class="survey-member-checkbox w-4 h-4 text-amber-500 rounded focus:ring-amber-500" checked>
-            <span class="text-sm text-gray-800 font-bold">${m.name}</span>
-        </label>`).join('');
-    if (clubSurveyDB[eventId] && Object.keys(clubSurveyDB[eventId]).length > 0) {
+            <input type="checkbox" value="${_escHtml(m.line_user_id)}" class="survey-member-checkbox w-4 h-4 text-amber-500 rounded focus:ring-amber-500" ${t ? '' : 'checked'}>
+            <span class="text-sm text-gray-800 font-bold flex-1 truncate">${name}</span>
+            ${badge(t)}
+        </label>`;
+        }).join('');
+    }
+
+    if ((survey.sent_count || 0) > 0) {
         document.getElementById('club-reg-stats-section').classList.remove('hidden');
-        renderSurveyStats(eventId);
+        renderSurveyStats();
     } else {
         document.getElementById('club-reg-stats-section').classList.add('hidden');
     }
@@ -1676,103 +1703,88 @@ function toggleAllSurveyMembers() {
     checkboxes.forEach(cb => cb.checked = !allSelected);
 }
 
-function sendClubSurvey() {
-    const eventId = document.getElementById('club-reg-event-select').value;
+async function sendClubSurvey() {
+    const eventId = _surveyEventId();
     if (!eventId) return showAlert('錯誤', '請先選擇活動');
     const checkboxes = document.querySelectorAll('.survey-member-checkbox:checked');
     if (checkboxes.length === 0) return showAlert('錯誤', '請至少勾選一位發送對象');
-    if (!clubSurveyDB[eventId]) clubSurveyDB[eventId] = {};
-    checkboxes.forEach(cb => {
-        if (!clubSurveyDB[eventId][cb.value]) {
-            clubSurveyDB[eventId][cb.value] = { name: cb.getAttribute('data-name'), status: 'pending' };
-        }
-    });
-    const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
-    addChatMessage("system", `📩 <b>【系統廣播】</b><br>執秘已向 ${checkboxes.length} 位社友發送了 <b>${eventObj ? eventObj.title : '活動'}</b> 的參加意願調查表 (Flex Message)。`);
-    document.getElementById('club-reg-stats-section').classList.remove('hidden');
-    renderSurveyStats(eventId);
-    showAlert('發送成功', `已成功推播報名調查表給 ${checkboxes.length} 位社友！`);
+    const uids = [...checkboxes].map(cb => cb.value);
+    try {
+        const r = await apiFetch('/admin/survey/send', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: parseInt(eventId), uids, club: myClubName })
+        });
+        if (r.status !== 'ok') { showAlert('發送失敗', r.message || '請稍後再試。'); return; }
+        await loadEventSurveyData();
+        const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
+        addChatMessage("system", `📩 <b>【已發送調查表】</b><br>已向 ${r.sent} 位社友推播 <b>${_escHtml(eventObj ? eventObj.title : '活動')}</b> 的參加意願調查表，社友在 LINE 點「參加」即完成報名。`);
+        showAlert('發送成功', `已推播報名調查表給 ${r.sent} 位社友！`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
 }
 
-function renderSurveyStats(eventId) {
-    const data = clubSurveyDB[eventId];
-    let attending = [], leave = [], pending = [], reminded = [];
-    for (const [id, info] of Object.entries(data)) {
-        if (info.status === 'attending') attending.push(info.name);
-        else if (info.status === 'leave') leave.push(info.name);
-        else if (info.status === 'pending') pending.push(info.name);
-        else if (info.status === 'reminded') reminded.push(info.name);
-    }
-    document.getElementById('survey-stat-attending').innerText = attending.length;
-    document.getElementById('survey-stat-leave').innerText = leave.length;
-    document.getElementById('survey-stat-pending').innerText = pending.length + reminded.length;
+function renderSurveyStats() {
+    const s = surveyState;
+    const detail = document.getElementById('survey-detail-list');
+    if (!s) { detail.innerHTML = '<div class="text-gray-400 italic text-center">尚無資料</div>'; return; }
+    document.getElementById('survey-stat-attending').innerText = s.attending || 0;
+    document.getElementById('survey-stat-leave').innerText = s.leave || 0;
+    document.getElementById('survey-stat-pending').innerText = s.pending || 0;
+
+    const pick = st => (s.targets || []).filter(t => t.status === st);
+    const names = list => list.map(t => _escHtml(t.name)).join('、');
+    const attending = pick('attending'), leave = pick('leave'), pending = pick('pending');
     let html = '';
-    if (attending.length > 0) {
-        html += `<div class="flex items-start gap-2"><span class="bg-emerald-100 text-emerald-700 px-1.5 rounded font-bold shrink-0">參加</span> <span class="text-gray-600">${attending.join(', ')}</span></div>`;
+    if (attending.length) {
+        html += `<div class="flex items-start gap-2"><span class="bg-emerald-100 text-emerald-700 px-1.5 rounded font-bold shrink-0">參加</span> <span class="text-gray-600">${names(attending)}</span></div>`;
     }
-    if (leave.length > 0) {
-        html += `<div class="flex items-start gap-2"><span class="bg-rose-100 text-rose-700 px-1.5 rounded font-bold shrink-0">請假</span> <span class="text-gray-600">${leave.join(', ')}</span></div>`;
+    if (leave.length) {
+        html += `<div class="flex items-start gap-2"><span class="bg-rose-100 text-rose-700 px-1.5 rounded font-bold shrink-0">請假</span> <span class="text-gray-600">${names(leave)}</span></div>`;
     }
-    if (pending.length > 0 || reminded.length > 0) {
-        let pendingNames = [...pending];
-        let remindedHtml = reminded.length > 0 ? `<span class="text-[10px] text-amber-600 ml-1">(已跟催: ${reminded.join(', ')})</span>` : '';
-        html += `<div class="flex items-start gap-2 border-t border-gray-100 pt-1.5 mt-1.5"><span class="bg-gray-200 text-gray-700 px-1.5 rounded font-bold shrink-0">未回</span> <span class="text-gray-600">${pendingNames.join(', ')} ${remindedHtml}</span></div>`;
+    if (pending.length) {
+        const reminded = pending.filter(t => t.reminded);
+        const remindedHtml = reminded.length ? `<span class="text-[10px] text-amber-600 ml-1">(已跟催: ${names(reminded)})</span>` : '';
+        html += `<div class="flex items-start gap-2 border-t border-gray-100 pt-1.5 mt-1.5"><span class="bg-gray-200 text-gray-700 px-1.5 rounded font-bold shrink-0">未回</span> <span class="text-gray-600">${names(pending)} ${remindedHtml}</span></div>`;
     }
     if (html === '') html = '<div class="text-gray-400 italic text-center">尚無資料</div>';
-    document.getElementById('survey-detail-list').innerHTML = html;
+    detail.innerHTML = html;
 }
 
-function simulateMemberReply() {
-    const eventId = document.getElementById('club-reg-event-select').value;
-    if (!eventId || !clubSurveyDB[eventId]) return;
-    const data = clubSurveyDB[eventId];
-    let changed = false;
-    for (const [id, info] of Object.entries(data)) {
-        if (info.status === 'pending' || info.status === 'reminded') {
-            info.status = Math.random() > 0.2 ? 'attending' : 'leave';
-            changed = true;
-            addChatMessage("system", `📱 <b>【社友回覆】</b><br>${info.name} 剛剛在 LINE 點擊了「${info.status === 'attending' ? '✅ 參加' : '❌ 請假'}」。`);
-            break;
-        }
-    }
-    if (changed) {
-        renderSurveyStats(eventId);
-    } else {
-        showAlert('模擬完畢', '所有收到通知的社友都已經回覆完畢囉！');
-    }
-}
-
-function remindPendingMembers() {
-    const eventId = document.getElementById('club-reg-event-select').value;
-    if (!eventId || !clubSurveyDB[eventId]) return;
-    const data = clubSurveyDB[eventId];
-    let remindCount = 0;
-    for (const [id, info] of Object.entries(data)) {
-        if (info.status === 'pending') { info.status = 'reminded'; remindCount++; }
-    }
-    if (remindCount > 0) {
-        renderSurveyStats(eventId);
-        addChatMessage("system", `⚠️ <b>【系統自動化】</b><br>系統已自動抓出過期 3 天未回覆的 ${remindCount} 位社友，並發送了「二次意願確認」推播通知！`);
-        showAlert('跟催發送成功', `已向 ${remindCount} 位尚未回覆的社友發送二次推播。`);
-    } else {
-        showAlert('無須跟催', '目前沒有尚未回覆的社友喔！');
+async function remindPendingMembers() {
+    const eventId = _surveyEventId();
+    if (!eventId) return showAlert('錯誤', '請先選擇活動');
+    try {
+        const r = await apiFetch('/admin/survey/remind', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: parseInt(eventId), club: myClubName })
+        });
+        if (r.status === 'none_pending') { surveyState = r; renderSurveyStats(); showAlert('無須跟催', '目前沒有尚未回覆的社友喔！'); return; }
+        if (r.status !== 'ok') { showAlert('跟催失敗', r.message || '請稍後再試。'); return; }
+        await loadEventSurveyData();
+        addChatMessage("system", `⚠️ <b>【二次意願確認】</b><br>已向 ${r.reminded} 位尚未回覆的社友發送跟催推播。`);
+        showAlert('跟催發送成功', `已向 ${r.reminded} 位尚未回覆的社友發送二次推播。`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
     }
 }
 
-function reportToPresident() {
-    const eventId = document.getElementById('club-reg-event-select').value;
-    if (!eventId || !clubSurveyDB[eventId]) return;
-    const data = clubSurveyDB[eventId];
-    const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
-    let pendingNames = [];
-    for (const [id, info] of Object.entries(data)) {
-        if (info.status === 'pending' || info.status === 'reminded') pendingNames.push(info.name);
-    }
-    if (pendingNames.length > 0) {
+async function reportToPresident() {
+    const eventId = _surveyEventId();
+    if (!eventId) return showAlert('錯誤', '請先選擇活動');
+    try {
+        const r = await apiFetch('/admin/survey/report', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: parseInt(eventId), club: myClubName })
+        });
+        if (r.status === 'none_pending') { showAlert('無未回覆者', '太棒了！所有社友皆已明確回覆意願，無須呈報。'); return; }
+        if (r.status !== 'ok') { showAlert('呈報失敗', r.message || '請稍後再試。'); return; }
+        const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
         closeModal('modal-club-reg-admin');
-        addChatMessage("system", `📄 <b>【未回覆名單呈報】</b><br>已將 <b>${eventObj ? eventObj.title : '活動'}</b> 尚未回覆的 ${pendingNames.length} 位社友名單：<br><span class="text-gray-500">${pendingNames.join('、')}</span><br><br>👉 統整完畢並傳送給 <b>社長</b> 進行後續關心。`);
-    } else {
-        showAlert('無未回覆者', '太棒了！所有社友皆已明確回覆意願，無須呈報。');
+        const to = r.to_self ? '（系統查無社長帳號，已改傳給您本人）' : `已於 LINE 傳送給 <b>社長</b> 進行後續關心。`;
+        addChatMessage("system", `📄 <b>【未回覆名單呈報】</b><br><b>${_escHtml(eventObj ? eventObj.title : '活動')}</b> 尚未回覆的 ${r.names.length} 位社友：<br><span class="text-gray-500">${r.names.map(_escHtml).join('、')}</span><br><br>👉 ${to}`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
     }
 }
 
