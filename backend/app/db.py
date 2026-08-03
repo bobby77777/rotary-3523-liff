@@ -633,7 +633,7 @@ def search_business(q: str, exclude_uid: str = "", limit: int = 10) -> list[dict
 _WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 # Simple scalar text/date fields (agenda is handled separately as a JSON string).
 _EVENT_FIELDS = ("scope", "club_name", "date", "title", "location",
-                 "chair", "time", "type", "fee", "pdf_url", "start_time", "mc")
+                 "chair", "time", "type", "fee", "pdf_url", "start_time", "mc", "geo")
 
 
 def ensure_events_table() -> None:
@@ -660,6 +660,8 @@ def ensure_events_table() -> None:
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS agenda TEXT NOT NULL DEFAULT '[]'")
     # 高球抽洞：主委抽出的隱藏洞（0-based index 的 JSON 陣列），空 = 尚未抽、用預設。
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS golf_holes TEXT NOT NULL DEFAULT '[]'")
+    # 會場座標 "緯度,經度"，供報到的 LBS 距離驗證用；留空 = 該活動不做定位驗證。
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS geo TEXT NOT NULL DEFAULT ''")
 
 
 def events_count() -> int:
@@ -707,6 +709,7 @@ def _row_to_event(r: dict) -> dict:
         "pdf_url": r["pdf_url"],
         "start_time": r.get("start_time") or "",
         "mc": r.get("mc") or "",
+        "geo": r.get("geo") or "",
         "agenda": agenda,
         "golf_holes": golf_holes,
     }
@@ -742,15 +745,15 @@ def create_event(data: dict) -> dict:
                 """
                 INSERT INTO events (scope, club_name, date, title, location,
                                     chair, time, type, fee, pdf_url,
-                                    start_time, mc, agenda)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                    start_time, mc, geo, agenda)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
                 """,
                 (data.get("scope", "district"), data.get("club_name", ""),
                  data.get("date") or None, data.get("title", ""), data.get("location", ""),
                  data.get("chair", ""), data.get("time", ""), data.get("type", ""),
                  data.get("fee", ""), data.get("pdf_url", ""),
-                 data.get("start_time", ""), data.get("mc", ""),
+                 data.get("start_time", ""), data.get("mc", ""), data.get("geo", ""),
                  json.dumps(data.get("agenda") or [])),
             )
             row = cur.fetchone()

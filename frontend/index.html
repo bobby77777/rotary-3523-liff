@@ -627,7 +627,11 @@
                         <input id="event-form-chair" placeholder="本社社長" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
                     </div>
                 </div>
-                <p class="text-[10px] text-gray-400 leading-relaxed">提示：類型含「例會」的本社活動，PDF 鈕會連到社刊；其他活動的 PDF 由執秘上傳到 Google Drive 資料夾（檔名以活動編號開頭）。</p>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 mb-1">會場座標（選填，報到定位驗證用）</label>
+                    <input id="event-form-geo" placeholder="25.0785,121.5262（Google 地圖右鍵可複製）" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                </div>
+                <p class="text-[10px] text-gray-400 leading-relaxed">提示：類型含「例會」的本社活動，PDF 鈕會連到社刊；其他活動的 PDF 由執秘上傳到 Google Drive 資料夾（檔名以活動編號開頭）。填了會場座標，報到時會檢查社友是否在現場 100 公尺內；留空則不做定位驗證。</p>
                 <div class="flex gap-2 pt-1">
                     <button onclick="closeEventForm()" class="flex-1 bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg text-xs">取消</button>
                     <button onclick="saveEventForm()" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-lg text-xs btn-3d btn-3d-primary">儲存</button>
@@ -1078,15 +1082,6 @@ const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
 const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
 // ============================================================
 
-// 地區活動的 PDF 走 Google Drive：把上傳後的分享連結填進 pdf_url，留空則顯示「PDF準備中」。
-const districtEvents = [
-    { id: 102, date: "2025-05-25", displayDate: "2025-05-25", weekday: "星期日", title: "DTTS 地區團隊訓練研討會", location: "漢來飯店", chair: "王維宏", time: "13:00-17:00", type: "訓練研討", pdf_url: "" },
-    { id: 104, date: "2025-08-24", displayDate: "2025-08-24", weekday: "星期日", title: "DTA 地區訓練講習會", location: "大直典華", chair: "蔡圻", time: "10:00-16:30", type: "訓練研討", pdf_url: "" },
-    { id: 107, date: "2026-09-15", displayDate: "2026-09-15", weekday: "星期二", title: "地區青少年交換(RYE)講習會", location: "台北福華大飯店", chair: "陳俊宇", time: "10:00-15:00", type: "講習培訓", pdf_url: "" },
-    { id: 106, date: "2026-10-14", displayDate: "2026-10-14", weekday: "星期三", title: "總監盃高爾夫球比賽", location: "老淡水高爾夫球場", chair: "林星煌", time: "整天", type: "地區運動", pdf_url: "" },
-    { id: 109, date: "2026-12-26", displayDate: "2026-12-26~27", weekday: "星期六、日", title: "地區年會", location: "圓山飯店", chair: "王欽秉", time: "整天", type: "地區年會", pdf_url: "" }
-];
-
 const golfPars = [4,3,5,4,4,3,4,5,4,4,4,3,5,4,4,3,5,4];
 
 // ---- STATE ----
@@ -1097,7 +1092,7 @@ let activeTab = 'home';
 let systemScope = 'district'; // 'district' | 'club'
 let currentActiveEvent = null;
 let isGolfCheckedIn = false;
-let isNewNewPeoriaDrawn = false;   // 新新貝利亞抽洞 state (mock, self-contained)
+let isNewNewPeoriaDrawn = false;   // 本次賽事是否已抽出隱藏洞（抽洞結果存在後端）
 let drawnHiddenHoles = [];
 let myRegisteredEvents = [];
 let isRichMenuOpen = true;
@@ -1161,7 +1156,7 @@ function hideLiffLoadingScreen() {
 }
 
 // ============================================================
-//  API HELPER  (replace mock calls with fetch to your backend)
+//  API HELPER
 // ============================================================
 async function apiFetch(path, options = {}) {
     const res = await fetch(API_BASE + path, {
@@ -1245,23 +1240,10 @@ async function loadEvents(scope) {
     }
 }
 
+// 後端是活動資料的唯一來源。連不上時回空陣列 —— 顯示不存在的活動只會讓社友
+// 白跑一趟或報名到錯的場次。
 function getActiveEventsData() {
-    const cached = eventsCache[systemScope];
-    if (cached && cached.length) return cached;
-    // Fallback (backend unreachable / desktop preview)
-    if (systemScope === 'district') return districtEvents;
-    const cn = myClubName || '本社';
-    const base = new Date();
-    const iso = (days) => {
-        const x = new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
-        return x.toISOString().slice(0, 10);
-    };
-    return [
-        // 非例會活動用 pdf_url 掛上傳到 Google Drive 的 PDF 分享連結；沒填則顯示「PDF準備中」。
-        { id: 9001, date: iso(9),  displayDate: iso(9),  weekday:"", title:`${cn} 第 1234 次例會 · 專題演講`, location:"本社例會餐廳", chair:"本社社長",     time:"12:00-14:00", type:"社內例會", fee:"NT$300" },
-        { id: 9002, date: iso(24), displayDate: iso(24), weekday:"", title:`${cn} 秋季國內旅遊`,              location:"宜蘭礁溪",     chair:"本社旅遊主委", time:"整天",        type:"社內旅遊", fee:"NT$2,800", pdf_url:"" },
-        { id: 9003, date: iso(40), displayDate: iso(40), weekday:"", title:`${cn} 高球月例賽`,                location:"美麗華高爾夫", chair:"本社高球主委", time:"06:00-14:00", type:"社內高球", fee:"NT$1,800" }
-    ];
+    return eventsCache[systemScope] || [];
 }
 
 function findClosestUpcomingEvent() {
@@ -1456,15 +1438,10 @@ function renderProfileMenu() {
 }
 
 
-// ============================================================
-//  PORTED FROM SIMULATOR  (mock-style, self-contained)
-// ============================================================
-
-// Combined district + club events, tagged with a scope label for the survey picker.
+// 地區 + 社內活動，標上範圍標籤給報名專區的活動下拉用。兩邊都取自後端快取。
 function getAllCombinedEvents() {
-    const dist = (typeof districtEvents !== 'undefined' ? districtEvents : []).map(e => ({ ...e, scope: '地區' }));
-    const clubRaw = (typeof eventsCache !== 'undefined' && eventsCache.club) ? eventsCache.club : [];
-    const club = clubRaw.map(e => ({ ...e, scope: '社內' }));
+    const dist = (eventsCache.district || []).map(e => ({ ...e, scope: '地區' }));
+    const club = (eventsCache.club || []).map(e => ({ ...e, scope: '社內' }));
     return [...dist, ...club];
 }
 
@@ -1567,36 +1544,43 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// 地區年會報到前的 LBS 距離驗證；通過才執行 onPass()
+// 報到前的 LBS 距離驗證；通過才執行 onPass()。
+// 會場座標存在活動的 geo 欄位（"緯度,經度"，執秘於行事曆管理填寫）；沒填就不做
+// 驗證直接放行 —— 拿寫死的座標去比對，只會擋錯人或放行錯人。
+// 拒絕定位授權一律視為驗證失敗：能靠關掉定位繞過的防弊等於沒有防弊。
+function _eventGeo(ev) {
+    const parts = String(ev.geo || '').split(',');
+    if (parts.length !== 2) return null;
+    const lat = parseFloat(parts[0]), lng = parseFloat(parts[1]);
+    return (isFinite(lat) && isFinite(lng)) ? { lat, lng } : null;
+}
+
 function runAnnualLbsGate(onPass) {
     const ev = currentActiveEvent || {};
-    const eventLat = ev.lat || 25.0785;
-    const eventLng = ev.lng || 121.5262;
-    addChatMessage("system", `📍 <b>【LBS 定位驗證中】</b><br>正在獲取您的實際 GPS 定位，以核對是否在「${ev.location || '會場'}」活動現場 (允許誤差 100 公尺)...`);
-    const runCheck = (userLat, userLng) => {
-        const dist = calculateDistance(userLat, userLng, eventLat, eventLng);
-        setTimeout(() => {
+    const venue = _eventGeo(ev);
+    if (!venue) { onPass(); return; }          // 此活動未設定會場座標 → 不做定位驗證
+    if (!navigator.geolocation) {
+        showAlert('無法定位', '您的裝置不支援定位功能，請洽現場工作人員協助報到。');
+        return;
+    }
+    addChatMessage("system", `📍 <b>【LBS 定位驗證中】</b><br>正在獲取您的實際 GPS 定位，以核對是否在「${_escHtml(ev.location || '會場')}」活動現場 (允許誤差 100 公尺)...`);
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, venue.lat, venue.lng);
             if (dist <= 100) {
                 addChatMessage("system", `✅ <b>定位驗證通過</b><br>距離會場：${Math.round(dist)} 公尺。`);
                 onPass();
             } else {
-                openGpsMapModal(userLat, userLng, eventLat, eventLng, Math.round(dist));
+                openGpsMapModal(pos.coords.latitude, pos.coords.longitude, venue.lat, venue.lng, Math.round(dist));
                 addChatMessage("system", `❌ <b>定位驗證失敗</b><br>距離會場 <b>${Math.round(dist)} 公尺</b>，超過允許範圍。`);
             }
-        }, 800);
-    };
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (pos) => runCheck(pos.coords.latitude, pos.coords.longitude),
-            () => {
-                addChatMessage("system", `❌ <b>未獲取真實定位授權</b><br>因瀏覽器安全性限制，已改用模擬座標 (台北信義區) 進行示範。`);
-                setTimeout(() => runCheck(25.0339, 121.5644), 800);
-            },
-            { enableHighAccuracy: true }
-        );
-    } else {
-        showAlert('錯誤', '您的裝置不支援定位功能。');
-    }
+        },
+        () => {
+            addChatMessage("system", `❌ <b>定位驗證失敗</b><br>未取得定位授權，無法確認您在會場。請於裝置設定開啟定位權限後重試，或洽現場工作人員。`);
+            showAlert('需要定位權限', '報到需確認您人在會場，請開啟定位權限後再試一次。');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+    );
 }
 
 // ---- 社務對帳與請款系統 ----
@@ -1724,7 +1708,12 @@ function _surveyEventId() {
     return document.getElementById('club-reg-event-select').value;
 }
 
-function openClubRegAdminModal() {
+async function openClubRegAdminModal() {
+    // 下拉要同時列出地區與社內活動，先確保兩邊的快取都載過。
+    await Promise.all([
+        eventsCache.district ? Promise.resolve() : loadEvents('district'),
+        eventsCache.club ? Promise.resolve() : loadEvents('club'),
+    ]);
     const allEvents = getAllCombinedEvents();
     const selectEl = document.getElementById('club-reg-event-select');
     selectEl.innerHTML = '<option value="">請選擇要發送/追蹤的活動...</option>';
@@ -2879,7 +2868,10 @@ async function renderClubMembers() {
             name: m.full_name + (m.nickname ? `（${m.nickname}）` : '')
         }));
     } catch (err) {
-        members = Array.from({ length: 6 }, (_, i) => ({ id: `mock_${i+1}`, name: `社友 ${i+1}` }));
+        // 絕不能塞假名單：勾選後會把不存在的 uid 寫進報名紀錄。
+        listEl.innerHTML = `<p class="text-xs text-rose-500 p-2">社友名單載入失敗：${_escHtml(err.message)}</p>`;
+        updateSelectedCount();
+        return;
     }
     if (!members.length) {
         listEl.innerHTML = `<p class="text-xs text-gray-400 p-2">此社目前沒有已綁定資料的社友。</p>`;
@@ -3206,6 +3198,7 @@ function openEventForm(ev) {
     document.getElementById('event-form-fee').value = ev.fee || '';
     document.getElementById('event-form-type').value = ev.type || '';
     document.getElementById('event-form-chair').value = ev.chair || '';
+    document.getElementById('event-form-geo').value = ev.geo || '';
     document.getElementById('event-admin-list-view').classList.add('hidden');
     document.getElementById('event-admin-form-view').classList.remove('hidden');
 }
@@ -3228,8 +3221,12 @@ async function saveEventForm() {
         fee: document.getElementById('event-form-fee').value.trim(),
         type: document.getElementById('event-form-type').value.trim(),
         chair: document.getElementById('event-form-chair').value.trim(),
+        geo: document.getElementById('event-form-geo').value.trim(),
     };
     if (!payload.title) { showAlert('缺少標題', '請輸入活動標題。'); return; }
+    if (payload.geo && !/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(payload.geo)) {
+        showAlert('座標格式錯誤', '會場座標請填「緯度,經度」，例如 25.0785,121.5262。'); return;
+    }
     try {
         if (id) await apiFetch('/admin/events/' + id, { method: 'PUT', body: JSON.stringify(payload) });
         else await apiFetch('/admin/events', { method: 'POST', body: JSON.stringify(payload) });
