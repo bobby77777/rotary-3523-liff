@@ -2214,7 +2214,8 @@ async function confirmRegistration() {
         if (digits) msg += `<br>轉出末 5 碼：<b class="text-blue-600">${digits}</b>（待秘書處對帳）`;
         else msg += `<br>⚠️ 未提供帳號末 5 碼，完成匯款後請至「個人中心→回報匯款」補填。`;
         addChatMessage("bot", msg);
-        sendLineMessage(`✅ 報名成功：${data.event_title}`);
+        // 不用 liff.sendMessages 回報名結果：那會用「社友本人」的身分在聊天室發話，
+        // 機器人又聽不懂那句話，只會回一句「請使用下方選單按鈕操作」。
     } catch (err) {
         showAlert('連線失敗', err.message + '\n請確認網路後再試。');
     }
