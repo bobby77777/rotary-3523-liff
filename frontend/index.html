@@ -423,8 +423,13 @@
         </div>
         <div class="overflow-y-auto p-4 space-y-4 flex-1 bg-gray-50 no-scrollbar">
             <div class="bg-purple-50 border border-purple-200 p-2.5 rounded-xl text-xs text-purple-800 flex justify-between items-center shadow-sm">
-                <span><i class="fa-solid fa-clock mr-1"></i> 切割基準時間：<b class="text-purple-900 font-black">10:30</b></span>
-                <span class="text-[9px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold shadow-sm">連動現場報到</span>
+                <span><i class="fa-solid fa-clock mr-1"></i> 切割基準時間：<b class="text-purple-900 font-black" id="vip-cutoff">--:--</b></span>
+                <span class="text-[9px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold shadow-sm">開場後抵達列入補介紹</span>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-xl p-2.5 shadow-sm flex gap-1.5">
+                <input type="text" id="vip-new-name" placeholder="貴賓姓名" class="w-1/3 bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-purple-500">
+                <input type="text" id="vip-new-title" placeholder="職銜（如 地區總監 DG）" class="flex-1 bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500">
+                <button onclick="addVIP()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 rounded-lg text-xs font-bold shrink-0 active:scale-95 transition-all"><i class="fa-solid fa-plus"></i></button>
             </div>
             <div id="vip-list-container" class="space-y-4"></div>
         </div>
@@ -676,14 +681,18 @@
             <div class="flex items-center gap-2 text-white"><i class="fa-solid fa-people-arrows text-yellow-400"></i><h3 class="font-bold text-base">即時調組系統</h3></div>
             <button onclick="closeModal('modal-swap-group')" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
         </div>
-        <div class="p-6 flex flex-col space-y-4">
-            <div><label class="block text-xs font-bold text-gray-700 mb-1">球友 A (原組成員)</label><input type="text" id="swap-player-a" value="王大同" class="w-full bg-gray-50 border border-gray-300 rounded-xl py-2.5 px-3 text-sm focus:ring-blue-500"></div>
+        <div class="p-5 flex flex-col space-y-4 max-h-[80vh] overflow-y-auto no-scrollbar">
+            <div id="swap-groups-board" class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-400 text-center">載入中…</div>
+            <div><label class="block text-xs font-bold text-gray-700 mb-1">球友 A (原組成員)</label><select id="swap-player-a" class="w-full bg-gray-50 border border-gray-300 rounded-xl py-2.5 px-3 text-sm font-bold focus:ring-blue-500"></select></div>
             <div class="flex justify-center"><div class="w-8 h-8 bg-blue-100 border border-blue-200 rounded-full flex items-center justify-center text-blue-600"><i class="fa-solid fa-arrow-down-up-across"></i></div></div>
-            <div><label class="block text-xs font-bold text-gray-700 mb-1">球友 B (欲對調成員)</label><input type="text" id="swap-player-b" value="張三明" class="w-full bg-gray-50 border border-gray-300 rounded-xl py-2.5 px-3 text-sm focus:ring-blue-500"></div>
+            <div><label class="block text-xs font-bold text-gray-700 mb-1">球友 B (欲對調成員)</label><select id="swap-player-b" class="w-full bg-gray-50 border border-gray-300 rounded-xl py-2.5 px-3 text-sm font-bold focus:ring-blue-500"></select></div>
             <div class="flex gap-2 w-full pt-2">
                 <button onclick="closeModal('modal-swap-group')" class="w-1/2 py-2.5 rounded-xl font-bold text-gray-600 text-sm bg-white btn-3d btn-3d-white mb-1">取消</button>
                 <button onclick="executeGroupSwap()" class="w-1/2 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-sm btn-3d btn-3d-primary mb-1">確認對調</button>
             </div>
+            <button onclick="autoGroupGolf()" class="w-full py-2 rounded-xl font-bold text-gray-600 text-[11px] bg-gray-100 border border-gray-200 hover:bg-gray-200 transition-colors">
+                <i class="fa-solid fa-shuffle"></i> 依報名名單重新分組（4 人一組）
+            </button>
         </div>
     </div>
 </div>
@@ -945,15 +954,6 @@ const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
 const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
 // ============================================================
 
-// ---- DATA (之後從 API 取得) ----
-const clubsData = [
-    { id: 1,  area: "第一分區", name: "台北南港扶輪社", charterYear: 1982, registered: 18, paid: 15, attended: 4 },
-    { id: 2,  area: "第一分區", name: "台北逸仙扶輪社", charterYear: 1998, registered: 12, paid: 12, attended: 6 },
-    { id: 5,  area: "第二分區", name: "台北松山扶輪社", charterYear: 1978, registered: 24, paid: 22, attended: 10 },
-    { id: 9,  area: "第三分區", name: "台北瑞光扶輪社", charterYear: 1985, registered: 20, paid: 20, attended: 11 },
-    { id: 10, area: "第三分區", name: "台北忠孝扶輪社", charterYear: 1996, registered: 13, paid: 11, attended: 5 }
-];
-
 // 地區活動的 PDF 走 Google Drive：把上傳後的分享連結填進 pdf_url，留空則顯示「PDF準備中」。
 const districtEvents = [
     { id: 102, date: "2025-05-25", displayDate: "2025-05-25", weekday: "星期日", title: "DTTS 地區團隊訓練研討會", location: "漢來飯店", chair: "王維宏", time: "13:00-17:00", type: "訓練研討", pdf_url: "" },
@@ -963,21 +963,7 @@ const districtEvents = [
     { id: 109, date: "2026-12-26", displayDate: "2026-12-26~27", weekday: "星期六、日", title: "地區年會", location: "圓山飯店", chair: "王欽秉", time: "整天", type: "地區年會", pdf_url: "" }
 ];
 
-const golfPlayers = [
-    { name: "我", scores: [4,3,5,4,4,3,4,5,4,4,4,3,5,4,4,3,5,4], isMe: true },
-    { name: "李志明", scores: [5,3,6,5,4,4,5,5,5,4,5,3,6,5,5,3,6,5], isMe: false },
-    { name: "陳建國", scores: [4,4,5,4,5,3,4,6,4,5,4,4,5,4,4,4,5,5], isMe: false },
-    { name: "林永生", scores: [6,2,7,5,4,3,5,6,5,5,5,4,7,4,5,4,6,4], isMe: false }
-];
 const golfPars = [4,3,5,4,4,3,4,5,4,4,4,3,5,4,4,3,5,4];
-
-const golfLeaderboardData = [
-    { rank:1, club:"台北松山扶輪社", name:"王大同", out:36, in:34, total:70, diff:-2 },
-    { rank:2, club:"台北瑞光扶輪社", name:"張國榮", out:35, in:36, total:71, diff:-1 },
-    { rank:3, club:"台北南港扶輪社", name:"林志豪", out:37, in:35, total:72, diff:0 },
-    { rank:4, club:"台北忠孝扶輪社", name:"陳建明", out:36, in:37, total:73, diff:1 },
-    { rank:5, club:"台北松山扶輪社", name:"吳宗翰", out:38, in:36, total:74, diff:2 },
-];
 
 // ---- STATE ----
 let lineProfile = null;       // from liff.getProfile()
@@ -1041,8 +1027,6 @@ function applyLineProfile() {
         avatarImg.classList.remove('hidden');
         avatarFallback.classList.add('hidden');
     }
-    // Update golf player "me" name from LINE profile
-    if (golfPlayers[0]) golfPlayers[0].name = lineProfile.displayName || '我';
 }
 
 function hideLiffLoadingScreen() {
@@ -1789,74 +1773,131 @@ async function reportToPresident() {
 }
 
 // ============================================================
-//  VIP ROLL-CALL (貴賓唱名介紹) — keyed by event id
+//  VIP ROLL-CALL (貴賓唱名介紹) — 名單存在後端，依活動分開
 // ============================================================
-const vipDatabase = {
-    107: [ // RYE
-        { id: 'v1', name: '陳俊宇', title: '地區總監 DG',      order: 1, arrived: true,  arriveTime: '09:30', isCalled: false },
-        { id: 'v2', name: '林大智', title: '前總監 PDG',       order: 2, arrived: true,  arriveTime: '09:45', isCalled: false },
-        { id: 'v3', name: '黃美麗', title: '總監當選人 DGE',   order: 3, arrived: false, arriveTime: '',      isCalled: false },
-        { id: 'v4', name: '張惠妹', title: '總監提名人 DGN',   order: 4, arrived: true,  arriveTime: '10:45', isCalled: false }
-    ],
-    109: [ // 年會
-        { id: 'v1', name: '王欽秉', title: '地區總監 DG',        order: 1, arrived: true,  arriveTime: '09:15', isCalled: false },
-        { id: 'v2', name: '李世民', title: '前總監 PDG',         order: 2, arrived: true,  arriveTime: '10:20', isCalled: false },
-        { id: 'v3', name: '趙子龍', title: '國際扶輪理事 RI Dir.', order: 3, arrived: true,  arriveTime: '10:40', isCalled: false },
-        { id: 'v4', name: '孫悟空', title: '地區秘書長 DS',      order: 4, arrived: true,  arriveTime: '10:55', isCalled: false },
-        { id: 'v5', name: '劉備',   title: '年會主委',           order: 5, arrived: false, arriveTime: '',      isCalled: false }
-    ]
-};
+// 主委在現場點「報到」，由伺服器蓋抵達時間；早於活動開始時間的進正式名單，
+// 晚到的自動落到補介紹名單。
+let vipState = { eventId: null, cutoff: '10:30', vips: [] };
 
-function openVIPListModal() {
-    const vips = vipDatabase[currentActiveEvent?.id] || [];
-    if (!vips.length) { showAlert('無貴賓資料', '此活動目前無設定貴賓唱名名單。'); return; }
+async function openVIPListModal() {
+    const container = document.getElementById('vip-list-container');
+    container.innerHTML = `<p class="text-xs text-gray-400 py-8 text-center">載入中…</p>`;
+    openModal('modal-vip-list');
+    await reloadVIPs();
+}
 
-    const onTime  = vips.filter(v => v.arrived && v.arriveTime <= '10:30').sort((a, b) => a.order - b.order);
-    const late    = vips.filter(v => v.arrived && v.arriveTime >  '10:30').sort((a, b) => a.order - b.order);
-    const pending = vips.filter(v => !v.arrived).sort((a, b) => a.order - b.order);
+async function reloadVIPs() {
+    const container = document.getElementById('vip-list-container');
+    const evId = vipState.eventId || currentActiveEvent?.id;
+    let data;
+    try {
+        data = await apiFetch('/admin/vips' + (evId ? ('?event=' + evId) : ''));
+    } catch (err) {
+        container.innerHTML = `<p class="text-xs text-rose-500 py-8 text-center">載入失敗：${_escHtml(err.message)}</p>`;
+        return;
+    }
+    if (data.status === 'forbidden') { closeModal('modal-vip-list'); showAlert('權限不足', data.message || '您沒有貴賓名單權限。'); return; }
+    if (data.status !== 'ok') {
+        container.innerHTML = `<p class="text-xs text-gray-400 py-8 text-center">${_escHtml(data.message || '找不到活動')}</p>`;
+        return;
+    }
+    vipState = { eventId: data.event_id, cutoff: data.cutoff, vips: data.vips || [] };
+    document.getElementById('vip-cutoff').textContent = data.cutoff;
+    renderVIPList();
+}
 
-    const group = (headBg, headText, icon, label, badgeBg, list, emptyText) => {
+function renderVIPList() {
+    const { cutoff, vips } = vipState;
+    const onTime  = vips.filter(v => v.arrived && v.arrive_time <= cutoff);
+    const late    = vips.filter(v => v.arrived && v.arrive_time >  cutoff);
+    const pending = vips.filter(v => !v.arrived);
+
+    const group = (headBg, headText, icon, label, badgeBg, list, emptyText, isPending) => {
         let h = `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div class="px-4 py-2 ${headBg} border-b flex justify-between items-center">
                 <span class="text-xs font-bold ${headText}"><i class="fa-solid ${icon} mr-1"></i> ${label}</span>
                 <span class="${badgeBg} text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">${list.length} 人</span>
             </div><div class="divide-y divide-gray-100">`;
         if (!list.length) h += `<div class="p-4 text-center text-xs text-gray-400 italic">${emptyText}</div>`;
-        list.forEach(v => { h += generateVIPRow(v); });
+        list.forEach((v, i) => { h += generateVIPRow(v, i + 1, isPending); });
         return h + `</div></div>`;
     };
 
-    let html = group('bg-indigo-50', 'text-indigo-800', 'fa-list-ol', '正式名單 (10:30 前報到)', 'bg-indigo-600', onTime, '目前尚無符合條件之貴賓');
-    html += group('bg-amber-50', 'text-amber-800', 'fa-bell', '補介紹名單 (10:30 後報到)', 'bg-amber-500', late, '目前尚無補介紹貴賓');
-    html += `<div class="opacity-70">` + group('bg-gray-100', 'text-gray-600', 'fa-hourglass-half', '尚未報到 (供查核用)', 'bg-gray-400', pending.map(v => ({ ...v, _pending: true })), '皆已全數抵達') + `</div>`;
-
-    document.getElementById('vip-list-container').innerHTML = html;
-    openModal('modal-vip-list');
-}
-
-function generateVIPRow(v) {
-    if (v._pending) {
-        return `<div class="p-2.5 flex justify-between items-center text-gray-400 bg-gray-50">
-            <div class="flex items-center gap-2"><span class="w-5 text-center text-[10px] font-bold">${v.order}.</span>
-            <div><div class="text-xs font-bold text-gray-500">${v.name}</div><div class="text-[9px]">${v.title}</div></div></div>
-            <span class="text-[10px]"><i class="fa-solid fa-minus"></i></span></div>`;
+    let html = '';
+    if (!vips.length) {
+        html = `<div class="bg-white rounded-2xl border border-gray-200 p-6 text-center text-xs text-gray-400">
+            此活動尚未建立貴賓名單，請用上方欄位新增。</div>`;
+    } else {
+        html  = group('bg-indigo-50', 'text-indigo-800', 'fa-list-ol', `正式名單 (${cutoff} 前抵達)`, 'bg-indigo-600', onTime, '目前尚無符合條件之貴賓');
+        html += group('bg-amber-50', 'text-amber-800', 'fa-bell', `補介紹名單 (${cutoff} 後抵達)`, 'bg-amber-500', late, '目前尚無補介紹貴賓');
+        html += `<div class="opacity-80">` + group('bg-gray-100', 'text-gray-600', 'fa-hourglass-half', '尚未抵達', 'bg-gray-400', pending, '皆已全數抵達', true) + `</div>`;
     }
-    const called = v.isCalled;
-    const btn = called
-        ? `<button onclick="toggleVIPCalled('${v.id}')" class="text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200 text-[10px] font-black shadow-sm active:scale-95"><i class="fa-solid fa-check-double"></i> 已唱名</button>`
-        : `<button onclick="toggleVIPCalled('${v.id}')" class="text-purple-600 bg-purple-100 hover:bg-purple-200 px-2 py-1 rounded-lg border border-purple-200 text-[10px] font-black shadow-sm active:scale-95"><i class="fa-solid fa-bullhorn"></i> 唱名</button>`;
-    return `<div class="p-3 flex justify-between items-center transition-all ${called ? 'opacity-50 grayscale bg-gray-50' : 'bg-white hover:bg-purple-50'}">
-        <div class="flex items-center gap-2"><span class="w-5 text-center text-xs font-black text-gray-400">${v.order}.</span>
-        <div><div class="text-[13px] font-black text-gray-800 flex items-center gap-1.5">${v.name}
-            <span class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5"><i class="fa-solid fa-clock"></i> ${v.arriveTime}</span></div>
-        <div class="text-[10px] text-gray-500 font-bold mt-0.5">${v.title}</div></div></div>
-        ${btn}</div>`;
+    document.getElementById('vip-list-container').innerHTML = html;
 }
 
-function toggleVIPCalled(vipId) {
-    const vips = vipDatabase[currentActiveEvent?.id] || [];
-    const vip = vips.find(v => v.id === vipId);
-    if (vip) { vip.isCalled = !vip.isCalled; openVIPListModal(); }
+function generateVIPRow(v, index, isPending) {
+    const del = `<button onclick="deleteVIP(${v.id})" class="text-gray-300 hover:text-red-500 px-1" title="移除"><i class="fa-solid fa-trash-can text-[11px]"></i></button>`;
+    if (isPending) {
+        return `<div class="p-2.5 flex justify-between items-center bg-gray-50">
+            <div class="flex items-center gap-2"><span class="w-5 text-center text-[10px] font-bold text-gray-400">${index}.</span>
+            <div><div class="text-xs font-bold text-gray-600">${_escHtml(v.name)}</div><div class="text-[9px] text-gray-400">${_escHtml(v.title)}</div></div></div>
+            <div class="flex items-center gap-1">
+                <button onclick="setVIPArrived(${v.id}, true)" class="text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-200 text-[10px] font-black active:scale-95"><i class="fa-solid fa-right-to-bracket"></i> 報到</button>
+                ${del}
+            </div></div>`;
+    }
+    const called = v.is_called;
+    const btn = called
+        ? `<button onclick="toggleVIPCalled(${v.id})" class="text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200 text-[10px] font-black shadow-sm active:scale-95"><i class="fa-solid fa-check-double"></i> 已唱名</button>`
+        : `<button onclick="toggleVIPCalled(${v.id})" class="text-purple-600 bg-purple-100 hover:bg-purple-200 px-2 py-1 rounded-lg border border-purple-200 text-[10px] font-black shadow-sm active:scale-95"><i class="fa-solid fa-bullhorn"></i> 唱名</button>`;
+    return `<div class="p-3 flex justify-between items-center transition-all ${called ? 'opacity-50 grayscale bg-gray-50' : 'bg-white hover:bg-purple-50'}">
+        <div class="flex items-center gap-2"><span class="w-5 text-center text-xs font-black text-gray-400">${index}.</span>
+        <div><div class="text-[13px] font-black text-gray-800 flex items-center gap-1.5">${_escHtml(v.name)}
+            <button onclick="setVIPArrived(${v.id}, false)" class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5" title="取消報到"><i class="fa-solid fa-clock"></i> ${_escHtml(v.arrive_time)}</button></div>
+        <div class="text-[10px] text-gray-500 font-bold mt-0.5">${_escHtml(v.title)}</div></div></div>
+        <div class="flex items-center gap-1">${btn}${del}</div></div>`;
+}
+
+async function _vipPost(path, body) {
+    try {
+        const data = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
+        if (data.status !== 'ok') { showAlert('操作失敗', data.message || '請稍後再試。'); return null; }
+        return data;
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+        return null;
+    }
+}
+
+async function addVIP() {
+    const nameEl = document.getElementById('vip-new-name');
+    const titleEl = document.getElementById('vip-new-title');
+    const name = nameEl.value.trim();
+    if (!name) { showAlert('請填姓名', '請先輸入貴賓姓名。'); return; }
+    const evId = vipState.eventId || currentActiveEvent?.id;
+    if (await _vipPost('/admin/vips', { event_id: evId, name, title: titleEl.value.trim() })) {
+        nameEl.value = ''; titleEl.value = '';
+        await reloadVIPs();
+    }
+}
+
+async function setVIPArrived(vipId, arrived) {
+    if (await _vipPost(`/admin/vips/${vipId}`, { arrived })) await reloadVIPs();
+}
+
+async function toggleVIPCalled(vipId) {
+    const v = vipState.vips.find(x => x.id === vipId);
+    if (!v) return;
+    if (await _vipPost(`/admin/vips/${vipId}`, { is_called: !v.is_called })) await reloadVIPs();
+}
+
+async function deleteVIP(vipId) {
+    try {
+        await apiFetch(`/admin/vips/${vipId}`, { method: 'DELETE' });
+        await reloadVIPs();
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
 }
 
 // ============================================================
@@ -2054,7 +2095,7 @@ function renderAdminMenu() {
     let left, rightTop;
     if (isGolf) {
         left = box('高爾夫主委', '賽事即時總看板',
-            miniRow(mini("openModal('modal-swap-group')", 'fa-people-arrows', '即時調組'),
+            miniRow(mini('openSwapGroupModal()', 'fa-people-arrows', '即時調組'),
                     mini('openGolfLeaderboard()', 'fa-flag', '賽事成績')) +
             miniRow(mini('openDrawHolesModal()', 'fa-dice', '新貝抽洞'),
                     mini('openGolfLeaderboard()', 'fa-ranking-star', '總桿排行')) + statsBtn);
@@ -2228,7 +2269,7 @@ async function clickHelpRegister(e) {
             ? clubs.map(c => `<option value="${c}">${c}</option>`).join('')
             : `<option value="">（尚無已綁定社友）</option>`;
     } catch (err) {
-        select.innerHTML = clubsData.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        select.innerHTML = `<option value="">（社別載入失敗）</option>`;
     }
     await renderClubMembers();
     openModal('modal-exec-sec-register');
@@ -2677,9 +2718,13 @@ async function openStatisticsModal(e) {
         if (data.status === 'forbidden') { showAlert('權限不足', data.message || '您沒有統計檢視權限。'); return; }
         if (data.status === 'no_event') { showAlert('無對應活動', data.message || '找不到活動資料。'); return; }
     } catch (err) {
-        console.warn('stats api fallback to mock:', err.message);
+        console.warn('stats:', err.message);
     }
-    renderStatisticsTable(); // dev/preview fallback (mock clubsData)
+    // 看板寧可空著也不要顯示假數字 —— 主委會拿這些數字對外報告。
+    ['kpi-total-reg', 'kpi-total-check', 'kpi-total-pay', 'kpi-total-unpay']
+        .forEach(id => { document.getElementById(id).textContent = '--'; });
+    document.getElementById('statistics-table-body').innerHTML =
+        `<tr><td colspan="5" class="py-6 text-center text-rose-500 text-xs">統計資料載入失敗，請確認網路後重開看板</td></tr>`;
 }
 
 function renderStatisticsFromApi(data) {
@@ -2793,21 +2838,6 @@ function renderClubAttendance(data) {
     }).join('');
 }
 
-function renderStatisticsTable() {
-    const tbody = document.getElementById('statistics-table-body');
-    let tr=0, tp=0, tu=0, ta=0;
-    tbody.innerHTML = clubsData.map(club => {
-        const unpay = club.registered - club.paid;
-        const rate = club.registered > 0 ? Math.round(club.attended/club.registered*100) : 0;
-        tr+=club.registered; tp+=club.paid; tu+=unpay; ta+=club.attended;
-        return `<tr class="border-b text-xs"><td class="py-2 px-3 font-bold">${club.name}</td><td class="text-center">${club.registered}</td><td class="text-center">${club.paid}</td><td class="text-center text-blue-600">${club.attended}</td><td class="text-right px-3">${rate}%</td></tr>`;
-    }).join('');
-    document.getElementById('kpi-total-reg').textContent = `${tr} 人`;
-    document.getElementById('kpi-total-pay').textContent = `${tp} 筆`;
-    document.getElementById('kpi-total-unpay').textContent = `${tu} 筆`;
-    document.getElementById('kpi-total-check').textContent = `${ta} 人`;
-}
-
 // ============================================================
 //  GOLF
 // ============================================================
@@ -2914,9 +2944,78 @@ function renderGolfLeaderboard(players) {
     }).join('');
 }
 
-function executeGroupSwap() {
-    closeModal('modal-swap-group');
-    addChatMessage("bot", `✅ <b>即時調組成功</b><br>${document.getElementById('swap-player-a').value} ↔ ${document.getElementById('swap-player-b').value} 已完成調換。`);
+// ---- 高球即時調組：分組表存在後端，對調後兩位球友都會收到 LINE 通知 ----
+let golfGroupState = { eventId: null, players: [] };
+
+async function openSwapGroupModal() {
+    document.getElementById('swap-groups-board').innerHTML = '載入中…';
+    openModal('modal-swap-group');
+    await reloadGolfGroups();
+}
+
+async function reloadGolfGroups() {
+    const board = document.getElementById('swap-groups-board');
+    const evId = golfGroupState.eventId || golfScoreEventId || currentActiveEvent?.id;
+    let data;
+    try {
+        data = await apiFetch('/golf/groups' + (evId ? ('?event=' + evId) : ''));
+    } catch (err) {
+        board.innerHTML = `<span class="text-rose-500">載入失敗：${_escHtml(err.message)}</span>`;
+        return;
+    }
+    if (data.status !== 'ok') { board.innerHTML = `<span class="text-gray-400">${_escHtml(data.message || '找不到賽事')}</span>`; return; }
+    golfGroupState = { eventId: data.event_id, players: data.players || [] };
+
+    const groups = data.groups || [];
+    board.innerHTML = groups.length
+        ? `<div class="text-left space-y-1.5">` + groups.map(g =>
+            `<div class="flex gap-2 items-start">
+                <span class="bg-blue-100 text-blue-800 font-black px-1.5 py-0.5 rounded text-[10px] shrink-0">第 ${g.group_no} 組</span>
+                <span class="text-gray-700 text-[11px] leading-relaxed">${g.players.map(p => _escHtml(p.name)).join('、')}</span>
+            </div>`).join('') + `</div>`
+        : `<span class="text-gray-400">尚未分組，可按下方「依報名名單重新分組」。</span>`;
+
+    const opts = golfGroupState.players.length
+        ? golfGroupState.players.map(p => `<option value="${p.id}">第 ${p.group_no} 組 · ${_escHtml(p.name)}</option>`).join('')
+        : `<option value="">（尚未分組）</option>`;
+    const a = document.getElementById('swap-player-a');
+    const b = document.getElementById('swap-player-b');
+    a.innerHTML = opts;
+    b.innerHTML = opts;
+    if (golfGroupState.players.length > 1) b.selectedIndex = 1;
+}
+
+async function autoGroupGolf() {
+    try {
+        const data = await apiFetch('/golf/groups/auto', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: golfGroupState.eventId || golfScoreEventId || currentActiveEvent?.id })
+        });
+        if (data.status !== 'ok') { showAlert('分組失敗', data.message || '請稍後再試。'); return; }
+        await reloadGolfGroups();
+        showAlert('分組完成', `已依報名名單將 ${data.players} 位球友分成 ${data.groups} 組。`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+async function executeGroupSwap() {
+    const a = document.getElementById('swap-player-a').value;
+    const b = document.getElementById('swap-player-b').value;
+    if (!a || !b) { showAlert('尚未分組', '請先建立分組表再進行調組。'); return; }
+    if (a === b) { showAlert('無法對調', '請選擇兩位不同的球友。'); return; }
+    try {
+        const data = await apiFetch('/golf/groups/swap', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: golfGroupState.eventId, a: parseInt(a), b: parseInt(b) })
+        });
+        if (data.status !== 'ok') { showAlert('調組失敗', data.message || '請稍後再試。'); return; }
+        await reloadGolfGroups();
+        closeModal('modal-swap-group');
+        addChatMessage("bot", `✅ <b>即時調組成功</b><br>${_escHtml(data.a.name)}（第 ${data.a.group_no} 組）↔ ${_escHtml(data.b.name)}（第 ${data.b.group_no} 組）<br><span class="text-[10px] text-gray-500">※ 已透過 LINE 通知兩位球友。</span>`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
 }
 
 // 新貝利亞抽洞：主委隨機抽出 6 個隱藏洞（前9/後9 各 3 個），存到後端並用於淨桿重算。
@@ -2942,48 +3041,95 @@ async function executeDrawHoles() {
     }
 }
 
-// 待繳費明細：從統計看板的「待繳費」KPI 點入，列出各社欠費筆數並可一鍵催繳。
-function openUnpaidDetailsModal() {
+// 待繳費明細：從統計看板的「待繳費」KPI 點入，列出各社未繳名單並可一鍵催繳。
+// 名單來自該活動的實際報名紀錄：payment_status 未達 confirmed 就算待繳，其中
+// uploaded（已回報末 5 碼、等執秘對帳）只列出、不催。
+let unpaidEventId = null;
+
+async function openUnpaidDetailsModal() {
     const container = document.getElementById('unpaid-details-list');
     if (!container) return;
-    const isAnnual = currentActiveEvent && (currentActiveEvent.id === 109 || currentActiveEvent.type === '地區年會');
-    let html = '';
-    let totalUnpaid = 0;
-
-    clubsData.forEach(club => {
-        let unpay = club.registered - club.paid;
-        if (isAnnual && unpay > 0 && club.registered > 0) unpay = club.registered; // 年會採執秘批次匯款，未匯前全社視為欠費
-        if (unpay <= 0) return;
-        totalUnpaid += unpay;
-        const note = isAnnual
-            ? `<div class="text-[10px] text-rose-500 mt-1.5 pl-2 border-l-2 border-rose-300 font-bold">⚠️ 執秘尚未批次匯款，目前為全社欠費狀態</div>`
-            : `<div class="text-[10px] text-gray-400 mt-1.5 pl-2 border-l-2 border-gray-200">※ 系統尚未登錄個別名單，目前共 ${unpay} 筆待繳</div>`;
-        html += `<div class="bg-white border border-rose-100 rounded-xl p-3 shadow-sm">
-            <div class="flex justify-between items-center">
-                <span class="font-bold text-gray-800 text-sm"><i class="fa-solid fa-house-flag text-blue-800 mr-1.5"></i>${club.name}</span>
-                <span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-xs font-black border border-rose-200">${unpay} 筆欠費</span>
-            </div>
-            ${note}
-            <button onclick="sendReminderPush('${club.name.replace(/'/g, "\\'")}')" class="mt-3 w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-[0.98]">
-                <i class="fa-regular fa-bell"></i> 一鍵發送催繳通知
-            </button>
-        </div>`;
-    });
-
-    if (totalUnpaid === 0) {
-        html = `<div class="text-center py-10">
-            <i class="fa-solid fa-circle-check text-5xl text-emerald-400 mb-3"></i>
-            <p class="text-gray-600 font-bold text-sm">太棒了！<br>目前全區皆已完成繳費！</p>
-        </div>`;
-    }
-    container.innerHTML = html;
-    document.getElementById('unpaid-modal-subtitle').innerText = `目前累計共 ${totalUnpaid} 筆欠款`;
+    container.innerHTML = `<p class="text-xs text-gray-400 py-8 text-center">載入中…</p>`;
+    document.getElementById('unpaid-modal-subtitle').innerText = '依各社欠費狀況列出';
     openModal('modal-unpaid-details');
+
+    const evId = statsEventId || currentActiveEvent?.id;
+    let data;
+    try {
+        data = await apiFetch('/admin/unpaid' + (evId ? ('?event=' + evId) : ''));
+    } catch (err) {
+        container.innerHTML = `<p class="text-xs text-rose-500 py-8 text-center">載入失敗：${_escHtml(err.message)}</p>`;
+        return;
+    }
+    if (data.status === 'forbidden') { closeModal('modal-unpaid-details'); showAlert('權限不足', data.message || '您沒有檢視權限。'); return; }
+    if (data.status !== 'ok') {
+        container.innerHTML = `<p class="text-xs text-gray-400 py-8 text-center">${_escHtml(data.message || '找不到活動資料')}</p>`;
+        return;
+    }
+    unpaidEventId = data.event_id;
+    renderUnpaidDetails(data);
 }
 
-// 註：待繳費看板目前仍是前端範例資料，這顆催繳鈕沒有後端，實際不會送出任何通知。
-function sendReminderPush(clubName) {
-    showAlert('催繳通知已送出', `已透過 LINE 官方帳號向「${clubName}」的欠費社友推送繳費提醒。`);
+function renderUnpaidDetails(data) {
+    const container = document.getElementById('unpaid-details-list');
+    const clubs = (data.clubs || []).filter(c => c.unpaid.length || c.reported.length);
+    document.getElementById('unpaid-modal-subtitle').innerText =
+        `${data.event_title}　待繳 ${data.total_unpaid} 筆`
+        + (data.total_reported ? `、待對帳 ${data.total_reported} 筆` : '');
+
+    if (!clubs.length) {
+        container.innerHTML = `<div class="text-center py-10">
+            <i class="fa-solid fa-circle-check text-5xl text-emerald-400 mb-3"></i>
+            <p class="text-gray-600 font-bold text-sm">太棒了！<br>報名者皆已完成繳費！</p>
+        </div>`;
+        return;
+    }
+    container.innerHTML = clubs.map(c => {
+        const names = list => list.map(_escHtml).join('、');
+        const unpaidHtml = c.unpaid.length
+            ? `<div class="text-[10px] text-gray-600 mt-1.5 pl-2 border-l-2 border-rose-300 leading-relaxed">${names(c.unpaid)}</div>`
+            : '';
+        const reportedHtml = c.reported.length
+            ? `<div class="text-[10px] text-amber-600 mt-1.5 pl-2 border-l-2 border-amber-300 leading-relaxed">已回報待對帳：${names(c.reported)}</div>`
+            : '';
+        const btn = c.unpaid.length
+            ? `<button onclick="sendReminderPush(this, '${_escAttr(c.club)}')" class="mt-3 w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-[0.98]">
+                <i class="fa-regular fa-bell"></i> 一鍵發送催繳通知（${c.unpaid.length} 人）
+            </button>`
+            : '';
+        return `<div class="bg-white border border-rose-100 rounded-xl p-3 shadow-sm">
+            <div class="flex justify-between items-center">
+                <span class="font-bold text-gray-800 text-sm"><i class="fa-solid fa-house-flag text-blue-800 mr-1.5"></i>${_escHtml(c.club)}</span>
+                <span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-xs font-black border border-rose-200">${c.unpaid.length} 筆待繳</span>
+            </div>
+            ${unpaidHtml}${reportedHtml}${btn}
+        </div>`;
+    }).join('');
+}
+
+function _escAttr(s) {
+    return _escHtml(s).replace(/'/g, '&#39;');
+}
+
+async function sendReminderPush(btn, clubName) {
+    const original = btn.innerHTML;
+    // 送出後按鈕就留在「已通知 N 人」且保持 disabled，免得手一滑連催兩次。
+    const restore = () => { btn.disabled = false; btn.innerHTML = original; };
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 發送中…`;
+    try {
+        const data = await apiFetch('/admin/unpaid/remind', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: unpaidEventId, club: clubName })
+        });
+        if (data.status === 'none_unpaid') { restore(); showAlert('無須催繳', `「${clubName}」目前沒有未繳費的社友。`); return; }
+        if (data.status !== 'ok') { restore(); showAlert('發送失敗', data.message || '請稍後再試。'); return; }
+        btn.innerHTML = `<i class="fa-solid fa-check"></i> 已通知 ${data.reminded} 人`;
+        showAlert('催繳通知已送出', `已透過 LINE 官方帳號向「${clubName}」的 ${data.reminded} 位欠費社友推送繳費提醒。`);
+    } catch (err) {
+        restore();
+        showAlert('連線失敗', err.message);
+    }
 }
 
 // ============================================================

@@ -5,7 +5,7 @@ import json
 import logging
 import random
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,8 @@ from .config import APP_BASE_URL, BULLETIN_BASE_URL, CALENDAR_BASE_URL, LINE_CHA
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+_TPE = timezone(timedelta(hours=8))   # 現場時間一律用台北時間，不跟著伺服器時區跑
+
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
@@ -36,6 +38,8 @@ async def lifespan(app: FastAPI):
     db.ensure_golf_scores_table()
     db.ensure_club_dues_table()
     db.ensure_event_surveys_table()
+    db.ensure_event_vips_table()
+    db.ensure_golf_groups_table()
     db.ensure_bulletin_editors_table()
     db.ensure_bulletin_content_table()
     db.ensure_club_finance_table()
@@ -173,7 +177,6 @@ def _club_events(club_name: str) -> list[dict]:
     """Representative in-club schedule (sample data, parallel to _EVENT_SCHEDULE)."""
     club = club_name or "本社"
     today = date.today()
-    from datetime import timedelta
     def d(days):
         return (today + timedelta(days=days)).isoformat()
     wk = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
@@ -1781,6 +1784,205 @@ async def admin_club_attendance(request: Request, club: str = ""):
         "avg_rate": round(total_att / total_reg * 100) if total_reg else 0,
         "members": members,
     }
+
+
+# ── 待繳費明細 / 一鍵催繳 ─────────────────────────────────────────────────────
+
+@app.get("/admin/unpaid")
+async def admin_unpaid(request: Request, event: int | None = None):
+    """Outstanding-payment drill-down for one event, grouped by club (admin only)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無檢視權限", "clubs": []}
+    ev = _lookup_event(admin_uid, event) if event else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動", "clubs": []}
+    rows = db.get_event_unpaid(ev["id"])
+    clubs: dict[str, dict] = {}
+    for r in rows:
+        c = clubs.setdefault(r["club_name"], {"club": r["club_name"], "unpaid": [], "reported": []})
+        name = (r["full_name"] + (f"（{r['nickname']}）" if r["nickname"] else "")) or "（未填個人資料）"
+        # 'uploaded' 已回報末 5 碼、只等執秘對帳 —— 列出來但不催。
+        c["reported" if r["payment_status"] == "uploaded" else "unpaid"].append(name)
+    out = sorted(clubs.values(), key=lambda c: (-len(c["unpaid"]), c["club"]))
+    return {
+        "status": "ok",
+        "event_id": ev["id"],
+        "event_title": ev["title"],
+        "fee": ev["fee"],
+        "total_unpaid": sum(len(c["unpaid"]) for c in out),
+        "total_reported": sum(len(c["reported"]) for c in out),
+        "clubs": out,
+    }
+
+
+@app.post("/admin/unpaid/remind")
+async def admin_unpaid_remind(request: Request):
+    """Push a payment reminder to one club's still-unpaid registrants (admin only)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無催繳權限"}
+    body = await request.json()
+    club = str(body.get("club", "")).strip()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    targets = [r for r in db.get_event_unpaid(ev["id"], club) if r["payment_status"] != "uploaded"]
+    if not targets:
+        return {"status": "none_unpaid", "reminded": 0}
+    text = (f"🔔 繳費提醒\n\n【{ev['title']}】\n{ev['date']}（{ev['weekday']}）　{ev['location']}\n"
+            f"費用：{ev['fee']}\n\n完成匯款後請至 LIFF「個人中心 → 回報匯款」填寫帳號末 5 碼，"
+            "秘書處才能完成對帳。")
+    sent = 0
+    for r in targets:
+        try:
+            line_api.push_text(r["line_user_id"], text)
+            sent += 1
+        except Exception:
+            logger.exception("payment reminder failed for %s", r["line_user_id"])
+    return {"status": "ok", "club": club, "reminded": sent, "targets": len(targets)}
+
+
+# ── 貴賓唱名 ─────────────────────────────────────────────────────────────────
+
+def _vip_cutoff(ev: dict) -> str:
+    """VIPs arriving after the event starts go to the 補介紹 list."""
+    start = (ev.get("start_time") or "").strip()
+    if not start:
+        start = (ev.get("time") or "").split("-")[0].strip()
+    return start if len(start) == 5 and start[2] == ":" else "10:30"
+
+
+@app.get("/admin/vips")
+async def admin_vips(request: Request, event: int | None = None):
+    """貴賓唱名名單（主委專用）。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無貴賓名單權限", "vips": []}
+    ev = _lookup_event(admin_uid, event) if event else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動", "vips": []}
+    return {"status": "ok", "event_id": ev["id"], "event_title": ev["title"],
+            "cutoff": _vip_cutoff(ev), "vips": db.list_event_vips(ev["id"])}
+
+
+@app.post("/admin/vips")
+async def admin_vip_add(request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無貴賓名單權限"}
+    body = await request.json()
+    name = str(body.get("name", "")).strip()
+    if not name:
+        return {"status": "invalid", "message": "請填寫貴賓姓名"}
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    return {"status": "ok", "vip": db.add_event_vip(ev["id"], name, str(body.get("title", "")).strip())}
+
+
+@app.post("/admin/vips/{vip_id}")
+async def admin_vip_update(vip_id: int, request: Request):
+    """報到 / 唱名 / 改名銜。報到時由伺服器蓋抵達時間，現場才不會靠手機時間各說各話。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無貴賓名單權限"}
+    body = await request.json()
+    fields = {k: body[k] for k in ("name", "title", "sort_order", "is_called") if k in body}
+    if "arrived" in body:
+        fields["arrived"] = bool(body["arrived"])
+        fields["arrive_time"] = datetime.now(_TPE).strftime("%H:%M") if fields["arrived"] else ""
+    vip = db.update_event_vip(vip_id, fields)
+    if vip is None:
+        return {"status": "not_found", "message": "找不到這位貴賓"}
+    return {"status": "ok", "vip": vip}
+
+
+@app.delete("/admin/vips/{vip_id}")
+async def admin_vip_delete(vip_id: int, request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無貴賓名單權限"}
+    db.delete_event_vip(vip_id)
+    return {"status": "ok"}
+
+
+# ── 高球即時調組 ─────────────────────────────────────────────────────────────
+
+@app.get("/golf/groups")
+async def golf_groups(request: Request, event: int | None = None):
+    """分組表。報名者本人也能看自己的組別，所以這支不擋一般社友。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    ev = _lookup_event(uid, event) if event else _current_event(uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應賽事", "groups": []}
+    rows = db.list_golf_groups(ev["id"])
+    groups: dict[int, list] = {}
+    for r in rows:
+        groups.setdefault(r["group_no"], []).append(
+            {"id": r["id"], "slot": r["slot"], "name": r["player_name"], "uid": r["line_user_id"]})
+    return {
+        "status": "ok", "event_id": ev["id"], "event_title": ev["title"],
+        "groups": [{"group_no": g, "players": p} for g, p in sorted(groups.items())],
+        "players": [{"id": r["id"], "name": r["player_name"], "group_no": r["group_no"]} for r in rows],
+    }
+
+
+@app.post("/golf/groups/auto")
+async def golf_groups_auto(request: Request):
+    """依報名名單重新分組（4 人一組，含執秘代報的來賓）。會蓋掉現有分組。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無分組權限"}
+    body = await request.json()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應賽事"}
+    players = [
+        {"uid": r["line_user_id"],
+         "name": (r["full_name"] + (f"（{r['nickname']}）" if r.get("nickname") else "")) or "社友"}
+        for r in db.get_event_registrants(ev["id"])
+    ]
+    players += [{"uid": "", "name": f"{g['name']}（來賓）"} for g in db.get_event_guests(ev["id"])]
+    if not players:
+        return {"status": "empty", "message": "此賽事還沒有人報名，無法分組"}
+    count = db.replace_golf_groups(ev["id"], players)
+    return {"status": "ok", "event_title": ev["title"], "players": count,
+            "groups": (count + 3) // 4}
+
+
+@app.post("/golf/groups/swap")
+async def golf_groups_swap(request: Request):
+    """即時調組：兩位球友互換組別與順位，並通知本人。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無調組權限"}
+    body = await request.json()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應賽事"}
+    try:
+        id_a, id_b = int(body.get("a")), int(body.get("b"))
+    except (TypeError, ValueError):
+        return {"status": "invalid", "message": "請選擇兩位要對調的球友"}
+    if id_a == id_b:
+        return {"status": "invalid", "message": "請選擇兩位不同的球友"}
+    swapped = db.swap_golf_players(ev["id"], id_a, id_b)
+    if swapped is None:
+        return {"status": "not_found", "message": "找不到這兩位球友的分組資料"}
+    a, b = swapped
+    for p in (a, b):
+        if p["line_user_id"]:
+            _push_receipt(p["line_user_id"],
+                          f"🔀 分組調整通知【{ev['title']}】\n"
+                          f"{p['player_name']} 已改分至第 {p['group_no']} 組（第 {p['slot']} 位）。")
+    return {"status": "ok",
+            "a": {"name": a["player_name"], "group_no": a["group_no"]},
+            "b": {"name": b["player_name"], "group_no": b["group_no"]}}
 
 
 # ── 報名專區：活動意願調查 ────────────────────────────────────────────────────

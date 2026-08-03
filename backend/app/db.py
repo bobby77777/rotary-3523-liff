@@ -905,7 +905,8 @@ def get_event_registration_count(event_id: int) -> int:
 def get_event_registrants(event_id: int, club_name: str = "") -> list[dict]:
     """Members registered for an event (optionally limited to one club)."""
     sql = """
-        SELECT COALESCE(pi.full_name, '(未綁定)') AS full_name,
+        SELECT r.line_user_id,
+               COALESCE(pi.full_name, '(未綁定)') AS full_name,
                pi.nickname,
                COALESCE(pi.club_name, '') AS club_name,
                r.checked_in,
@@ -1190,6 +1191,175 @@ def add_event_guests(event_id: int, names: list[str], registered_by: str = "",
         _release_conn(conn)
 
 
+# ── 待繳費明細 / 催繳 ──────────────────────────────────────────────────────────
+
+def get_event_unpaid(event_id: int, club_name: str = "") -> list[dict]:
+    """Registrants who have not been marked 已收繳費 for an event.
+    'uploaded' (回報了末 5 碼、等對帳) is still outstanding, but must not be chased."""
+    return query(
+        """
+        SELECT r.line_user_id,
+               r.payment_status,
+               COALESCE(NULLIF(pi.club_name, ''), '（未綁定社籍）') AS club_name,
+               COALESCE(pi.full_name, '') AS full_name,
+               COALESCE(pi.nickname, '')  AS nickname
+        FROM registrations r
+        LEFT JOIN personal_information pi ON pi.line_user_id = r.line_user_id
+        WHERE r.event_id = %s
+          AND r.payment_status <> 'confirmed'
+          AND (%s = '' OR COALESCE(NULLIF(pi.club_name, ''), '（未綁定社籍）') = %s)
+        ORDER BY club_name, full_name
+        """,
+        (event_id, club_name, club_name),
+    )
+
+
+# ── 貴賓唱名 ───────────────────────────────────────────────────────────────────
+
+def ensure_event_vips_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS event_vips (
+            id SERIAL PRIMARY KEY,
+            event_id    INTEGER NOT NULL,
+            name        TEXT NOT NULL,
+            title       TEXT NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            arrived     BOOLEAN NOT NULL DEFAULT FALSE,
+            arrive_time TEXT NOT NULL DEFAULT '',
+            is_called   BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    execute("CREATE INDEX IF NOT EXISTS event_vips_event_idx ON event_vips (event_id)")
+
+
+def list_event_vips(event_id: int) -> list[dict]:
+    return query(
+        "SELECT id, name, title, sort_order, arrived, arrive_time, is_called "
+        "FROM event_vips WHERE event_id = %s ORDER BY sort_order, id",
+        (event_id,),
+    )
+
+
+_VIP_COLS = "id, event_id, name, title, sort_order, arrived, arrive_time, is_called"
+
+
+def _write_returning(sql: str, params) -> dict | None:
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def add_event_vip(event_id: int, name: str, title: str) -> dict:
+    return _write_returning(
+        f"""
+        INSERT INTO event_vips (event_id, name, title, sort_order)
+        VALUES (%s, %s, %s,
+                COALESCE((SELECT MAX(sort_order) + 1 FROM event_vips WHERE event_id = %s), 1))
+        RETURNING {_VIP_COLS}
+        """,
+        (event_id, name, title, event_id),
+    )
+
+
+def update_event_vip(vip_id: int, fields: dict) -> dict | None:
+    allowed = ("name", "title", "sort_order", "arrived", "arrive_time", "is_called")
+    sets = [f"{k} = %s" for k in allowed if k in fields]   # whitelist → safe to interpolate
+    if not sets:
+        return None
+    params = [fields[k] for k in allowed if k in fields] + [vip_id]
+    return _write_returning(
+        f"UPDATE event_vips SET {', '.join(sets)} WHERE id = %s RETURNING {_VIP_COLS}",
+        params,
+    )
+
+
+def delete_event_vip(vip_id: int) -> None:
+    execute("DELETE FROM event_vips WHERE id = %s", (vip_id,))
+
+
+# ── 高球即時調組 ───────────────────────────────────────────────────────────────
+
+def ensure_golf_groups_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS golf_groups (
+            id SERIAL PRIMARY KEY,
+            event_id     INTEGER NOT NULL,
+            group_no     INTEGER NOT NULL,
+            slot         INTEGER NOT NULL,
+            player_name  TEXT NOT NULL DEFAULT '',
+            line_user_id TEXT NOT NULL DEFAULT '',
+            UNIQUE(event_id, group_no, slot)
+        )
+    """)
+
+
+def list_golf_groups(event_id: int) -> list[dict]:
+    return query(
+        "SELECT id, group_no, slot, player_name, line_user_id "
+        "FROM golf_groups WHERE event_id = %s ORDER BY group_no, slot",
+        (event_id,),
+    )
+
+
+def replace_golf_groups(event_id: int, players: list[dict], per_group: int = 4) -> int:
+    """Redraw the whole grouping from an ordered player list (4 per 組 by default)."""
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM golf_groups WHERE event_id = %s", (event_id,))
+            for i, p in enumerate(players):
+                cur.execute(
+                    "INSERT INTO golf_groups (event_id, group_no, slot, player_name, line_user_id) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (event_id, i // per_group + 1, i % per_group + 1,
+                     p.get("name", ""), p.get("uid", "")),
+                )
+        conn.commit()
+        return len(players)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def swap_golf_players(event_id: int, id_a: int, id_b: int) -> tuple[dict, dict] | None:
+    """Swap two players' seats, so each keeps the other's 組別/順位."""
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM golf_groups WHERE event_id = %s AND id IN (%s, %s)",
+                        (event_id, id_a, id_b))
+            rows = [dict(r) for r in cur.fetchall()]
+            if len(rows) != 2:
+                return None
+            a, b = (rows[0], rows[1]) if rows[0]["id"] == id_a else (rows[1], rows[0])
+            # Park one row outside the unique(event, group, slot) space while swapping.
+            cur.execute("UPDATE golf_groups SET group_no = -1, slot = -1 WHERE id = %s", (a["id"],))
+            cur.execute("UPDATE golf_groups SET group_no = %s, slot = %s WHERE id = %s",
+                        (a["group_no"], a["slot"], b["id"]))
+            cur.execute("UPDATE golf_groups SET group_no = %s, slot = %s WHERE id = %s",
+                        (b["group_no"], b["slot"], a["id"]))
+        conn.commit()
+        return ({**a, "group_no": b["group_no"], "slot": b["slot"]},
+                {**b, "group_no": a["group_no"], "slot": a["slot"]})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
 # ── 報名專區：活動意願調查 ──────────────────────────────────────────────────────
 
 def ensure_event_surveys_table() -> None:
@@ -1306,6 +1476,13 @@ def get_club_admins(club_name: str) -> list[str]:
         (club_name,),
     )
     return [r["line_user_id"] for r in rows]
+
+
+def get_event_guests(event_id: int) -> list[dict]:
+    return query(
+        "SELECT id, name, registered_by FROM event_guests WHERE event_id = %s ORDER BY id",
+        (event_id,),
+    )
 
 
 def search_member(keyword: str) -> list[dict]:
