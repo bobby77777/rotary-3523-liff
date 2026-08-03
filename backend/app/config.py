@@ -13,6 +13,9 @@ GOOGLE_DRIVE_FOLDER_ID    = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
 # event id as a leading number, e.g. "102.pdf"). MUST differ from
 # GOOGLE_DRIVE_FOLDER_ID so ingest.py doesn't pull these into the vector store.
 EVENT_PDF_FOLDER_ID       = os.environ.get("EVENT_PDF_FOLDER_ID", "")
+# Font used to draw 議程 PDFs (must cover Traditional Chinese). Leave empty to
+# auto-detect: backend/assets/fonts/*.ttf first, then the usual system paths.
+AGENDA_FONT_PATH          = os.environ.get("AGENDA_FONT_PATH", "")
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
 LIFF_URL     = os.environ.get("LIFF_URL", "https://liff.line.me/2010535285-kh8rJmpS")
 # Public URL of the bulletin editor/viewer (GitHub Pages). Used for the LINE "社刊"

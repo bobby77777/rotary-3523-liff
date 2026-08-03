@@ -39,7 +39,7 @@ Static HTML opened as a LINE LIFF app; no build step.
 |------|--------------|
 | `index.html` | Main app — event calendar & registration, payment reporting, member profile, and an admin area (labelled **社長** in club scope, **主委** in district scope) with event management, attendance, dues, stats. |
 | `bulletin.html` | Weekly bulletin (社刊), **stored per club**. 主委 edits and **發布社刊** (one-click publish, no dialog); anyone can **下載 PDF** (real vector PDF via the browser's print engine). |
-| `calendar.html` | Annual event table (district/club scope) + per-event **agenda (議程)** editor with auto-computed times, quick-fill templates, PDF-link attachments, LINE preview, and agenda PDF export. |
+| `calendar.html` | Annual event table (district/club scope) + per-event **agenda (議程)** editor with auto-computed times, quick-fill templates, PDF-link attachments, and LINE preview. **下載 PDF** prints the agenda being edited (vector, via the browser); the copy members see is rendered by the backend from the saved agenda. |
 
 ### Deploy (GitHub Pages via Actions)
 
@@ -61,7 +61,8 @@ FastAPI service backing the LIFF app and the LINE bot.
 - **LINE bot** — award queries, RAG document Q&A, member profiles, date/weather; keyword shortcuts `社刊` and `行事曆` reply with editor links.
 - **Events / 行事曆** — editable in Supabase (`events` table, scope + club + agenda JSON). CRUD via `/admin/events` (admin-gated); read via `/events`.
 - **社刊** — published per club as content JSON (`/bulletin/content`); members load and print their own vector PDF.
-- **Event PDFs** — non-例會 events link a PDF that 執秘 drops in a Google Drive folder; the backend streams it via `/events/{id}/pdf`.
+- **議程 PDF** — `/events/{id}/pdf` renders the saved agenda into a real **vector** PDF on the fly (`agenda_pdf.py`, fpdf2 + an embedded CJK font): selectable, searchable text and working attachment links, instead of the old browser screenshot. Needs one font covering Traditional Chinese — auto-detected from `backend/assets/fonts/*.ttf` or the usual system paths, or set `AGENDA_FONT_PATH`. Without one the endpoint falls back to whatever was stored/uploaded before.
+- **Event PDFs** — non-例會 events link a PDF that 執秘 drops in a Google Drive folder; the same `/events/{id}/pdf` streams it when the event has no agenda.
 - **RAG ingestion** — `ingest.py` watches a Google Drive folder and re-embeds changed files into Supabase (pgvector).
 
 ### Requirements
@@ -88,6 +89,8 @@ OPENWEATHERMAP_API_KEY=...
 APP_BASE_URL=https://your-public-backend            # ngrok / prod URL, used for event PDF links
 GOOGLE_DRIVE_FOLDER_ID=...                           # RAG ingestion folder
 EVENT_PDF_FOLDER_ID=...                              # separate folder for event PDFs (must differ)
+# Optional — font for 議程 PDFs; auto-detected when omitted (see 議程 PDF above):
+# AGENDA_FONT_PATH=/System/Library/Fonts/Supplemental/Arial Unicode.ttf
 # Optional overrides (default to the GitHub Pages URLs):
 # BULLETIN_BASE_URL=https://<user>.github.io/rotary-3523-liff/bulletin.html
 # CALENDAR_BASE_URL=https://<user>.github.io/rotary-3523-liff/calendar.html

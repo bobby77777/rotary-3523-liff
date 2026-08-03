@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from . import db, event_pdfs, line_api
+from . import agenda_pdf, db, event_pdfs, line_api
 from urllib.parse import quote
 from .config import APP_BASE_URL, BULLETIN_BASE_URL, CALENDAR_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
 
@@ -1377,19 +1377,23 @@ async def events(request: Request, scope: str = ""):
         scope = db.get_user_scope(uid) if uid else "district"
     club = db.get_user_club(uid) if uid else ""
     evs = _events_for_scope(scope, club)
-    # 活動 PDF 兩個來源：(1) 議程編輯器存進 DB 的議程 PDF；(2) 執秘上傳到 Drive 資料夾的檔案。
-    # 任一存在就把 pdf_url 指到後端代理串流端點（GET /events/{id}/pdf）。
+    # 活動 PDF 三個來源：(1) 已存檔的議程（後端即時產生向量 PDF）；(2) 舊版存進 DB
+    # 的議程 PDF；(3) 執秘上傳到 Drive 資料夾的檔案。任一存在就把 pdf_url 指到後端
+    # 端點（GET /events/{id}/pdf）。
     pmap = await run_in_threadpool(event_pdfs.event_pdf_map)
     stored = db.event_pdf_ids()
+    can_render = agenda_pdf.font_path() is not None
     evs = [{**e, "pdf_url": f"{APP_BASE_URL}/events/{e['id']}/pdf"}
-           if (e.get("id") in stored or e.get("id") in pmap) else e
+           if ((can_render and e.get("agenda")) or e.get("id") in stored or e.get("id") in pmap)
+           else e
            for e in evs]
     return {"status": "ok", "scope": scope, "events": evs}
 
 
 @app.post("/admin/events/{event_id}/pdf")
 async def admin_save_event_pdf(event_id: int, request: Request):
-    """儲存某活動的 PDF（議程編輯器存檔時自動產生的議程 PDF）。Body 為 PDF 位元組。"""
+    """儲存某活動的 PDF。Body 為 PDF 位元組。議程 PDF 現在由後端即時產生（見
+    GET /events/{id}/pdf），這裡保留給舊版前端與手動上傳的備援檔。"""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="Not an admin")
@@ -1402,9 +1406,15 @@ async def admin_save_event_pdf(event_id: int, request: Request):
 
 @app.get("/events/{event_id}/pdf")
 async def event_pdf(event_id: int):
-    """某活動的 PDF：優先回傳議程編輯器存進 DB 的議程 PDF；否則代理串流 執秘
-    上傳到 Drive 的檔案。前端活動卡的 PDF 鈕直接開這個網址。"""
-    data = db.get_event_pdf(event_id)
+    """某活動的 PDF。順序：(1) 由已存檔的議程即時產生「向量」PDF（文字可選取、
+    可搜尋）；(2) 舊版由瀏覽器上傳存進 DB 的 PDF；(3) 代理串流 執秘上傳到
+    Drive 的檔案。前端活動卡的 PDF 鈕直接開這個網址。"""
+    ev = db.get_event(event_id)
+    data = None
+    if ev and ev.get("agenda"):
+        data = await run_in_threadpool(agenda_pdf.build_agenda_pdf, ev)
+    if data is None:
+        data = db.get_event_pdf(event_id)
     if data is None:
         file_id = event_pdfs.get_pdf_file_id(event_id)
         if not file_id:
