@@ -2,8 +2,9 @@
 
 A LINE **LIFF** web app plus a **FastAPI** backend for International Rotary
 District 3523 — event calendar & registration, per-club weekly bulletins
-(社刊), meeting agendas (議程), and a LINE chatbot (award queries, RAG Q&A,
-member profiles).
+(社刊), meeting agendas (議程), a chair/president back-office (attendance,
+dues, seating, raffle, board motions …), and a LINE chatbot (award queries,
+RAG Q&A, member profiles).
 
 This is a **monorepo**: the static frontend and the Python backend live side by
 side but deploy independently.
@@ -39,7 +40,7 @@ Static HTML opened as a LINE LIFF app; no build step.
 
 | Page | What it does |
 |------|--------------|
-| `index.html` | Main app — event calendar & registration, payment reporting, member profile, and an admin area (labelled **社長** in club scope, **主委** in district scope) with event management, attendance, dues, stats. |
+| `index.html` | Main app — event calendar & registration, payment reporting, member profile, and an admin area (labelled **社長** in club scope, **主委** in district scope). The admin tiles change with the active event's type; see [Admin tools](#admin-tools-後台) below. |
 | `bulletin.html` | Weekly bulletin (社刊), **stored per club**. 主委 edits and **發布社刊** (one-click publish, no dialog); anyone can **下載 PDF** (real vector PDF via the browser's print engine). |
 | `calendar.html` | Annual event table (district/club scope) + per-event **agenda (議程)** editor with auto-computed times, quick-fill templates, PDF-link attachments, and LINE preview. **下載 PDF** prints the agenda being edited (vector, via the browser); the copy members see is rendered by the backend from the saved agenda. |
 
@@ -65,8 +66,29 @@ FastAPI service backing the LIFF app and the LINE bot.
 - **社刊** — published per club as content JSON (`/bulletin/content`); members load and print their own vector PDF.
 - **議程 PDF** — `/events/{id}/pdf` renders the saved agenda into a real **vector** PDF on the fly (`agenda_pdf.py`, fpdf2 + an embedded CJK font): selectable, searchable text and working attachment links, instead of the old browser screenshot. Needs one font covering Traditional Chinese — auto-detected from `backend/assets/fonts/*.ttf` or the usual system paths, or set `AGENDA_FONT_PATH`. Without one the endpoint falls back to whatever was stored/uploaded before.
 - **Event PDFs** — non-例會 events link a PDF that 執秘 drops in a Google Drive folder; the same `/events/{id}/pdf` streams it when the event has no agenda.
-- **Admin back-office** — every 主委/社長 tool is backed by real tables and LINE pushes: 報名意願調查, 待繳費催繳, 貴賓唱名, 高球分組/即時調組, 年會桌次, 摸彩 (draws from checked-in attendees), RYE 面試時段與同意書審核, and 理監事議案表決 (board members vote by postback from a Flex card).
+- **Admin back-office** — see the table below; every tool is backed by real tables and LINE pushes.
+- **Check-in** — QR scan (`/checkin`) marks attendance and notifies both the member and the scanning admin. Events carrying a venue coordinate (`events.geo`, set in 行事曆管理 as `緯度,經度`) also gate check-in on being within 100 m; events without one skip the check entirely.
 - **RAG ingestion** — `ingest.py` watches a Google Drive folder and re-embeds changed files into Supabase (pgvector).
+
+### Admin tools (後台)
+
+Each is admin-gated (`db.is_admin`), scoped to one event or one club, and
+reachable both from the LIFF admin tab and from a deep link in the LINE admin
+menu (`?tab=admin&action=…`).
+
+| 功能 | What it does | Endpoints |
+|------|--------------|-----------|
+| 報名專區 | Push a 參加意願調查 Flex card to selected members; 參加 also registers them. Chase non-responders, escalate the pending list to the 社長. | `/admin/survey*` |
+| 社友出席率 · 統計看板 | Per-member attendance, per-club registration/payment/check-in KPIs. | `/admin/club_attendance`, `/admin/stats` |
+| 待繳費明細 | Who still owes for an event, by club; 一鍵催繳 pushes them. People who already reported transfer digits are listed as 待對帳 and never chased. | `/admin/unpaid*` |
+| 社友社費 | 執秘 bills a member for the month; the member reports payment from 個人中心. | `/dues/*` |
+| 社務對帳 | Monthly club finance sheet (rent, salary, fixed items, member advances). | `/club/finance` |
+| 貴賓唱名 | Per-event VIP list; mark arrival (server-stamped Taipei time) and 唱名. Arrivals after the event's start time fall into 補介紹. | `/admin/vips*` |
+| 高球 | Score submission with New Peoria netting, hidden-hole draw, 4-per-組 grouping and 即時調組 (both players notified). | `/golf/*` |
+| 桌次安排 | Seats registrants (guests included) N per table with clubmates together; swap seats on the spot; 公布桌次 pushes each attendee their table and seat. | `/admin/seating*` |
+| 摸彩系統 | Prizes with quotas, drawn only from **checked-in** attendees, never the same person twice per event. Winners get a LINE push. | `/admin/raffle*` |
+| RYE | One applicant list: auto-assign interview slots from the event start, notify students, and record/approve the parental consent form (verdict is pushed to the student). | `/admin/rye*` |
+| 理監事專區 | Pick the board from the club roster, post a motion, and it goes out as a Flex card whose 同意/反對/棄權 buttons write back by postback. Votes are changeable until the motion is closed. | `/admin/board*` |
 
 ### Requirements
 - Python 3.11+ (3.10 works but Google libs warn)
@@ -102,10 +124,11 @@ Google Drive auth — either:
 - **Service account** (recommended): put the key at `backend/secrets/service_account.json` and share both Drive folders with its email; or
 - **OAuth**: put `secrets/credentials.json`, then run `python reauth_drive.py` once to create `secrets/token.json` (expires if the OAuth app is in "Testing" mode).
 
-Tables are created / migrated automatically on startup (`ensure_*` in `db.py`);
-the RAG tables (`documents`, `document_rows`, `document_metadata`,
-`personal_information`) still need the SQL from the Supabase editor — see the
-git history for the DDL.
+Tables are created / migrated automatically on startup (`ensure_*` in `db.py`,
+called from the app's `lifespan`) — adding a feature means adding an `ensure_*`
+there, not a manual migration. The RAG tables (`documents`, `document_rows`,
+`document_metadata`, `personal_information`) still need the SQL from the
+Supabase editor — see the git history for the DDL.
 
 ### Run
 
@@ -130,4 +153,18 @@ python ingest.py               # poll Drive every 60s
 ## Notes
 - `backend/.env` and `backend/secrets/` hold credentials and are git-ignored — never commit them.
 - Frontend and backend deploy separately: **frontend** = push → GitHub Pages Action; **backend** = restart the service (DB migrations run on startup).
-- Event `id` is referenced across registrations, check-in, stats, golf scores, and event-PDF filenames — keep it stable.
+- Event `id` is referenced across registrations, check-in, stats, golf scores, seating, raffle and event-PDF filenames — keep it stable.
+
+### Conventions worth keeping
+- **No placeholder data in the UI.** When a call fails, show the error — never
+  fall back to sample clubs, members or events. Chairs report these numbers
+  externally, and a fake roster once let the exec secretary register
+  non-existent `line_user_id`s.
+- **Receipts are bot pushes, not `liff.sendMessages`.** The LIFF must never
+  speak as the member: that puts words in their chat and the bot answers its own
+  unrecognised text. Confirmations go out from the backend via `_push_receipt`
+  to whoever performed the action, and are best-effort — a LINE outage must not
+  fail an action that already succeeded.
+- **Anything shown as verified must be verified.** No simulated GPS, no
+  hardcoded venue coordinates: if the check can't run, it fails or is skipped
+  explicitly.
