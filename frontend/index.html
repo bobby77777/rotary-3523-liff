@@ -439,6 +439,130 @@
     </div>
 </div>
 
+<!-- 桌次安排 (年會主委) -->
+<div id="modal-seating" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+        <div class="bg-gradient-to-r from-amber-800 to-orange-700 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-chair text-amber-100"></i></div>
+                <div><h3 class="font-extrabold text-base">桌次安排</h3><p class="text-[10px] text-amber-100" id="seating-subtitle">依報名名單排桌，同社坐一起</p></div>
+            </div>
+            <button onclick="closeModal('modal-seating')" class="text-amber-100 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="overflow-y-auto p-5 space-y-4 flex-1 bg-gray-50 no-scrollbar">
+            <div class="flex gap-2 items-center">
+                <label class="text-xs font-bold text-gray-700 shrink-0">每桌人數</label>
+                <input type="number" id="seating-per-table" value="10" min="2" max="20" class="w-16 bg-white border border-gray-300 rounded-lg py-1.5 px-2 text-sm text-center font-bold focus:ring-1 focus:ring-amber-500">
+                <button onclick="autoSeating()" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg text-[11px] font-bold active:scale-[0.98]"><i class="fa-solid fa-shuffle"></i> 依報名名單重新排桌</button>
+            </div>
+            <div id="seating-board" class="space-y-2"></div>
+            <div class="bg-white border border-gray-200 rounded-xl p-3 space-y-2 shadow-sm">
+                <p class="text-xs font-black text-gray-700"><i class="fa-solid fa-arrow-right-arrow-left text-amber-600 mr-1"></i> 現場換位</p>
+                <select id="seating-person-a" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-2 text-xs font-bold"></select>
+                <select id="seating-person-b" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-2 text-xs font-bold"></select>
+                <button onclick="executeSeatSwap()" class="w-full bg-gray-800 text-white py-2 rounded-lg text-[11px] font-bold active:scale-[0.98]">確認對調</button>
+            </div>
+        </div>
+        <div class="bg-gray-100 px-5 py-3 shrink-0 border-t border-gray-200">
+            <button onclick="publishSeating()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs btn-3d mb-1" style="box-shadow:0 4px 0 #065f46"><i class="fa-solid fa-paper-plane"></i> 公布桌次（LINE 通知每位與會者）</button>
+        </div>
+    </div>
+</div>
+
+<!-- 摸彩系統 (年會主委) -->
+<div id="modal-raffle" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+        <div class="bg-gradient-to-r from-rose-700 to-pink-600 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-ticket text-rose-100"></i></div>
+                <div><h3 class="font-extrabold text-base">摸彩系統</h3><p class="text-[10px] text-rose-100" id="raffle-subtitle">從「已報到」的與會者抽出</p></div>
+            </div>
+            <button onclick="closeModal('modal-raffle')" class="text-rose-100 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="overflow-y-auto p-5 space-y-4 flex-1 bg-gray-50 no-scrollbar">
+            <div class="bg-white border border-gray-200 rounded-xl p-2.5 shadow-sm flex gap-1.5">
+                <input type="text" id="raffle-prize-name" placeholder="獎項名稱（如 頭獎 iPad）" class="flex-1 bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs font-bold focus:ring-1 focus:ring-rose-500">
+                <input type="number" id="raffle-prize-qty" value="1" min="1" max="100" class="w-14 bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-1 text-xs text-center font-bold focus:ring-1 focus:ring-rose-500">
+                <button onclick="addPrize()" class="bg-rose-600 hover:bg-rose-700 text-white px-3 rounded-lg text-xs font-bold shrink-0 active:scale-95"><i class="fa-solid fa-plus"></i></button>
+            </div>
+            <div id="raffle-prizes" class="space-y-2"></div>
+        </div>
+        <div class="bg-gray-100 px-5 py-3 shrink-0 border-t border-gray-200">
+            <button onclick="closeModal('modal-raffle')" class="w-full bg-gray-800 text-white font-bold py-2.5 rounded-xl text-xs btn-3d btn-3d-dark mb-1">關閉</button>
+        </div>
+    </div>
+</div>
+
+<!-- RYE 面試安排 / 同意書審核 -->
+<div id="modal-rye" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+        <div class="bg-gradient-to-r from-sky-800 to-cyan-700 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-user-graduate text-sky-100"></i></div>
+                <div><h3 class="font-extrabold text-base">RYE 學生管理</h3><p class="text-[10px] text-sky-100" id="rye-subtitle">面試時段與家長同意書</p></div>
+            </div>
+            <button onclick="closeModal('modal-rye')" class="text-sky-100 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="flex shrink-0 border-b border-gray-200 bg-white">
+            <button id="rye-tab-interview" onclick="switchRyeMode('interview')" class="flex-1 py-2.5 text-xs font-bold border-b-2 border-sky-600 text-sky-700"><i class="fa-solid fa-users-viewfinder mr-1"></i>面試安排</button>
+            <button id="rye-tab-consent" onclick="switchRyeMode('consent')" class="flex-1 py-2.5 text-xs font-bold border-b-2 border-transparent text-gray-400"><i class="fa-solid fa-file-signature mr-1"></i>同意書審核</button>
+        </div>
+        <div class="overflow-y-auto p-5 space-y-4 flex-1 bg-gray-50 no-scrollbar">
+            <div class="bg-white border border-gray-200 rounded-xl p-2.5 shadow-sm flex gap-1.5">
+                <input type="text" id="rye-new-name" placeholder="學生姓名" class="w-1/3 bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs font-bold focus:ring-1 focus:ring-sky-500">
+                <input type="text" id="rye-new-club" placeholder="推薦社別" class="flex-1 bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs focus:ring-1 focus:ring-sky-500">
+                <button onclick="addRyeApplicant()" class="bg-sky-600 hover:bg-sky-700 text-white px-3 rounded-lg text-xs font-bold shrink-0 active:scale-95"><i class="fa-solid fa-plus"></i></button>
+            </div>
+            <div id="rye-interview-tools" class="flex gap-2 items-center">
+                <label class="text-xs font-bold text-gray-700 shrink-0">起始</label>
+                <input type="text" id="rye-start" placeholder="10:00" class="w-16 bg-white border border-gray-300 rounded-lg py-1.5 px-1 text-xs text-center font-bold">
+                <label class="text-xs font-bold text-gray-700 shrink-0">每人</label>
+                <input type="number" id="rye-minutes" value="20" min="5" max="120" class="w-14 bg-white border border-gray-300 rounded-lg py-1.5 px-1 text-xs text-center font-bold">
+                <button onclick="autoScheduleRye()" class="flex-1 bg-sky-600 hover:bg-sky-700 text-white py-1.5 rounded-lg text-[11px] font-bold active:scale-[0.98]"><i class="fa-solid fa-wand-magic-sparkles"></i> 自動排時段</button>
+            </div>
+            <div id="rye-list" class="space-y-2"></div>
+        </div>
+        <div class="bg-gray-100 px-5 py-3 shrink-0 border-t border-gray-200">
+            <button id="rye-notify-btn" onclick="notifyRye()" class="w-full bg-sky-700 hover:bg-sky-800 text-white font-bold py-2.5 rounded-xl text-xs btn-3d mb-1" style="box-shadow:0 4px 0 #0c4a6e"><i class="fa-solid fa-paper-plane"></i> 通知學生面試時段</button>
+        </div>
+    </div>
+</div>
+
+<!-- 理監事專區 (社內) -->
+<div id="modal-board" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+        <div class="bg-gradient-to-r from-slate-900 to-indigo-900 px-6 py-4 text-white flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-user-tie text-indigo-200"></i></div>
+                <div><h3 class="font-extrabold text-base">理監事專區</h3><p class="text-[10px] text-indigo-200" id="board-subtitle">議案線上表決</p></div>
+            </div>
+            <button onclick="closeModal('modal-board')" class="text-indigo-200 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="overflow-y-auto p-5 space-y-4 flex-1 bg-gray-50 no-scrollbar">
+            <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                <button onclick="toggleBoardMembers()" class="w-full px-4 py-2.5 bg-gray-100 flex justify-between items-center text-xs font-bold text-gray-700">
+                    <span><i class="fa-solid fa-user-tie text-indigo-600 mr-1"></i> 理監事名單（<span id="board-member-count">0</span> 人）</span>
+                    <i class="fa-solid fa-chevron-down text-gray-400" id="board-member-chevron"></i>
+                </button>
+                <div id="board-members-panel" class="hidden p-3 space-y-2">
+                    <div id="board-members-list" class="max-h-40 overflow-y-auto no-scrollbar space-y-1 bg-gray-50 p-2 rounded-lg border border-gray-200"></div>
+                    <button onclick="saveBoardMembers()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-[11px] font-bold active:scale-[0.98]">儲存名單</button>
+                </div>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-xl p-3 space-y-2 shadow-sm">
+                <p class="text-xs font-black text-gray-700"><i class="fa-solid fa-file-pen text-indigo-600 mr-1"></i> 新增議案</p>
+                <input type="text" id="motion-title" placeholder="議案名稱" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs font-bold focus:ring-1 focus:ring-indigo-500">
+                <textarea id="motion-detail" rows="2" placeholder="說明（選填）" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs resize-none focus:ring-1 focus:ring-indigo-500"></textarea>
+                <button onclick="createMotion()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-[11px] font-bold active:scale-[0.98]"><i class="fa-solid fa-paper-plane"></i> 建立並推播給理監事</button>
+            </div>
+            <div id="board-motions" class="space-y-2"></div>
+        </div>
+        <div class="bg-gray-100 px-5 py-3 shrink-0 border-t border-gray-200">
+            <button onclick="closeModal('modal-board')" class="w-full bg-gray-800 text-white font-bold py-2.5 rounded-xl text-xs btn-3d btn-3d-dark mb-1">關閉</button>
+        </div>
+    </div>
+</div>
+
 <!-- Event (行事曆) Admin Modal (執秘 新增/修改活動) -->
 <div id="modal-event-admin" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
@@ -1331,7 +1455,6 @@ function renderProfileMenu() {
     else c.classList.add('hidden');
 }
 
-function adminStub(name) { showAlert(name, '此功能建置中，敬請期待。'); }
 
 // ============================================================
 //  PORTED FROM SIMULATOR  (mock-style, self-contained)
@@ -1773,6 +1896,475 @@ async function reportToPresident() {
 }
 
 // ============================================================
+//  桌次安排 (年會主委)
+// ============================================================
+let seatingState = { eventId: null, people: [] };
+
+async function openSeatingModal() {
+    document.getElementById('seating-board').innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">載入中…</p>`;
+    openModal('modal-seating');
+    await reloadSeating();
+}
+
+async function reloadSeating() {
+    const board = document.getElementById('seating-board');
+    const evId = seatingState.eventId || currentActiveEvent?.id;
+    let data;
+    try {
+        data = await apiFetch('/admin/seating' + (evId ? ('?event=' + evId) : ''));
+    } catch (err) {
+        board.innerHTML = `<p class="text-xs text-rose-500 py-6 text-center">載入失敗：${_escHtml(err.message)}</p>`;
+        return;
+    }
+    if (data.status === 'forbidden') { closeModal('modal-seating'); showAlert('權限不足', data.message || '您沒有桌次安排權限。'); return; }
+    if (data.status !== 'ok') { board.innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">${_escHtml(data.message || '找不到活動')}</p>`; return; }
+
+    seatingState = { eventId: data.event_id, people: data.people || [] };
+    document.getElementById('seating-subtitle').textContent = data.event_title;
+    const tables = data.tables || [];
+    board.innerHTML = tables.length
+        ? tables.map(t => `<div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
+            <div class="flex justify-between items-center mb-1">
+                <span class="bg-amber-100 text-amber-800 font-black px-2 py-0.5 rounded text-[11px]">第 ${t.table_no} 桌</span>
+                <span class="text-[10px] text-gray-400">${t.seats.length} 人</span>
+            </div>
+            <p class="text-[11px] text-gray-700 leading-relaxed">${t.seats.map(s => _escHtml(s.name)).join('、')}</p>
+        </div>`).join('')
+        : `<p class="text-xs text-gray-400 py-6 text-center">尚未排桌，請按上方「依報名名單重新排桌」。</p>`;
+
+    const opts = seatingState.people.length
+        ? seatingState.people.map(p => `<option value="${p.id}">第 ${p.table_no} 桌 · ${_escHtml(p.name)}</option>`).join('')
+        : `<option value="">（尚未排桌）</option>`;
+    const a = document.getElementById('seating-person-a');
+    const b = document.getElementById('seating-person-b');
+    a.innerHTML = opts; b.innerHTML = opts;
+    if (seatingState.people.length > 1) b.selectedIndex = 1;
+}
+
+async function autoSeating() {
+    const perTable = parseInt(document.getElementById('seating-per-table').value) || 10;
+    try {
+        const data = await apiFetch('/admin/seating/auto', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: seatingState.eventId || currentActiveEvent?.id, per_table: perTable })
+        });
+        if (data.status !== 'ok') { showAlert('排桌失敗', data.message || '請稍後再試。'); return; }
+        await reloadSeating();
+        showAlert('排桌完成', `已把 ${data.seated} 位與會者排成 ${data.tables} 桌（每桌 ${data.per_table} 人）。`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+async function executeSeatSwap() {
+    const a = document.getElementById('seating-person-a').value;
+    const b = document.getElementById('seating-person-b').value;
+    if (!a || !b) { showAlert('尚未排桌', '請先排桌再進行換位。'); return; }
+    if (a === b) { showAlert('無法對調', '請選擇兩位不同的與會者。'); return; }
+    try {
+        const data = await apiFetch('/admin/seating/swap', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: seatingState.eventId, a: parseInt(a), b: parseInt(b) })
+        });
+        if (data.status !== 'ok') { showAlert('換位失敗', data.message || '請稍後再試。'); return; }
+        await reloadSeating();
+        showAlert('換位完成', `${data.a.name} → 第 ${data.a.table_no} 桌\n${data.b.name} → 第 ${data.b.table_no} 桌`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+async function publishSeating() {
+    try {
+        const data = await apiFetch('/admin/seating/publish', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: seatingState.eventId || currentActiveEvent?.id })
+        });
+        if (data.status !== 'ok') { showAlert('公布失敗', data.message || '請稍後再試。'); return; }
+        closeModal('modal-seating');
+        addChatMessage('bot', `🪑 <b>【桌次已公布】</b><br>已透過 LINE 通知 ${data.notified} 位與會者自己的桌次。`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+// ============================================================
+//  摸彩系統 (年會主委)
+// ============================================================
+let raffleEventId = null;
+
+async function openRaffleModal() {
+    document.getElementById('raffle-prizes').innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">載入中…</p>`;
+    openModal('modal-raffle');
+    await reloadRaffle();
+}
+
+async function reloadRaffle() {
+    const box = document.getElementById('raffle-prizes');
+    const evId = raffleEventId || currentActiveEvent?.id;
+    let data;
+    try {
+        data = await apiFetch('/admin/raffle' + (evId ? ('?event=' + evId) : ''));
+    } catch (err) {
+        box.innerHTML = `<p class="text-xs text-rose-500 py-6 text-center">載入失敗：${_escHtml(err.message)}</p>`;
+        return;
+    }
+    if (data.status === 'forbidden') { closeModal('modal-raffle'); showAlert('權限不足', data.message || '您沒有摸彩權限。'); return; }
+    if (data.status !== 'ok') { box.innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">${_escHtml(data.message || '找不到活動')}</p>`; return; }
+
+    raffleEventId = data.event_id;
+    document.getElementById('raffle-subtitle').textContent = `可抽人數：${data.candidates} 人（已報到且未中獎）`;
+    const prizes = data.prizes || [];
+    box.innerHTML = prizes.length
+        ? prizes.map(p => {
+            const won = p.winners.length > 0;
+            const winnerHtml = won
+                ? `<div class="mt-2 pt-2 border-t border-dashed border-gray-200 text-[11px] text-gray-700 leading-relaxed">
+                     🎉 ${p.winners.map(w => _escHtml(w.name) + (w.club ? `<span class="text-gray-400">（${_escHtml(w.club)}）</span>` : '')).join('、')}</div>`
+                : '';
+            const btn = won
+                ? `<button onclick="drawPrize(${p.id}, true)" class="bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-300 px-2.5 py-1 rounded-lg text-[10px] font-bold active:scale-95">重抽</button>`
+                : `<button onclick="drawPrize(${p.id}, false)" class="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-lg text-[10px] font-black active:scale-95"><i class="fa-solid fa-dice"></i> 抽出</button>`;
+            return `<div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
+                <div class="flex justify-between items-center gap-2">
+                    <div class="min-w-0">
+                        <p class="text-sm font-black text-gray-800 truncate">${_escHtml(p.name)}</p>
+                        <p class="text-[10px] text-gray-400">${p.qty} 個名額</p>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">${btn}
+                        <button onclick="deletePrize(${p.id})" class="text-gray-300 hover:text-red-500 px-1"><i class="fa-solid fa-trash-can text-[11px]"></i></button>
+                    </div>
+                </div>${winnerHtml}</div>`;
+        }).join('')
+        : `<p class="text-xs text-gray-400 py-6 text-center">尚未建立獎項，請用上方欄位新增。</p>`;
+}
+
+async function addPrize() {
+    const nameEl = document.getElementById('raffle-prize-name');
+    const qtyEl = document.getElementById('raffle-prize-qty');
+    const name = nameEl.value.trim();
+    if (!name) { showAlert('請填獎項', '請先輸入獎項名稱。'); return; }
+    try {
+        const data = await apiFetch('/admin/raffle/prizes', {
+            method: 'POST',
+            body: JSON.stringify({ event_id: raffleEventId || currentActiveEvent?.id, name, qty: parseInt(qtyEl.value) || 1 })
+        });
+        if (data.status !== 'ok') { showAlert('新增失敗', data.message || '請稍後再試。'); return; }
+        nameEl.value = ''; qtyEl.value = 1;
+        await reloadRaffle();
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+async function deletePrize(prizeId) {
+    try {
+        await apiFetch(`/admin/raffle/prizes/${prizeId}`, { method: 'DELETE' });
+        await reloadRaffle();
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+async function drawPrize(prizeId, redraw) {
+    try {
+        const data = await apiFetch('/admin/raffle/draw', {
+            method: 'POST', body: JSON.stringify({ prize_id: prizeId, redraw: !!redraw })
+        });
+        if (data.status !== 'ok') { showAlert('抽獎失敗', data.message || '請稍後再試。'); return; }
+        await reloadRaffle();
+        const names = data.winners.map(w => w.name + (w.club ? `（${w.club}）` : '')).join('\n');
+        const short = data.short ? '\n\n※ 可抽人數不足，已抽出全部符合資格者。' : '';
+        showAlert(`🎉 ${data.prize} 中獎名單`, names + short);
+        addChatMessage('bot', `🎟️ <b>【${_escHtml(data.prize)} 抽出】</b><br>${data.winners.map(w => _escHtml(w.name)).join('、')}<br><span class="text-[10px] text-gray-500">※ 已透過 LINE 通知中獎人。</span>`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+// ============================================================
+//  RYE 面試安排 / 同意書審核
+// ============================================================
+let ryeState = { eventId: null, mode: 'interview', applicants: [] };
+
+async function openRyeModal(mode) {
+    ryeState.mode = mode || 'interview';
+    document.getElementById('rye-list').innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">載入中…</p>`;
+    openModal('modal-rye');
+    _applyRyeMode();
+    await reloadRye();
+}
+
+function switchRyeMode(mode) {
+    ryeState.mode = mode;
+    _applyRyeMode();
+    renderRyeList();
+}
+
+function _applyRyeMode() {
+    const isInterview = ryeState.mode === 'interview';
+    const on = 'flex-1 py-2.5 text-xs font-bold border-b-2 border-sky-600 text-sky-700';
+    const off = 'flex-1 py-2.5 text-xs font-bold border-b-2 border-transparent text-gray-400';
+    document.getElementById('rye-tab-interview').className = isInterview ? on : off;
+    document.getElementById('rye-tab-consent').className = isInterview ? off : on;
+    document.getElementById('rye-interview-tools').classList.toggle('hidden', !isInterview);
+    document.getElementById('rye-notify-btn').classList.toggle('hidden', !isInterview);
+    document.getElementById('rye-subtitle').textContent = isInterview ? '排定面試時段並通知學生' : '審核家長同意書';
+}
+
+async function reloadRye() {
+    const evId = ryeState.eventId || currentActiveEvent?.id;
+    let data;
+    try {
+        data = await apiFetch('/admin/rye' + (evId ? ('?event=' + evId) : ''));
+    } catch (err) {
+        document.getElementById('rye-list').innerHTML = `<p class="text-xs text-rose-500 py-6 text-center">載入失敗：${_escHtml(err.message)}</p>`;
+        return;
+    }
+    if (data.status === 'forbidden') { closeModal('modal-rye'); showAlert('權限不足', data.message || '您沒有 RYE 管理權限。'); return; }
+    if (data.status !== 'ok') { document.getElementById('rye-list').innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">${_escHtml(data.message || '找不到活動')}</p>`; return; }
+    ryeState.eventId = data.event_id;
+    ryeState.applicants = data.applicants || [];
+    const startEl = document.getElementById('rye-start');
+    if (!startEl.value) startEl.value = data.start_time || '10:00';
+    renderRyeList();
+}
+
+function renderRyeList() {
+    const box = document.getElementById('rye-list');
+    const list = ryeState.applicants;
+    if (!list.length) {
+        box.innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">尚未建立學生名單，請用上方欄位新增。</p>`;
+        return;
+    }
+    const isInterview = ryeState.mode === 'interview';
+    box.innerHTML = list.map(a => {
+        const head = `<div class="flex justify-between items-start gap-2">
+            <div class="min-w-0">
+                <p class="text-sm font-black text-gray-800 truncate">${_escHtml(a.name)}</p>
+                <p class="text-[10px] text-gray-400">${_escHtml(a.club_name) || '未填推薦社別'}${a.line_user_id ? '' : ' · 未綁定 LINE'}</p>
+            </div>
+            <button onclick="deleteRyeApplicant(${a.id})" class="text-gray-300 hover:text-red-500 px-1 shrink-0"><i class="fa-solid fa-trash-can text-[11px]"></i></button>
+        </div>`;
+        if (isInterview) {
+            return `<div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm space-y-2">${head}
+                <div class="flex gap-1.5">
+                    <input type="text" value="${_escAttr(a.slot_time)}" placeholder="時段 10:00" onchange="updateRye(${a.id}, 'slot_time', this.value)" class="w-20 bg-gray-50 border border-gray-300 rounded-lg py-1 px-2 text-xs text-center font-bold focus:ring-1 focus:ring-sky-500">
+                    <input type="text" value="${_escAttr(a.interviewer)}" placeholder="面試官" onchange="updateRye(${a.id}, 'interviewer', this.value)" class="flex-1 bg-gray-50 border border-gray-300 rounded-lg py-1 px-2 text-xs focus:ring-1 focus:ring-sky-500">
+                </div></div>`;
+        }
+        const badge = {
+            approved: '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已通過</span>',
+            rejected: '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">需補件</span>',
+            pending:  '<span class="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">待審核</span>',
+            none:     '<span class="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">未收件</span>',
+        }[a.consent_status] || '';
+        const link = a.consent_url
+            ? `<a href="${_escAttr(a.consent_url)}" target="_blank" class="text-[10px] text-blue-600 underline truncate block">開啟同意書</a>` : '';
+        return `<div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm space-y-2">${head}
+            <div class="flex items-center gap-1.5">${badge}${link}</div>
+            <input type="text" value="${_escAttr(a.consent_url)}" placeholder="貼上同意書連結（Drive 等）" onchange="updateRye(${a.id}, 'consent_url', this.value, 'pending')" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-1 px-2 text-[11px] focus:ring-1 focus:ring-sky-500">
+            <input type="text" value="${_escAttr(a.consent_note)}" placeholder="備註（退件原因等）" onchange="updateRye(${a.id}, 'consent_note', this.value)" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-1 px-2 text-[11px] focus:ring-1 focus:ring-sky-500">
+            <div class="flex gap-1.5">
+                <button onclick="reviewConsent(${a.id}, 'approved')" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-[10px] font-bold active:scale-95">✅ 通過</button>
+                <button onclick="reviewConsent(${a.id}, 'rejected')" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-1.5 rounded-lg text-[10px] font-bold active:scale-95">❌ 退件</button>
+            </div></div>`;
+    }).join('');
+}
+
+async function _ryePost(path, body) {
+    try {
+        const data = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
+        if (data.status !== 'ok') { showAlert('操作失敗', data.message || '請稍後再試。'); return null; }
+        return data;
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+        return null;
+    }
+}
+
+async function addRyeApplicant() {
+    const nameEl = document.getElementById('rye-new-name');
+    const clubEl = document.getElementById('rye-new-club');
+    if (!nameEl.value.trim()) { showAlert('請填姓名', '請先輸入學生姓名。'); return; }
+    const ok = await _ryePost('/admin/rye/applicants', {
+        event_id: ryeState.eventId || currentActiveEvent?.id,
+        name: nameEl.value.trim(), club_name: clubEl.value.trim()
+    });
+    if (ok) { nameEl.value = ''; clubEl.value = ''; await reloadRye(); }
+}
+
+async function updateRye(id, field, value, alsoStatus) {
+    const body = { [field]: value };
+    // 貼上連結就自動轉成「待審核」，主委不用多按一次。
+    if (alsoStatus && value.trim()) body.consent_status = alsoStatus;
+    if (await _ryePost(`/admin/rye/applicants/${id}`, body)) await reloadRye();
+}
+
+async function reviewConsent(id, status) {
+    if (await _ryePost(`/admin/rye/applicants/${id}`, { consent_status: status })) await reloadRye();
+}
+
+async function deleteRyeApplicant(id) {
+    try {
+        await apiFetch(`/admin/rye/applicants/${id}`, { method: 'DELETE' });
+        await reloadRye();
+    } catch (err) { showAlert('連線失敗', err.message); }
+}
+
+async function autoScheduleRye() {
+    const data = await _ryePost('/admin/rye/schedule', {
+        event_id: ryeState.eventId || currentActiveEvent?.id,
+        start: document.getElementById('rye-start').value.trim(),
+        minutes: parseInt(document.getElementById('rye-minutes').value) || 20,
+    });
+    if (!data) return;
+    await reloadRye();
+    showAlert('排定完成', `已從 ${data.start} 起，每 ${data.minutes} 分鐘排定 ${data.scheduled} 位學生。`);
+}
+
+async function notifyRye() {
+    const data = await _ryePost('/admin/rye/notify', { event_id: ryeState.eventId || currentActiveEvent?.id });
+    if (!data) return;
+    closeModal('modal-rye');
+    addChatMessage('bot', `📋 <b>【面試時段已通知】</b><br>已透過 LINE 通知 ${data.notified} 位學生自己的面試時間。`);
+}
+
+// ============================================================
+//  理監事專區 (社內)
+// ============================================================
+let boardState = { club: '', members: [], motions: [] };
+
+async function openBoardModal() {
+    document.getElementById('board-motions').innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">載入中…</p>`;
+    openModal('modal-board');
+    await reloadBoard();
+}
+
+async function reloadBoard() {
+    const box = document.getElementById('board-motions');
+    let data;
+    try {
+        data = await apiFetch('/admin/board?club=' + encodeURIComponent(myClubName || ''));
+    } catch (err) {
+        box.innerHTML = `<p class="text-xs text-rose-500 py-6 text-center">載入失敗：${_escHtml(err.message)}</p>`;
+        return;
+    }
+    if (data.status === 'forbidden') { closeModal('modal-board'); showAlert('權限不足', data.message || '您沒有理監事專區權限。'); return; }
+    boardState = { club: data.club, members: data.members || [], motions: data.motions || [] };
+    document.getElementById('board-subtitle').textContent = `${data.club || '本社'}　議案線上表決`;
+    document.getElementById('board-member-count').textContent = boardState.members.length;
+    renderBoardMotions();
+}
+
+function renderBoardMotions() {
+    const box = document.getElementById('board-motions');
+    if (!boardState.motions.length) {
+        box.innerHTML = `<p class="text-xs text-gray-400 py-6 text-center">目前沒有議案。</p>`;
+        return;
+    }
+    const names = list => list.map(_escHtml).join('、');
+    box.innerHTML = boardState.motions.map(m => {
+        const closed = m.status !== 'open';
+        const badge = { open: '<span class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">表決中</span>',
+                        passed: '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已通過</span>',
+                        rejected: '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">已否決</span>' }[m.status];
+        const row = (label, cls, list) => list.length
+            ? `<div class="flex items-start gap-2 text-[10px]"><span class="${cls} px-1.5 rounded font-bold shrink-0">${label}</span><span class="text-gray-600">${names(list)}</span></div>` : '';
+        const actions = closed ? '' : `<div class="flex gap-1.5 pt-2 border-t border-gray-100">
+            <button onclick="closeMotion(${m.id}, 'passed')" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-[10px] font-bold active:scale-95">結案：通過</button>
+            <button onclick="closeMotion(${m.id}, 'rejected')" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-1.5 rounded-lg text-[10px] font-bold active:scale-95">結案：否決</button>
+        </div>`;
+        return `<div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm space-y-2 ${closed ? 'opacity-70' : ''}">
+            <div class="flex justify-between items-start gap-2">
+                <p class="text-sm font-black text-gray-800">${_escHtml(m.title)}</p>${badge}
+            </div>
+            ${m.detail ? `<p class="text-[11px] text-gray-500 leading-relaxed">${_escHtml(m.detail)}</p>` : ''}
+            <div class="grid grid-cols-3 gap-1.5 text-center">
+                <div class="bg-emerald-50 border border-emerald-200 rounded-lg py-1"><span class="block text-[9px] text-emerald-700 font-bold">同意</span><span class="block text-sm font-black text-emerald-600">${m.yes.length}</span></div>
+                <div class="bg-rose-50 border border-rose-200 rounded-lg py-1"><span class="block text-[9px] text-rose-700 font-bold">反對</span><span class="block text-sm font-black text-rose-600">${m.no.length}</span></div>
+                <div class="bg-gray-100 border border-gray-200 rounded-lg py-1"><span class="block text-[9px] text-gray-600 font-bold">棄權/未投</span><span class="block text-sm font-black text-gray-700">${m.abstain.length + m.pending.length}</span></div>
+            </div>
+            ${row('同意', 'bg-emerald-100 text-emerald-700', m.yes)}
+            ${row('反對', 'bg-rose-100 text-rose-700', m.no)}
+            ${row('棄權', 'bg-gray-200 text-gray-700', m.abstain)}
+            ${row('未投', 'bg-amber-100 text-amber-700', m.pending)}
+            ${actions}</div>`;
+    }).join('');
+}
+
+async function toggleBoardMembers() {
+    const panel = document.getElementById('board-members-panel');
+    const chevron = document.getElementById('board-member-chevron');
+    const opening = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !opening);
+    chevron.className = `fa-solid fa-chevron-${opening ? 'up' : 'down'} text-gray-400`;
+    if (!opening) return;
+
+    const list = document.getElementById('board-members-list');
+    list.innerHTML = `<p class="text-xs text-gray-400 p-2">載入社友名單…</p>`;
+    let members = [];
+    try {
+        const data = await apiFetch('/admin/club_members?club=' + encodeURIComponent(myClubName || boardState.club || ''));
+        members = data.members || [];
+    } catch (err) {
+        list.innerHTML = `<p class="text-xs text-rose-500 p-2">社友名單載入失敗</p>`;
+        return;
+    }
+    const chosen = new Set(boardState.members.map(m => m.uid));
+    list.innerHTML = members.length
+        ? members.map(m => `<label class="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer">
+            <input type="checkbox" value="${_escAttr(m.line_user_id)}" class="board-member-checkbox w-4 h-4 text-indigo-600 rounded" ${chosen.has(m.line_user_id) ? 'checked' : ''}>
+            <span class="text-xs text-gray-800 font-bold">${_escHtml(m.full_name + (m.nickname ? `（${m.nickname}）` : ''))}</span>
+        </label>`).join('')
+        : `<p class="text-xs text-gray-400 p-2">此社尚無社友資料。</p>`;
+}
+
+async function saveBoardMembers() {
+    const uids = [...document.querySelectorAll('.board-member-checkbox:checked')].map(cb => cb.value);
+    try {
+        const data = await apiFetch('/admin/board/members', {
+            method: 'POST', body: JSON.stringify({ club: myClubName || boardState.club, uids })
+        });
+        if (data.status !== 'ok') { showAlert('儲存失敗', data.message || '請稍後再試。'); return; }
+        await reloadBoard();
+        showAlert('已儲存', `理監事名單已更新為 ${data.members} 人。`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+async function createMotion() {
+    const titleEl = document.getElementById('motion-title');
+    const detailEl = document.getElementById('motion-detail');
+    if (!titleEl.value.trim()) { showAlert('請填議案名稱', '請先輸入議案名稱。'); return; }
+    try {
+        const data = await apiFetch('/admin/board/motions', {
+            method: 'POST',
+            body: JSON.stringify({ club: myClubName || boardState.club, title: titleEl.value.trim(), detail: detailEl.value.trim() })
+        });
+        if (data.status !== 'ok') { showAlert('建立失敗', data.message || '請稍後再試。'); return; }
+        titleEl.value = ''; detailEl.value = '';
+        await reloadBoard();
+        showAlert('議案已送出', `已推播給 ${data.notified} 位理監事，他們可直接在 LINE 上表決。`);
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+async function closeMotion(motionId, result) {
+    try {
+        const data = await apiFetch(`/admin/board/motions/${motionId}/close`, {
+            method: 'POST', body: JSON.stringify({ result })
+        });
+        if (data.status !== 'ok') { showAlert('結案失敗', data.message || '請稍後再試。'); return; }
+        await reloadBoard();
+    } catch (err) {
+        showAlert('連線失敗', err.message);
+    }
+}
+
+// ============================================================
 //  VIP ROLL-CALL (貴賓唱名介紹) — 名單存在後端，依活動分開
 // ============================================================
 // 主委在現場點「報到」，由伺服器蓋抵達時間；早於活動開始時間的進正式名單，
@@ -2102,13 +2694,13 @@ function renderAdminMenu() {
         rightTop = scanner('報到相機');
     } else if (isRye) {
         left = box('RYE 主委', 'RYE 報名與審核看板',
-            miniRow(mini("adminStub('面試安排')", 'fa-users-viewfinder', '面試安排'),
-                    mini("adminStub('同意書審核')", 'fa-file-signature', '同意書審核')) + statsBtn);
+            miniRow(mini("openRyeModal('interview')", 'fa-users-viewfinder', '面試安排'),
+                    mini("openRyeModal('consent')", 'fa-file-signature', '同意書審核')) + statsBtn);
         rightTop = vip;
     } else if (isAnnual) {
         left = box('年會主委', '地區年會 管理總看板',
-            miniRow(mini("adminStub('桌次安排')", 'fa-chair', '桌次安排'),
-                    mini("adminStub('摸彩系統')", 'fa-ticket', '摸彩系統')) + statsBtn);
+            miniRow(mini('openSeatingModal()', 'fa-chair', '桌次安排'),
+                    mini('openRaffleModal()', 'fa-ticket', '摸彩系統')) + statsBtn);
         rightTop = vip;
     } else {
         left = box('主委專用', '報名/繳費 動態統計看板',
@@ -3214,6 +3806,25 @@ function handleDeepLink() {
     }
     if (action === 'vip') {
         setTimeout(() => openVIPListModal(), 300);
+    }
+    if (action === 'club_finance') setTimeout(() => openClubFinanceModal(), 300);
+    if (action === 'board')        setTimeout(() => openBoardModal(), 300);
+    if (action === 'golf_swap') {
+        golfScoreEventId = parseInt(p.get('event')) || null;
+        setTimeout(() => openSwapGroupModal(), 300);
+    }
+    if (action === 'draw_holes')   setTimeout(() => openDrawHolesModal(), 300);
+    if (action === 'seating') {
+        seatingState.eventId = parseInt(p.get('event')) || null;
+        setTimeout(() => openSeatingModal(), 300);
+    }
+    if (action === 'raffle') {
+        raffleEventId = parseInt(p.get('event')) || null;
+        setTimeout(() => openRaffleModal(), 300);
+    }
+    if (action === 'rye_interview' || action === 'rye_consent') {
+        ryeState.eventId = parseInt(p.get('event')) || null;
+        setTimeout(() => openRyeModal(action === 'rye_consent' ? 'consent' : 'interview'), 300);
     }
     if (action === 'dues') {
         setTimeout(() => (tab === 'admin' ? openClubDuesModal() : openMyDuesModal()), 300);

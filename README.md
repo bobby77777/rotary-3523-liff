@@ -65,6 +65,7 @@ FastAPI service backing the LIFF app and the LINE bot.
 - **社刊** — published per club as content JSON (`/bulletin/content`); members load and print their own vector PDF.
 - **議程 PDF** — `/events/{id}/pdf` renders the saved agenda into a real **vector** PDF on the fly (`agenda_pdf.py`, fpdf2 + an embedded CJK font): selectable, searchable text and working attachment links, instead of the old browser screenshot. Needs one font covering Traditional Chinese — auto-detected from `backend/assets/fonts/*.ttf` or the usual system paths, or set `AGENDA_FONT_PATH`. Without one the endpoint falls back to whatever was stored/uploaded before.
 - **Event PDFs** — non-例會 events link a PDF that 執秘 drops in a Google Drive folder; the same `/events/{id}/pdf` streams it when the event has no agenda.
+- **Admin back-office** — every 主委/社長 tool is backed by real tables and LINE pushes: 報名意願調查, 待繳費催繳, 貴賓唱名, 高球分組/即時調組, 年會桌次, 摸彩 (draws from checked-in attendees), RYE 面試時段與同意書審核, and 理監事議案表決 (board members vote by postback from a Flex card).
 - **RAG ingestion** — `ingest.py` watches a Google Drive folder and re-embeds changed files into Supabase (pgvector).
 
 ### Requirements

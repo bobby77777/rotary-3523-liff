@@ -1335,29 +1335,382 @@ def replace_golf_groups(event_id: int, players: list[dict], per_group: int = 4) 
 
 def swap_golf_players(event_id: int, id_a: int, id_b: int) -> tuple[dict, dict] | None:
     """Swap two players' seats, so each keeps the other's 組別/順位."""
+    return _swap_rows("golf_groups", ("group_no", "slot"), event_id, id_a, id_b)
+
+
+# ── 年會桌次安排 ───────────────────────────────────────────────────────────────
+
+def ensure_event_seating_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS event_seating (
+            id SERIAL PRIMARY KEY,
+            event_id     INTEGER NOT NULL,
+            table_no     INTEGER NOT NULL,
+            seat_no      INTEGER NOT NULL,
+            name         TEXT NOT NULL DEFAULT '',
+            line_user_id TEXT NOT NULL DEFAULT '',
+            club_name    TEXT NOT NULL DEFAULT '',
+            UNIQUE(event_id, table_no, seat_no)
+        )
+    """)
+
+
+def list_event_seating(event_id: int) -> list[dict]:
+    return query(
+        "SELECT id, table_no, seat_no, name, line_user_id, club_name "
+        "FROM event_seating WHERE event_id = %s ORDER BY table_no, seat_no",
+        (event_id,),
+    )
+
+
+def replace_event_seating(event_id: int, people: list[dict], per_table: int = 10) -> int:
+    """Re-seat everyone from an ordered list (same club stays together upstream)."""
     conn = _get_conn()
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM golf_groups WHERE event_id = %s AND id IN (%s, %s)",
-                        (event_id, id_a, id_b))
-            rows = [dict(r) for r in cur.fetchall()]
-            if len(rows) != 2:
-                return None
-            a, b = (rows[0], rows[1]) if rows[0]["id"] == id_a else (rows[1], rows[0])
-            # Park one row outside the unique(event, group, slot) space while swapping.
-            cur.execute("UPDATE golf_groups SET group_no = -1, slot = -1 WHERE id = %s", (a["id"],))
-            cur.execute("UPDATE golf_groups SET group_no = %s, slot = %s WHERE id = %s",
-                        (a["group_no"], a["slot"], b["id"]))
-            cur.execute("UPDATE golf_groups SET group_no = %s, slot = %s WHERE id = %s",
-                        (b["group_no"], b["slot"], a["id"]))
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM event_seating WHERE event_id = %s", (event_id,))
+            for i, p in enumerate(people):
+                cur.execute(
+                    "INSERT INTO event_seating (event_id, table_no, seat_no, name, line_user_id, club_name) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (event_id, i // per_table + 1, i % per_table + 1,
+                     p.get("name", ""), p.get("uid", ""), p.get("club", "")),
+                )
         conn.commit()
-        return ({**a, "group_no": b["group_no"], "slot": b["slot"]},
-                {**b, "group_no": a["group_no"], "slot": a["slot"]})
+        return len(people)
     except Exception:
         conn.rollback()
         raise
     finally:
         _release_conn(conn)
+
+
+def swap_event_seats(event_id: int, id_a: int, id_b: int) -> tuple[dict, dict] | None:
+    return _swap_rows("event_seating", ("table_no", "seat_no"), event_id, id_a, id_b)
+
+
+def _swap_rows(table: str, cols: tuple[str, str], event_id: int,
+               id_a: int, id_b: int) -> tuple[dict, dict] | None:
+    """Exchange two rows' position columns. `table`/`cols` are internal constants,
+    never user input. Parks one row at (-1,-1) so the UNIQUE index stays happy."""
+    c1, c2 = cols
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"SELECT * FROM {table} WHERE event_id = %s AND id IN (%s, %s)",
+                        (event_id, id_a, id_b))
+            rows = [dict(r) for r in cur.fetchall()]
+            if len(rows) != 2:
+                return None
+            a, b = (rows[0], rows[1]) if rows[0]["id"] == id_a else (rows[1], rows[0])
+            cur.execute(f"UPDATE {table} SET {c1} = -1, {c2} = -1 WHERE id = %s", (a["id"],))
+            cur.execute(f"UPDATE {table} SET {c1} = %s, {c2} = %s WHERE id = %s",
+                        (a[c1], a[c2], b["id"]))
+            cur.execute(f"UPDATE {table} SET {c1} = %s, {c2} = %s WHERE id = %s",
+                        (b[c1], b[c2], a["id"]))
+        conn.commit()
+        return ({**a, c1: b[c1], c2: b[c2]}, {**b, c1: a[c1], c2: a[c2]})
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+# ── 年會摸彩 ───────────────────────────────────────────────────────────────────
+
+def ensure_raffle_tables() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS event_prizes (
+            id SERIAL PRIMARY KEY,
+            event_id   INTEGER NOT NULL,
+            name       TEXT NOT NULL,
+            qty        INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    execute("""
+        CREATE TABLE IF NOT EXISTS event_raffle_winners (
+            id SERIAL PRIMARY KEY,
+            event_id     INTEGER NOT NULL,
+            prize_id     INTEGER NOT NULL,
+            name         TEXT NOT NULL DEFAULT '',
+            line_user_id TEXT NOT NULL DEFAULT '',
+            club_name    TEXT NOT NULL DEFAULT '',
+            drawn_at     TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    execute("CREATE INDEX IF NOT EXISTS raffle_winners_event_idx "
+            "ON event_raffle_winners (event_id)")
+
+
+def list_prizes(event_id: int) -> list[dict]:
+    return query(
+        "SELECT id, name, qty, sort_order FROM event_prizes "
+        "WHERE event_id = %s ORDER BY sort_order, id",
+        (event_id,),
+    )
+
+
+def add_prize(event_id: int, name: str, qty: int) -> dict:
+    return _write_returning(
+        """
+        INSERT INTO event_prizes (event_id, name, qty, sort_order)
+        VALUES (%s, %s, %s,
+                COALESCE((SELECT MAX(sort_order) + 1 FROM event_prizes WHERE event_id = %s), 1))
+        RETURNING id, name, qty, sort_order
+        """,
+        (event_id, name, qty, event_id),
+    )
+
+
+def delete_prize(prize_id: int) -> None:
+    execute("DELETE FROM event_raffle_winners WHERE prize_id = %s", (prize_id,))
+    execute("DELETE FROM event_prizes WHERE id = %s", (prize_id,))
+
+
+def get_prize(prize_id: int) -> dict | None:
+    rows = query("SELECT id, event_id, name, qty FROM event_prizes WHERE id = %s", (prize_id,))
+    return rows[0] if rows else None
+
+
+def list_winners(event_id: int) -> list[dict]:
+    return query(
+        "SELECT id, prize_id, name, line_user_id, club_name FROM event_raffle_winners "
+        "WHERE event_id = %s ORDER BY id",
+        (event_id,),
+    )
+
+
+def raffle_candidates(event_id: int) -> list[dict]:
+    """Checked-in attendees who have not won anything at this event yet."""
+    return query(
+        """
+        SELECT r.line_user_id,
+               COALESCE(pi.full_name, '') AS full_name,
+               COALESCE(pi.nickname, '')  AS nickname,
+               COALESCE(pi.club_name, '') AS club_name
+        FROM registrations r
+        LEFT JOIN personal_information pi ON pi.line_user_id = r.line_user_id
+        WHERE r.event_id = %s AND r.checked_in
+          AND r.line_user_id NOT IN (
+              SELECT line_user_id FROM event_raffle_winners WHERE event_id = %s)
+        ORDER BY r.line_user_id
+        """,
+        (event_id, event_id),
+    )
+
+
+def add_winners(event_id: int, prize_id: int, winners: list[dict]) -> None:
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            for w in winners:
+                cur.execute(
+                    "INSERT INTO event_raffle_winners (event_id, prize_id, name, line_user_id, club_name) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (event_id, prize_id, w["name"], w["uid"], w["club"]),
+                )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def clear_prize_winners(prize_id: int) -> None:
+    execute("DELETE FROM event_raffle_winners WHERE prize_id = %s", (prize_id,))
+
+
+# ── RYE：面試安排 + 同意書審核 ─────────────────────────────────────────────────
+
+def ensure_rye_applicants_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS rye_applicants (
+            id SERIAL PRIMARY KEY,
+            event_id       INTEGER NOT NULL,
+            name           TEXT NOT NULL,
+            club_name      TEXT NOT NULL DEFAULT '',
+            line_user_id   TEXT NOT NULL DEFAULT '',
+            slot_time      TEXT NOT NULL DEFAULT '',
+            interviewer    TEXT NOT NULL DEFAULT '',
+            consent_url    TEXT NOT NULL DEFAULT '',
+            consent_status TEXT NOT NULL DEFAULT 'none',   -- none | pending | approved | rejected
+            consent_note   TEXT NOT NULL DEFAULT '',
+            sort_order     INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+
+_RYE_COLS = ("id, event_id, name, club_name, line_user_id, slot_time, interviewer, "
+             "consent_url, consent_status, consent_note, sort_order")
+
+
+def list_rye_applicants(event_id: int) -> list[dict]:
+    return query(
+        f"SELECT {_RYE_COLS} FROM rye_applicants WHERE event_id = %s ORDER BY sort_order, id",
+        (event_id,),
+    )
+
+
+def add_rye_applicant(event_id: int, name: str, club: str, uid: str) -> dict:
+    return _write_returning(
+        f"""
+        INSERT INTO rye_applicants (event_id, name, club_name, line_user_id, sort_order)
+        VALUES (%s, %s, %s, %s,
+                COALESCE((SELECT MAX(sort_order) + 1 FROM rye_applicants WHERE event_id = %s), 1))
+        RETURNING {_RYE_COLS}
+        """,
+        (event_id, name, club, uid, event_id),
+    )
+
+
+def update_rye_applicant(applicant_id: int, fields: dict) -> dict | None:
+    allowed = ("name", "club_name", "line_user_id", "slot_time", "interviewer",
+               "consent_url", "consent_status", "consent_note", "sort_order")
+    sets = [f"{k} = %s" for k in allowed if k in fields]   # whitelist → safe to interpolate
+    if not sets:
+        return None
+    params = [fields[k] for k in allowed if k in fields] + [applicant_id]
+    return _write_returning(
+        f"UPDATE rye_applicants SET {', '.join(sets)} WHERE id = %s RETURNING {_RYE_COLS}",
+        params,
+    )
+
+
+def delete_rye_applicant(applicant_id: int) -> None:
+    execute("DELETE FROM rye_applicants WHERE id = %s", (applicant_id,))
+
+
+def set_rye_slots(event_id: int, slots: list[tuple[int, str]]) -> None:
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            for applicant_id, slot in slots:
+                cur.execute("UPDATE rye_applicants SET slot_time = %s WHERE id = %s AND event_id = %s",
+                            (slot, applicant_id, event_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+# ── 理監事專區：名單 + 議案表決 ────────────────────────────────────────────────
+
+def ensure_board_tables() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS board_members (
+            club_name    TEXT NOT NULL,
+            line_user_id TEXT NOT NULL,
+            PRIMARY KEY (club_name, line_user_id)
+        )
+    """)
+    execute("""
+        CREATE TABLE IF NOT EXISTS board_motions (
+            id SERIAL PRIMARY KEY,
+            club_name  TEXT NOT NULL,
+            title      TEXT NOT NULL,
+            detail     TEXT NOT NULL DEFAULT '',
+            status     TEXT NOT NULL DEFAULT 'open',   -- open | passed | rejected
+            created_by TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    execute("""
+        CREATE TABLE IF NOT EXISTS board_votes (
+            motion_id    INTEGER NOT NULL,
+            line_user_id TEXT NOT NULL,
+            vote         TEXT NOT NULL,               -- yes | no | abstain
+            voted_at     TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (motion_id, line_user_id)
+        )
+    """)
+
+
+def list_board_members(club_name: str) -> list[dict]:
+    return query(
+        """
+        SELECT bm.line_user_id,
+               COALESCE(pi.full_name, '') AS full_name,
+               COALESCE(pi.nickname, '')  AS nickname
+        FROM board_members bm
+        LEFT JOIN personal_information pi ON pi.line_user_id = bm.line_user_id
+        WHERE bm.club_name = %s
+        ORDER BY pi.full_name
+        """,
+        (club_name,),
+    )
+
+
+def set_board_members(club_name: str, uids: list[str]) -> int:
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM board_members WHERE club_name = %s", (club_name,))
+            for uid in uids:
+                cur.execute("INSERT INTO board_members (club_name, line_user_id) VALUES (%s, %s) "
+                            "ON CONFLICT DO NOTHING", (club_name, uid))
+        conn.commit()
+        return len(uids)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def add_board_motion(club_name: str, title: str, detail: str, created_by: str) -> dict:
+    return _write_returning(
+        "INSERT INTO board_motions (club_name, title, detail, created_by) "
+        "VALUES (%s, %s, %s, %s) RETURNING id, club_name, title, detail, status",
+        (club_name, title, detail, created_by),
+    )
+
+
+def get_board_motion(motion_id: int) -> dict | None:
+    rows = query("SELECT id, club_name, title, detail, status FROM board_motions WHERE id = %s",
+                 (motion_id,))
+    return rows[0] if rows else None
+
+
+def list_board_motions(club_name: str) -> list[dict]:
+    return query(
+        "SELECT id, title, detail, status, created_at FROM board_motions "
+        "WHERE club_name = %s ORDER BY id DESC",
+        (club_name,),
+    )
+
+
+def close_board_motion(motion_id: int, status: str) -> None:
+    execute("UPDATE board_motions SET status = %s WHERE id = %s", (status, motion_id))
+
+
+def cast_board_vote(motion_id: int, line_user_id: str, vote: str) -> None:
+    execute(
+        """
+        INSERT INTO board_votes (motion_id, line_user_id, vote, voted_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (motion_id, line_user_id) DO UPDATE SET vote = EXCLUDED.vote, voted_at = NOW()
+        """,
+        (motion_id, line_user_id, vote),
+    )
+
+
+def list_board_votes(motion_id: int) -> list[dict]:
+    return query(
+        """
+        SELECT bv.line_user_id, bv.vote,
+               COALESCE(pi.full_name, '') AS full_name,
+               COALESCE(pi.nickname, '')  AS nickname
+        FROM board_votes bv
+        LEFT JOIN personal_information pi ON pi.line_user_id = bv.line_user_id
+        WHERE bv.motion_id = %s
+        """,
+        (motion_id,),
+    )
 
 
 # ── 報名專區：活動意願調查 ──────────────────────────────────────────────────────

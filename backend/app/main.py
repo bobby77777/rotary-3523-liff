@@ -40,6 +40,10 @@ async def lifespan(app: FastAPI):
     db.ensure_event_surveys_table()
     db.ensure_event_vips_table()
     db.ensure_golf_groups_table()
+    db.ensure_event_seating_table()
+    db.ensure_raffle_tables()
+    db.ensure_rye_applicants_table()
+    db.ensure_board_tables()
     db.ensure_bulletin_editors_table()
     db.ensure_bulletin_content_table()
     db.ensure_club_finance_table()
@@ -436,6 +440,43 @@ def _build_survey_bubble(ev: dict, reminder: bool = False) -> dict:
     }
 
 
+def _build_motion_bubble(motion: dict, club: str) -> dict:
+    """理監事議案表決票，三個選項都是 postback，票直接回寫資料庫。"""
+    body = [
+        {"type": "text", "text": motion["title"], "size": "md", "weight": "bold",
+         "color": "#1f2937", "wrap": True},
+        {"type": "text", "text": club, "size": "xs", "color": "#6b7280"},
+    ]
+    if motion.get("detail"):
+        body += [{"type": "separator", "margin": "md"},
+                 {"type": "text", "text": motion["detail"], "size": "sm", "color": "#4b5563",
+                  "wrap": True, "margin": "md"}]
+    vote = lambda label, code, color: {
+        "type": "button", "style": "primary", "color": color, "height": "sm",
+        "action": {"type": "postback", "label": label,
+                   "data": f"action=board_vote&id={motion['id']}&v={code}",
+                   "displayText": f"{label}：{motion['title']}"},
+    }
+    return {
+        "type": "bubble",
+        "header": {
+            "type": "box", "layout": "vertical", "backgroundColor": "#1e3a5f", "paddingAll": "16px",
+            "contents": [{"type": "text", "text": "🗳️ 理監事議案表決", "size": "lg",
+                          "weight": "bold", "color": "#ffffff"}],
+        },
+        "body": {"type": "box", "layout": "vertical", "spacing": "sm",
+                 "paddingAll": "16px", "contents": body},
+        "footer": {
+            "type": "box", "layout": "vertical", "spacing": "sm",
+            "contents": [
+                {"type": "box", "layout": "horizontal", "spacing": "sm",
+                 "contents": [vote("✅ 同意", "yes", "#10b981"), vote("❌ 反對", "no", "#ef4444")]},
+                vote("➖ 棄權", "abstain", "#9ca3af"),
+            ],
+        },
+    }
+
+
 def _build_profile_card(user_info: dict | None, reg_count: int) -> dict:
     if user_info:
         name_text = f"{user_info['full_name']}（{user_info.get('nickname', '')}）"
@@ -570,26 +611,26 @@ def _admin_buttons(scope: str, ev: dict | None) -> list[tuple]:
         return [
             execreg,
             ("📊 社友出席率", "uri", f"{LIFF_URL}?tab=admin&scope=club&action=attendance"),
-            ("💵 社務對帳",   "postback", "action=admin_stub&f=club_finance"),
-            ("👥 理監事專區", "postback", "action=admin_stub&f=board"),
+            ("💵 社務對帳",   "uri", f"{LIFF_URL}?tab=admin&scope=club&action=club_finance"),
+            ("👥 理監事專區", "uri", f"{LIFF_URL}?tab=admin&scope=club&action=board"),
             ("🧾 社友社費",   "uri", f"{LIFF_URL}?tab=admin&scope=club&action=dues"),
             checkin, scanner,
         ]
     if ev and _is_golf_event(ev):
         return [stats,
-                ("🔀 即時調組",     "postback", "action=admin_stub&f=golf_swap"),
+                ("🔀 即時調組",     "uri", f"{LIFF_URL}?tab=admin&action=golf_swap&event={ev_id}"),
                 ("🏁 賽事成績",     "uri", f"{LIFF_URL}?tab=admin&action=leaderboard&event={ev_id}"),
-                ("🎲 新貝利亞抽洞", "postback", "action=admin_stub&f=draw_holes"),
+                ("🎲 新貝利亞抽洞", "uri", f"{LIFF_URL}?tab=admin&action=draw_holes&event={ev_id}"),
                 checkin, scanner]
     if ev and _is_rye_event(ev):
         return [stats,
-                ("📋 面試安排",   "postback", "action=admin_stub&f=rye_interview"),
-                ("✍️ 同意書審核", "postback", "action=admin_stub&f=rye_consent"),
+                ("📋 面試安排",   "uri", f"{LIFF_URL}?tab=admin&action=rye_interview&event={ev_id}"),
+                ("✍️ 同意書審核", "uri", f"{LIFF_URL}?tab=admin&action=rye_consent&event={ev_id}"),
                 vip, checkin, support]
     if ev and _is_annual_event(ev):
         return [stats,
-                ("🪑 桌次安排", "postback", "action=admin_stub&f=seating"),
-                ("🎟️ 摸彩系統", "postback", "action=admin_stub&f=raffle"),
+                ("🪑 桌次安排", "uri", f"{LIFF_URL}?tab=admin&action=seating&event={ev_id}"),
+                ("🎟️ 摸彩系統", "uri", f"{LIFF_URL}?tab=admin&action=raffle&event={ev_id}"),
                 vip, checkin, support]
     # default district management
     return [checkin, stats, execreg, scanner, search, announce]
@@ -882,6 +923,25 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
                 "若之後改變主意，可從首頁重新報名。",
             )
 
+    elif action == "board_vote":
+        motion = db.get_board_motion(int(p.get("id", 0)))
+        if motion is None:
+            line_api.reply_text(reply_token, "找不到這個議案，請聯絡秘書處。")
+            return
+        if motion["status"] != "open":
+            line_api.reply_text(reply_token, f"「{motion['title']}」已結案，無法再投票。")
+            return
+        if user_id not in [m["line_user_id"] for m in db.list_board_members(motion["club_name"])]:
+            line_api.reply_text(reply_token, "此議案僅限本社理監事表決。")
+            return
+        choice = p.get("v", "")
+        if choice not in ("yes", "no", "abstain"):
+            return
+        db.cast_board_vote(motion["id"], user_id, choice)
+        label = {"yes": "✅ 同意", "no": "❌ 反對", "abstain": "➖ 棄權"}[choice]
+        line_api.reply_text(reply_token, f"已記錄您的表決：{label}\n\n{motion['title']}\n"
+                                         "（結案前可再點一次改票）")
+
     # ── Profile flows ──────────────────────────────────────────────────────────
     elif action == "my_profile":
         _handle_profile(reply_token, user_id)
@@ -939,14 +999,13 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
         if not _admin_has_permission(role, scope, ev):
             line_api.reply_flex(reply_token, "🔒 權限不符", _build_admin_unauthorized(role, ev))
             return
-        feature = p.get("f", "")
-        names = {
-            "support": "後台支援", "club_finance": "社務對帳", "board": "理監事專區",
-            "golf_swap": "即時調組", "draw_holes": "新貝利亞抽洞",
-            "rye_interview": "面試安排", "rye_consent": "同意書審核",
-            "seating": "桌次安排", "raffle": "摸彩系統",
-        }
-        line_api.reply_text(reply_token, f"「{names.get(feature, feature)}」功能開發中，敬請期待 🚧")
+        # 其餘後台功能都已改成直接開 LIFF（見 _admin_buttons）；這裡只剩後台支援。
+        if p.get("f") == "support":
+            line_api.reply_text(reply_token,
+                                "🎧 秘書處聯絡方式\n\n信箱：office@rotary3523.org.tw\n"
+                                "系統問題請附上活動名稱與畫面截圖，我們會盡快回覆。")
+        else:
+            line_api.reply_text(reply_token, "請改用後台選單中的按鈕操作 🙏")
 
     elif action == "search_member":
         if not db.is_admin(user_id):
@@ -1983,6 +2042,424 @@ async def golf_groups_swap(request: Request):
     return {"status": "ok",
             "a": {"name": a["player_name"], "group_no": a["group_no"]},
             "b": {"name": b["player_name"], "group_no": b["group_no"]}}
+
+
+# ── 年會桌次安排 ─────────────────────────────────────────────────────────────
+
+def _attendee_pool(event_id: int) -> list[dict]:
+    """報名者（含執秘代報的來賓），照社別排在一起。"""
+    people = [
+        {"uid": r["line_user_id"],
+         "name": (r["full_name"] + (f"（{r['nickname']}）" if r.get("nickname") else "")) or "社友",
+         "club": r.get("club_name", "")}
+        for r in db.get_event_registrants(event_id)
+    ]
+    people.sort(key=lambda p: (p["club"], p["name"]))
+    people += [{"uid": "", "name": f"{g['name']}（來賓）", "club": ""}
+               for g in db.get_event_guests(event_id)]
+    return people
+
+
+@app.get("/admin/seating")
+async def admin_seating(request: Request, event: int | None = None):
+    """桌次表（年會主委）。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無桌次安排權限", "tables": []}
+    ev = _lookup_event(admin_uid, event) if event else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動", "tables": []}
+    rows = db.list_event_seating(ev["id"])
+    tables: dict[int, list] = {}
+    for r in rows:
+        tables.setdefault(r["table_no"], []).append(
+            {"id": r["id"], "seat_no": r["seat_no"], "name": r["name"],
+             "uid": r["line_user_id"], "club": r["club_name"]})
+    return {
+        "status": "ok", "event_id": ev["id"], "event_title": ev["title"],
+        "tables": [{"table_no": t, "seats": s} for t, s in sorted(tables.items())],
+        "people": [{"id": r["id"], "name": r["name"], "table_no": r["table_no"]} for r in rows],
+    }
+
+
+@app.post("/admin/seating/auto")
+async def admin_seating_auto(request: Request):
+    """依報名名單排桌（預設 10 人一桌，同社盡量坐一起）。會蓋掉現有桌次。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無桌次安排權限"}
+    body = await request.json()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    per_table = max(2, min(int(body.get("per_table") or 10), 20))
+    people = _attendee_pool(ev["id"])
+    if not people:
+        return {"status": "empty", "message": "此活動還沒有人報名，無法排桌"}
+    count = db.replace_event_seating(ev["id"], people, per_table)
+    return {"status": "ok", "seated": count,
+            "tables": (count + per_table - 1) // per_table, "per_table": per_table}
+
+
+@app.post("/admin/seating/swap")
+async def admin_seating_swap(request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無桌次安排權限"}
+    body = await request.json()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    try:
+        id_a, id_b = int(body.get("a")), int(body.get("b"))
+    except (TypeError, ValueError):
+        return {"status": "invalid", "message": "請選擇兩位要對調的與會者"}
+    if id_a == id_b:
+        return {"status": "invalid", "message": "請選擇兩位不同的與會者"}
+    swapped = db.swap_event_seats(ev["id"], id_a, id_b)
+    if swapped is None:
+        return {"status": "not_found", "message": "找不到這兩位的座位資料"}
+    a, b = swapped
+    return {"status": "ok",
+            "a": {"name": a["name"], "table_no": a["table_no"]},
+            "b": {"name": b["name"], "table_no": b["table_no"]}}
+
+
+@app.post("/admin/seating/publish")
+async def admin_seating_publish(request: Request):
+    """公布桌次：逐一通知有 LINE 身分的與會者自己坐第幾桌。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無桌次安排權限"}
+    body = await request.json()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    seats = [s for s in db.list_event_seating(ev["id"]) if s["line_user_id"]]
+    if not seats:
+        return {"status": "empty", "message": "尚未排桌，或與會者都沒有 LINE 身分"}
+    sent = 0
+    for s in seats:
+        try:
+            line_api.push_text(
+                s["line_user_id"],
+                f"🪑 桌次通知【{ev['title']}】\n{ev['date']}（{ev['weekday']}）　{ev['location']}\n\n"
+                f"您的座位：第 {s['table_no']} 桌　第 {s['seat_no']} 位")
+            sent += 1
+        except Exception:
+            logger.exception("seating push failed for %s", s["line_user_id"])
+    return {"status": "ok", "notified": sent}
+
+
+# ── 年會摸彩 ─────────────────────────────────────────────────────────────────
+
+@app.get("/admin/raffle")
+async def admin_raffle(request: Request, event: int | None = None):
+    """獎項、已中獎名單與目前可抽人數（年會主委）。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無摸彩權限", "prizes": []}
+    ev = _lookup_event(admin_uid, event) if event else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動", "prizes": []}
+    winners = db.list_winners(ev["id"])
+    by_prize: dict[int, list] = {}
+    for w in winners:
+        by_prize.setdefault(w["prize_id"], []).append({"name": w["name"], "club": w["club_name"]})
+    return {
+        "status": "ok", "event_id": ev["id"], "event_title": ev["title"],
+        "candidates": len(db.raffle_candidates(ev["id"])),
+        "prizes": [{**p, "winners": by_prize.get(p["id"], [])} for p in db.list_prizes(ev["id"])],
+    }
+
+
+@app.post("/admin/raffle/prizes")
+async def admin_raffle_add_prize(request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無摸彩權限"}
+    body = await request.json()
+    name = str(body.get("name", "")).strip()
+    if not name:
+        return {"status": "invalid", "message": "請填寫獎項名稱"}
+    try:
+        qty = max(1, min(int(body.get("qty") or 1), 100))
+    except (TypeError, ValueError):
+        return {"status": "invalid", "message": "名額請填數字"}
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    return {"status": "ok", "prize": db.add_prize(ev["id"], name, qty)}
+
+
+@app.delete("/admin/raffle/prizes/{prize_id}")
+async def admin_raffle_delete_prize(prize_id: int, request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無摸彩權限"}
+    db.delete_prize(prize_id)
+    return {"status": "ok"}
+
+
+@app.post("/admin/raffle/draw")
+async def admin_raffle_draw(request: Request):
+    """從「已報到」且尚未中獎的人裡抽出得獎者，並推播通知本人。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無摸彩權限"}
+    body = await request.json()
+    prize = db.get_prize(int(body.get("prize_id") or 0))
+    if prize is None:
+        return {"status": "not_found", "message": "找不到這個獎項"}
+    ev = db.get_event(prize["event_id"])
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    if body.get("redraw"):
+        db.clear_prize_winners(prize["id"])
+    elif [w for w in db.list_winners(ev["id"]) if w["prize_id"] == prize["id"]]:
+        return {"status": "already", "message": "此獎項已抽出，如要重抽請先清除"}
+
+    pool = db.raffle_candidates(ev["id"])
+    if not pool:
+        return {"status": "empty", "message": "目前沒有已報到且尚未中獎的與會者"}
+    picked = random.sample(pool, min(prize["qty"], len(pool)))
+    winners = [{"uid": p["line_user_id"],
+                "name": (p["full_name"] + (f"（{p['nickname']}）" if p["nickname"] else "")) or "與會者",
+                "club": p["club_name"]}
+               for p in picked]
+    db.add_winners(ev["id"], prize["id"], winners)
+    for w in winners:
+        if w["uid"]:
+            _push_receipt(w["uid"], f"🎉 恭喜中獎！\n\n【{ev['title']}】{prize['name']}\n"
+                                    f"請至現場服務台領獎。")
+    return {"status": "ok", "prize": prize["name"], "drawn": len(winners),
+            "short": len(winners) < prize["qty"],
+            "winners": [{"name": w["name"], "club": w["club"]} for w in winners]}
+
+
+# ── RYE：面試安排 + 同意書審核 ───────────────────────────────────────────────
+
+@app.get("/admin/rye")
+async def admin_rye(request: Request, event: int | None = None):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無 RYE 管理權限", "applicants": []}
+    ev = _lookup_event(admin_uid, event) if event else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動", "applicants": []}
+    return {"status": "ok", "event_id": ev["id"], "event_title": ev["title"],
+            "start_time": ev.get("start_time") or (ev.get("time") or "").split("-")[0].strip(),
+            "applicants": db.list_rye_applicants(ev["id"])}
+
+
+@app.post("/admin/rye/applicants")
+async def admin_rye_add(request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無 RYE 管理權限"}
+    body = await request.json()
+    name = str(body.get("name", "")).strip()
+    if not name:
+        return {"status": "invalid", "message": "請填寫學生姓名"}
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    return {"status": "ok", "applicant": db.add_rye_applicant(
+        ev["id"], name, str(body.get("club_name", "")).strip(),
+        str(body.get("line_user_id", "")).strip())}
+
+
+@app.post("/admin/rye/applicants/{applicant_id}")
+async def admin_rye_update(applicant_id: int, request: Request):
+    """改時段 / 面試官 / 同意書連結與審核結果。審核有結果就通知學生。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無 RYE 管理權限"}
+    body = await request.json()
+    fields = {k: str(body[k]).strip() for k in
+              ("name", "club_name", "line_user_id", "slot_time", "interviewer",
+               "consent_url", "consent_note") if k in body}
+    if "consent_status" in body:
+        status = str(body["consent_status"]).strip()
+        if status not in ("none", "pending", "approved", "rejected"):
+            return {"status": "invalid", "message": "同意書狀態不正確"}
+        fields["consent_status"] = status
+    applicant = db.update_rye_applicant(applicant_id, fields)
+    if applicant is None:
+        return {"status": "not_found", "message": "找不到這位學生"}
+    if fields.get("consent_status") in ("approved", "rejected") and applicant["line_user_id"]:
+        verdict = "✅ 已通過" if fields["consent_status"] == "approved" else "❌ 需補件"
+        note = f"\n主委備註：{applicant['consent_note']}" if applicant["consent_note"] else ""
+        _push_receipt(applicant["line_user_id"],
+                      f"📄 家長同意書審核結果：{verdict}\n\n{applicant['name']}{note}")
+    return {"status": "ok", "applicant": applicant}
+
+
+@app.delete("/admin/rye/applicants/{applicant_id}")
+async def admin_rye_delete(applicant_id: int, request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無 RYE 管理權限"}
+    db.delete_rye_applicant(applicant_id)
+    return {"status": "ok"}
+
+
+@app.post("/admin/rye/schedule")
+async def admin_rye_schedule(request: Request):
+    """自動排面試時段：從活動開始時間起，每人間隔 N 分鐘。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無 RYE 管理權限"}
+    body = await request.json()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    applicants = db.list_rye_applicants(ev["id"])
+    if not applicants:
+        return {"status": "empty", "message": "尚未建立學生名單"}
+    try:
+        every = max(5, min(int(body.get("minutes") or 20), 120))
+    except (TypeError, ValueError):
+        every = 20
+    start = str(body.get("start") or ev.get("start_time") or
+                (ev.get("time") or "").split("-")[0].strip() or "10:00")
+    try:
+        h, m = start.split(":")[:2]
+        cur = int(h) * 60 + int(m)
+    except ValueError:
+        cur = 600
+    slots = []
+    for a in applicants:
+        slots.append((a["id"], f"{cur // 60 % 24:02d}:{cur % 60:02d}"))
+        cur += every
+    db.set_rye_slots(ev["id"], slots)
+    return {"status": "ok", "scheduled": len(slots), "start": slots[0][1], "minutes": every}
+
+
+@app.post("/admin/rye/notify")
+async def admin_rye_notify(request: Request):
+    """把面試時段通知有 LINE 身分的學生。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無 RYE 管理權限"}
+    body = await request.json()
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+    targets = [a for a in db.list_rye_applicants(ev["id"]) if a["line_user_id"] and a["slot_time"]]
+    if not targets:
+        return {"status": "empty", "message": "沒有可通知的對象（需有 LINE 身分且已排定時段）"}
+    sent = 0
+    for a in targets:
+        who = f"\n面試官：{a['interviewer']}" if a["interviewer"] else ""
+        try:
+            line_api.push_text(
+                a["line_user_id"],
+                f"📋 面試時段通知【{ev['title']}】\n{ev['date']}（{ev['weekday']}）　{ev['location']}\n\n"
+                f"{a['name']} 同學，您的面試時間為 {a['slot_time']}{who}\n請提前 10 分鐘報到。")
+            sent += 1
+        except Exception:
+            logger.exception("rye notify failed for %s", a["line_user_id"])
+    return {"status": "ok", "notified": sent}
+
+
+# ── 理監事專區：名單 + 議案表決 ───────────────────────────────────────────────
+
+def _motion_tally(motion_id: int, club: str) -> dict:
+    votes = db.list_board_votes(motion_id)
+    members = db.list_board_members(club)
+    voted = {v["line_user_id"]: v for v in votes}
+    name = lambda r: (r["full_name"] + (f"（{r['nickname']}）" if r["nickname"] else "")) or "理監事"
+    return {
+        "yes":     [name(v) for v in votes if v["vote"] == "yes"],
+        "no":      [name(v) for v in votes if v["vote"] == "no"],
+        "abstain": [name(v) for v in votes if v["vote"] == "abstain"],
+        "pending": [name(m) for m in members if m["line_user_id"] not in voted],
+    }
+
+
+@app.get("/admin/board")
+async def admin_board(request: Request, club: str = ""):
+    """理監事名單與議案表決狀況（社長 / 秘書）。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無理監事專區權限", "motions": []}
+    club = club or db.get_user_club(admin_uid)
+    motions = []
+    for m in db.list_board_motions(club):
+        motions.append({"id": m["id"], "title": m["title"], "detail": m["detail"],
+                        "status": m["status"], **_motion_tally(m["id"], club)})
+    return {"status": "ok", "club": club,
+            "members": [{"uid": m["line_user_id"],
+                         "name": (m["full_name"] + (f"（{m['nickname']}）" if m["nickname"] else ""))
+                                 or "（未填個人資料）"}
+                        for m in db.list_board_members(club)],
+            "motions": motions}
+
+
+@app.post("/admin/board/members")
+async def admin_board_members(request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無理監事專區權限"}
+    body = await request.json()
+    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    uids = [str(u) for u in body.get("uids", []) if u]
+    return {"status": "ok", "club": club, "members": db.set_board_members(club, uids)}
+
+
+@app.post("/admin/board/motions")
+async def admin_board_add_motion(request: Request):
+    """建立議案並推播給理監事，讓他們直接在 LINE 上表決。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無理監事專區權限"}
+    body = await request.json()
+    title = str(body.get("title", "")).strip()
+    if not title:
+        return {"status": "invalid", "message": "請填寫議案名稱"}
+    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    members = db.list_board_members(club)
+    if not members:
+        return {"status": "no_members", "message": "請先設定理監事名單"}
+    motion = db.add_board_motion(club, title, str(body.get("detail", "")).strip(), admin_uid)
+    try:
+        line_api.multicast_flex([m["line_user_id"] for m in members],
+                                f"🗳️ 議案表決：{title}",
+                                _build_motion_bubble(motion, club))
+    except Exception:
+        logger.exception("motion multicast failed for %s", motion["id"])
+        return {"status": "push_failed", "message": "議案已建立，但 LINE 推播失敗。"}
+    return {"status": "ok", "motion_id": motion["id"], "notified": len(members)}
+
+
+@app.post("/admin/board/motions/{motion_id}/close")
+async def admin_board_close_motion(motion_id: int, request: Request):
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無理監事專區權限"}
+    body = await request.json()
+    status = str(body.get("result", "")).strip()
+    if status not in ("passed", "rejected"):
+        return {"status": "invalid", "message": "結果只能是通過或否決"}
+    motion = db.get_board_motion(motion_id)
+    if motion is None:
+        return {"status": "not_found", "message": "找不到這個議案"}
+    db.close_board_motion(motion_id, status)
+    verdict = "✅ 通過" if status == "passed" else "❌ 否決"
+    tally = _motion_tally(motion_id, motion["club_name"])
+    for m in db.list_board_members(motion["club_name"]):
+        _push_receipt(m["line_user_id"],
+                      f"🗳️ 議案結果：{verdict}\n\n{motion['title']}\n"
+                      f"同意 {len(tally['yes'])}　反對 {len(tally['no'])}　棄權 {len(tally['abstain'])}")
+    return {"status": "ok", "result": status}
 
 
 # ── 報名專區：活動意願調查 ────────────────────────────────────────────────────
