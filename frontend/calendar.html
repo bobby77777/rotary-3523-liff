@@ -425,6 +425,7 @@
             if (field === 'duration') { item.duration = parseInt(e.target.value) || 0; updateTimesAndData(); syncTimeCells(); }
             else item[field] = e.target.value;
           }
+          if (e.target.tagName === 'TEXTAREA') autoGrow(e.target);
         }
       });
       container.addEventListener('click', (e) => {
@@ -529,12 +530,21 @@
             <div class="col-span-2 text-center font-mono text-slate-700 bg-slate-100 py-1.5 rounded text-sm" data-time-for="${item.id}">${item.startTimeStr || '--:--'} - ${item.endTimeStr || '--:--'}</div>
             <div class="col-span-1 flex justify-center"><input type="number" min="0" data-id="${item.id}" data-field="duration" value="${item.duration}" class="w-16 p-1.5 text-center border border-transparent rounded outline-none font-bold text-blue-700 bg-transparent ${inputClass}" ${ro}/></div>
             <div class="col-span-4 flex items-center"><textarea data-id="${item.id}" data-field="content" rows="1" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.content || '')}</textarea></div>
-            <div class="col-span-3"><input type="text" data-id="${item.id}" data-field="speaker" value="${escapeHtml(item.speaker || '')}" placeholder="無" class="w-full p-2 border border-transparent rounded outline-none bg-transparent ${inputClass}" ${ro}/></div>
+            <div class="col-span-3 flex items-center"><textarea data-id="${item.id}" data-field="speaker" rows="1" placeholder="無" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.speaker || '')}</textarea></div>
             <div class="col-span-2 flex items-center justify-between"><div class="flex-1">${pdfHTML}</div>${controlsHTML}</div>
           </div>`;
       });
       container.innerHTML = html;
+      container.querySelectorAll('textarea').forEach(autoGrow);
       lucide.createIcons();
+    }
+
+    // 內容/主題 與 講者/負責人 都是可換行的多行欄位；長字或 Enter 換行後把高度撐開，
+    // 不然 rows="1" + overflow-hidden 會把第二行以後藏起來。
+    function autoGrow(el) {
+      el.style.height = 'auto';
+      const borders = el.offsetHeight - el.clientHeight;   // scrollHeight 不含上下框線
+      el.style.height = (el.scrollHeight + borders) + 'px';
     }
 
     function handleAddItem(afterIndex) {
@@ -615,8 +625,8 @@
         return `<tr style="border-bottom:1px solid #e2e8f0;">
           <td style="padding:14px 8px;text-align:center;font-family:monospace;font-size:13px;">${s} - ${e}</td>
           <td style="padding:14px 8px;text-align:center;font-size:13px;">${item.duration}</td>
-          <td style="padding:14px 8px;font-size:14px;">${escapeHtml(item.content || '')}</td>
-          <td style="padding:14px 8px;font-size:14px;">${escapeHtml(item.speaker || '')}</td>
+          <td style="padding:14px 8px;font-size:14px;white-space:pre-wrap;">${escapeHtml(item.content || '')}</td>
+          <td style="padding:14px 8px;font-size:14px;white-space:pre-wrap;">${escapeHtml(item.speaker || '')}</td>
           <td style="padding:14px 8px;font-size:13px;">${att}</td></tr>`;
       }).join('');
       const endMins = cur, endH = Math.floor(endMins / 60) % 24, endM = endMins % 60;
