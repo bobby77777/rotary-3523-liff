@@ -1140,6 +1140,21 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
 
 # ── LIFF check-in API ─────────────────────────────────────────────────────────
 
+def _push_receipt(uid: str, text: str) -> None:
+    """Confirm a LIFF action in the user's own chat, as the bot.
+
+    The LIFF used to do this with liff.sendMessages, which posts as the *member*
+    — their own words in their own chat, and the bot then answered the
+    unrecognised text with 「請使用下方選單按鈕操作」. Never fatal: the action
+    already succeeded by the time we get here."""
+    if not uid:
+        return
+    try:
+        line_api.push_text(uid, text)
+    except Exception:
+        logger.exception("receipt push failed for %s", uid)
+
+
 def _member_name(uid: str) -> str:
     rows = db.get_personal_info(uid)
     if rows:
@@ -1177,12 +1192,15 @@ async def checkin(request: Request):
         "checked_in": db.get_event_checkin_count(ev["id"]),
         "total": db.get_event_registration_count(ev["id"]),
     }
-    # Notify the attendee in their own chat when check-in succeeds.
+    # Notify the attendee in their own chat when check-in succeeds, and leave the
+    # scanning admin a running tally in theirs.
     if result == "ok":
         try:
             line_api.push_text(attendee_uid, f"✅ 已完成【{ev['title']}】報到，歡迎蒞臨！")
         except Exception:
             logger.exception("check-in push failed for %s", attendee_uid)
+        _push_receipt(admin_uid, f"✅ {name} 已完成【{ev['title']}】報到"
+                                 f"（{resp['checked_in']}/{resp['total']}）")
     return resp
 
 
@@ -1216,6 +1234,8 @@ async def golf_scores_submit(request: Request):
     name = _member_name(uid)
     db.upsert_golf_score(ev["id"], uid, name, scores)
     result = _new_peoria(scores, _event_hidden_holes(ev))
+    _push_receipt(uid, f"⛳️ 成績已送出【{ev['title']}】\n"
+                       f"總桿 {result['gross']}、差點 {result['handicap']}、淨桿 {result['net']}（新貝利亞）")
     return {"status": "ok", "event_title": ev["title"], **result}
 
 
@@ -1279,6 +1299,8 @@ async def golf_draw_holes(request: Request):
 
     holes = sorted(random.sample(range(0, 9), 3) + random.sample(range(9, 18), 3))
     db.save_golf_holes(ev["id"], holes)
+    _push_receipt(uid, f"🎲 新貝利亞抽洞完成【{ev['title']}】\n"
+                       f"隱藏洞：H{'、H'.join(str(h + 1) for h in holes)}")
     return {"status": "ok", "already": False, "event_title": ev["title"], "holes": holes}
 
 
@@ -1366,6 +1388,8 @@ async def dues_pay(request: Request):
         return {"status": "invalid", "message": "請輸入正確的匯款帳號末 5 碼"}
     club = db.get_user_club(uid)
     db.pay_dues(club, month, uid, digits)
+    _push_receipt(uid, f"💰 已回報 {month} 社費繳款" + (f"，末 5 碼：{digits}" if digits else "")
+                  + "\n執秘對帳後狀態會更新為「已收繳費」。")
     return {"status": "ok", "month": month}
 
 
@@ -1665,6 +1689,13 @@ async def payment_report(request: Request):
         return {"status": "no_event", "message": "找不到對應活動"}
 
     res = db.report_payment(uid, ev["id"], digits)
+    if res["was_registered"]:
+        note = f"💰 已回報【{ev['title']}】匯款末 5 碼：{digits}\n秘書處對帳後會通知您。"
+    else:
+        note = f"✅ 報名成功：{ev['title']}\n{ev['date']}（{ev['weekday']}）{ev['time']}　{ev['location']}"
+        note += (f"\n匯款末 5 碼：{digits}（待對帳）" if digits
+                 else "\n完成匯款後請至「個人中心 → 回報匯款」補填末 5 碼。")
+    _push_receipt(uid, note)
     return {
         "status": "ok",
         "event_id": ev["id"],
@@ -1918,6 +1949,9 @@ async def admin_bulk_register(request: Request):
             line_api.push_text(uid, f"📋 執秘已代您報名【{ev['title']}】，如有疑問請洽社務行政。")
         except Exception:
             logger.exception("bulk-register push failed for %s", uid)
+
+    _push_receipt(admin_uid, f"✅ 已完成 {result['new'] + guest_count} 筆【{ev['title']}】報名"
+                             + (f"（另有 {result['dup']} 人先前已報名）" if result["dup"] else ""))
 
     return {
         "status": "ok",

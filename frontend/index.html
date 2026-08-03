@@ -2010,7 +2010,6 @@ async function submitMyDues() {
         if (data.status !== 'ok') { showAlert('回報失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-my-dues');
         addChatMessage('bot', `✅ <b>社費繳款已回報</b><br>末 5 碼：<b class="text-pink-600">${digits}</b><br>執秘對帳後狀態將更新為「已收繳費」。`);
-        sendLineMessage(`💰 已回報 ${data.month} 社費，末5碼：${digits}`);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -2163,7 +2162,6 @@ async function handleQrScanResult(qrValue) {
         const data = await apiFetch('/checkin', { method: 'POST', body: JSON.stringify(body) });
         if (data.status === 'ok') {
             addChatMessage("bot", `✅ <b>${data.name}</b> 報到成功！<br>${data.event_title}<br>目前已報到 <b>${data.checked_in}</b> / ${data.total} 人`);
-            sendLineMessage(`✅ ${data.name} 已完成【${data.event_title}】報到（${data.checked_in}/${data.total}）`);
         } else if (data.status === 'already') {
             addChatMessage("bot", `⚠️ <b>${data.name}</b> 先前已完成報到，未重複計算。`);
         } else if (data.status === 'not_registered') {
@@ -2178,16 +2176,9 @@ async function handleQrScanResult(qrValue) {
     }
 }
 
-// ============================================================
-//  SEND LINE MESSAGE  (only works inside LINE app)
-// ============================================================
-async function sendLineMessage(text) {
-    try {
-        if (liff.isInClient()) {
-            await liff.sendMessages([{ type: 'text', text }]);
-        }
-    } catch (e) { console.warn('sendMessages:', e); }
-}
+// 操作結果的聊天室回條一律由後端用官方帳號推播給操作者本人（見 _push_receipt）。
+// 這裡不再用 liff.sendMessages —— 那是以社友本人的身分發話，機器人聽不懂那句話，
+// 只會回一句「請使用下方選單按鈕操作」。
 
 // ============================================================
 //  REGISTRATION HANDLERS
@@ -2311,7 +2302,6 @@ async function submitExecSecRegistration() {
         if (data.guests)      msg += `<br>附加來賓 <b>${data.guests}</b> 位`;
         if (digits)           msg += `<br>末 5 碼：<b class="text-blue-600">${digits}</b>`;
         addChatMessage("bot", msg);
-        sendLineMessage(`✅ 已為 ${clubName} 完成 ${data.members_new + data.guests} 筆【${data.event_title}】報名`);
     } catch (err) {
         showAlert('連線失敗', err.message + '\n請確認網路後再試。');
     }
@@ -2369,7 +2359,6 @@ async function submitPaymentInfo() {
         closeModal('modal-payment-info');
         document.getElementById('bank-digits').value = '';
         addChatMessage("bot", `✅ <b>匯款資訊已登錄</b><br>${data.event_title}<br>末 5 碼：<b class="text-blue-600">${digits}</b><br>對帳完成後將通知您！`);
-        sendLineMessage(`💰 已回報匯款末5碼：${digits}`);
     } catch (err) {
         showAlert('連線失敗', err.message + '\n請確認網路後再試。');
     }
@@ -2886,7 +2875,6 @@ async function submitGolfScores() {
         if (data.status !== 'ok') { showAlert('送出失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-golf-scorecard');
         showAlert('成績已送出', `總桿 ${data.gross} · 差點 ${data.handicap} · 淨桿 ${data.net}`);
-        sendLineMessage(`⛳️ 我的成績已送出【${data.event_title}】：總桿 ${data.gross}、淨桿 ${data.net}（新貝利亞）`);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -2949,7 +2937,6 @@ async function executeDrawHoles() {
         const holes = data.holes.map(h => h + 1).join('、H');
         const note = data.already ? '（先前已抽出，維持不變）' : '';
         addChatMessage('bot', `🎲 <b>【新貝利亞抽洞完成】</b>${note}<br><br>隱藏洞：<br><b class="text-emerald-600">H${holes}</b><br><br>👉 淨桿排行已依此 6 洞重新結算，主委可於賽事成績看板檢視。`);
-        sendLineMessage(`🎲 新貝利亞抽洞完成，隱藏洞：H${holes}`);
     } catch (e) {
         showAlert('抽洞失敗', e.message);
     }
@@ -2994,9 +2981,9 @@ function openUnpaidDetailsModal() {
     openModal('modal-unpaid-details');
 }
 
+// 註：待繳費看板目前仍是前端範例資料，這顆催繳鈕沒有後端，實際不會送出任何通知。
 function sendReminderPush(clubName) {
     showAlert('催繳通知已送出', `已透過 LINE 官方帳號向「${clubName}」的欠費社友推送繳費提醒。`);
-    sendLineMessage(`🔔 已向 ${clubName} 發送繳費催繳通知。`);
 }
 
 // ============================================================
