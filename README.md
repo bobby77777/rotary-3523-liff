@@ -61,7 +61,7 @@ After that, every push to `main` that touches `frontend/` redeploys automaticall
 FastAPI service backing the LIFF app and the LINE bot.
 
 **Highlights**
-- **LINE bot** — award queries, RAG document Q&A, member profiles, date/weather; keyword shortcuts `社刊` and `行事曆` reply with editor links.
+- **LINE bot** — award queries, RAG document Q&A, member profiles, date/weather; the `行事曆` keyword replies with the calendar/agenda editor link. Everything else typed as text is answered with 「請使用下方選單按鈕操作」 — entry points live in the rich menu and the LIFF, not in keywords.
 - **Events / 行事曆** — editable in Supabase (`events` table, scope + club + agenda JSON). CRUD via `/admin/events` (admin-gated); read via `/events`.
 - **社刊** — published per club as content JSON (`/bulletin/content`); members load and print their own vector PDF.
 - **議程 PDF** — `/events/{id}/pdf` renders the saved agenda into a real **vector** PDF on the fly (`agenda_pdf.py`, fpdf2 + an embedded CJK font): selectable, searchable text and working attachment links, instead of the old browser screenshot. Needs one font covering Traditional Chinese — auto-detected from `backend/assets/fonts/*.ttf` or the usual system paths, or set `AGENDA_FONT_PATH`. Without one the endpoint falls back to whatever was stored/uploaded before.
