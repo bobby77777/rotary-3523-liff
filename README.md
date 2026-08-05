@@ -40,7 +40,7 @@ Static HTML opened as a LINE LIFF app; no build step.
 
 | Page | What it does |
 |------|--------------|
-| `index.html` | Main app — event calendar & registration, payment reporting, member profile, and an admin area (labelled **社長** in club scope, **主委** in district scope). The admin tiles change with the active event's type; see [Admin tools](#admin-tools-後台) below. |
+| `index.html` | Main app. Four full pages behind a bottom tab bar — **首頁** (next event + 近期活動), **個人** (check-in, 報名紀錄, 繳費, 得獎), **刊物**, and an admin page labelled **社長** in club scope / **主委** in district scope (hidden for plain members). Rows inside 現場作業 follow the active event's type; see [Admin tools](#admin-tools-後台). Short confirmations appear as toasts, receipts as dialogs. |
 | `bulletin.html` | Weekly bulletin (社刊), **stored per club**. 主委 edits and **發布社刊** (one-click publish, no dialog); anyone can **下載 PDF** (real vector PDF via the browser's print engine). |
 | `calendar.html` | Annual event table (district/club scope) + per-event **agenda (議程)** editor with auto-computed times, quick-fill templates, PDF-link attachments, and LINE preview. **下載 PDF** prints the agenda being edited (vector, via the browser); the copy members see is rendered by the backend from the saved agenda. |
 
@@ -168,3 +168,12 @@ python ingest.py               # poll Drive every 60s
 - **Anything shown as verified must be verified.** No simulated GPS, no
   hardcoded venue coordinates: if the check can't run, it fails or is skipped
   explicitly.
+- **Results belong on a page, not in a popup stream.** `index.html` is four
+  full pages plus modals; anything a member has to read or scroll (event list,
+  registrant list, award lookup, matchmaking hits) renders into a page section.
+  Only two transient channels exist: `showToast` for "done" messages (text-only,
+  auto-dismissing) and `showAlert` for receipts carrying numbers or names.
+- **Deep links are a public contract.** `backend/app/main.py` bakes
+  `?tab=…&action=…` into Flex messages already delivered to members, so the four
+  page ids and every `action` in `handleDeepLink` must keep working. The
+  scratchpad Playwright suite walks all 18 of them.
