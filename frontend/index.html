@@ -1416,17 +1416,7 @@ function renderEbooksPage() {
                         : '<span class="text-[11px] bg-slate-200 text-slate-500 font-bold px-2 py-1 rounded shrink-0">尚未上線</span>'}
                 </button>`;
             }).join('')}
-        </div>
-
-        <p class="section-title">編輯與工具</p>
-        <div class="card divide-y divide-slate-100 overflow-hidden">
-            <button onclick="openCalendarPage()" class="row-item">
-                <span class="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calendar-days"></i></span>
-                <span class="flex-1"><span class="block text-[15px] font-bold text-slate-800">行事曆與議程</span>
-                    <span class="block text-[12px] text-slate-400">查看年度活動；幹部可編輯議程</span></span>
-                <i class="fa-solid fa-arrow-up-right-from-square text-slate-300 text-xs"></i>
-            </button>
-        </div>`;
+        </div>`;   // 刊物頁只放刊物；行事曆／議程的入口在首頁與社長頁
 }
 
 // 個人頁：以前是三種互斥的磚版型（高球／年會／一般），現在是同一頁裡的條件式區塊。
