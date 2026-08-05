@@ -1291,7 +1291,8 @@ async def golf_my_score(request: Request, event: int | None = None):
         return {"status": "ok", "scores": None, "pars": GOLF_PARS}
     row = db.get_golf_score(ev["id"], uid)
     scores = row["scores"] if row and isinstance(row.get("scores"), list) else None
-    return {"status": "ok", "event_id": ev["id"], "scores": scores, "pars": GOLF_PARS}
+    return {"status": "ok", "event_id": ev["id"], "event_title": ev["title"],
+            "scores": scores, "pars": GOLF_PARS}
 
 
 @app.get("/golf/leaderboard")
@@ -1300,7 +1301,7 @@ async def golf_leaderboard(request: Request, event: int | None = None):
     uid = request.headers.get("X-Line-UserId", "")
     ev = _lookup_event(uid, event) if event else _current_event(uid)
     if ev is None:
-        return {"status": "no_event", "players": []}
+        return {"status": "no_event", "message": "找不到對應賽事", "players": []}
     rows = db.get_golf_scores(ev["id"])
     hidden = _event_hidden_holes(ev)
     players = []

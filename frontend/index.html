@@ -666,7 +666,7 @@
         <div class="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 px-6 py-4 text-white flex justify-between items-center shrink-0">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-trophy text-yellow-300"></i></div>
-                <div><h3 class="font-black text-sm">3523地區總監盃高爾夫球賽</h3><p class="text-[10px] text-emerald-200">即時電子計分系統</p></div>
+                <div><h3 class="font-black text-sm">即時電子計分卡</h3><p class="text-[10px] text-emerald-200" id="golf-scorecard-event">高爾夫球賽</p></div>
             </div>
             <button onclick="closeModal('modal-golf-scorecard')" class="text-emerald-100 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
         </div>
@@ -685,7 +685,7 @@
         <div class="bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-900 px-6 py-5 text-white flex justify-between items-center shrink-0">
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 bg-yellow-400 text-emerald-900 rounded-full flex items-center justify-center font-black"><i class="fa-solid fa-trophy"></i></div>
-                <div><h3 class="font-extrabold text-sm">即時全體成績看板</h3><p class="text-[10px] text-emerald-200">總監盃高爾夫球賽</p></div>
+                <div><h3 class="font-extrabold text-sm">即時全體成績看板</h3><p class="text-[10px] text-emerald-200" id="golf-leaderboard-event">高爾夫球賽</p></div>
             </div>
             <button onclick="closeModal('modal-golf-leaderboard')" class="text-white hover:text-emerald-200"><i class="fa-solid fa-xmark text-xl"></i></button>
         </div>
@@ -3601,16 +3601,30 @@ function renderClubAttendance(data) {
 let golfScoreEventId = null;
 let myGolfScores = golfPars.slice();  // start at par
 
+// 計分、排行榜、抽洞、分組全部要指向同一場賽事：深連結帶的 event 優先，
+// 否則用畫面上正在看的活動。都沒有才讓後端自己猜（會猜成「最近的一場」，
+// 常常不是高球賽——排行榜曾因此顯示「尚無選手送出成績」）。
+function golfEventId() {
+    return golfScoreEventId || currentActiveEvent?.id || null;
+}
+
+function setGolfModalEvent(id, title) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = title || currentActiveEvent?.title || '高爾夫球賽';
+}
+
 async function openGolfScorecard(e) {
     e && e.stopPropagation();
     openModal('modal-golf-scorecard');
+    setGolfModalEvent('golf-scorecard-event');
     document.getElementById('golf-table-container').innerHTML =
         `<p class="text-xs text-gray-400 py-8 text-center">載入中…</p>`;
     try {
-        const q = golfScoreEventId ? ('?event=' + golfScoreEventId) : '';
-        const data = await apiFetch('/golf/my_score' + q);
+        const evId = golfEventId();
+        const data = await apiFetch('/golf/my_score' + (evId ? ('?event=' + evId) : ''));
         myGolfScores = Array.isArray(data.scores) && data.scores.length === 18
             ? data.scores.slice() : golfPars.slice();
+        setGolfModalEvent('golf-scorecard-event', data.event_title);
     } catch (err) {
         myGolfScores = golfPars.slice();
     }
@@ -3654,11 +3668,11 @@ async function submitGolfScores() {
     try {
         const data = await apiFetch('/golf/scores', {
             method: 'POST',
-            body: JSON.stringify({ event_id: golfScoreEventId || currentActiveEvent?.id, scores: myGolfScores })
+            body: JSON.stringify({ event_id: golfEventId(), scores: myGolfScores })
         });
         if (data.status !== 'ok') { showAlert('送出失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-golf-scorecard');
-        showAlert('成績已送出', `總桿 ${data.gross} · 差點 ${data.handicap} · 淨桿 ${data.net}`);
+        showAlert('成績已送出', `${data.event_title || ''}\n總桿 ${data.gross} · 差點 ${data.handicap} · 淨桿 ${data.net}`.trim());
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -3669,9 +3683,15 @@ async function openGolfLeaderboard(e) {
     const tbody = document.getElementById('golf-leaderboard-body');
     tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-400 text-xs">載入中…</td></tr>`;
     openModal('modal-golf-leaderboard');
+    setGolfModalEvent('golf-leaderboard-event');
     try {
-        const q = golfScoreEventId ? ('?event=' + golfScoreEventId) : '';
-        const data = await apiFetch('/golf/leaderboard' + q);
+        const evId = golfEventId();
+        const data = await apiFetch('/golf/leaderboard' + (evId ? ('?event=' + evId) : ''));
+        setGolfModalEvent('golf-leaderboard-event', data.event_title);
+        if (data.status !== 'ok') {
+            tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-400 text-xs">${_escHtml(data.message || '找不到對應賽事。')}</td></tr>`;
+            return;
+        }
         renderGolfLeaderboard(data.players || []);
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-rose-500 text-xs">載入失敗：${err.message}</td></tr>`;
@@ -3709,7 +3729,7 @@ async function openSwapGroupModal() {
 
 async function reloadGolfGroups() {
     const board = document.getElementById('swap-groups-board');
-    const evId = golfGroupState.eventId || golfScoreEventId || currentActiveEvent?.id;
+    const evId = golfGroupState.eventId || golfEventId();
     let data;
     try {
         data = await apiFetch('/golf/groups' + (evId ? ('?event=' + evId) : ''));
@@ -3743,7 +3763,7 @@ async function autoGroupGolf() {
     try {
         const data = await apiFetch('/golf/groups/auto', {
             method: 'POST',
-            body: JSON.stringify({ event_id: golfGroupState.eventId || golfScoreEventId || currentActiveEvent?.id })
+            body: JSON.stringify({ event_id: golfGroupState.eventId || golfEventId() })
         });
         if (data.status !== 'ok') { showAlert('分組失敗', data.message || '請稍後再試。'); return; }
         await reloadGolfGroups();
@@ -3778,7 +3798,7 @@ function openDrawHolesModal() {
 }
 
 async function executeDrawHoles() {
-    const evId = currentActiveEvent?.id;
+    const evId = golfEventId();
     try {
         const data = await apiFetch('/golf/draw_holes', {
             method: 'POST', body: JSON.stringify({ event_id: evId }),
