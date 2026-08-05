@@ -1779,7 +1779,11 @@ async def attendance_me(request: Request):
             "event_id": r["event_id"],
             "title": ev["title"] if ev else f"活動 #{r['event_id']}",
             "date": ev["date"] if ev else "",
+            "location": ev["location"] if ev else "",
+            "time": ev["time"] if ev else "",
+            "fee": ev["fee"] if ev else "",
             "checked_in": bool(r["checked_in"]),
+            "payment_status": r["payment_status"],
         })
     attended = sum(1 for e in events if e["checked_in"])
     return {

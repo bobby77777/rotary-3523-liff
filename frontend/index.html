@@ -1041,7 +1041,9 @@ let currentActiveEvent = null;
 let isGolfCheckedIn = false;
 let isNewNewPeoriaDrawn = false;   // 本次賽事是否已抽出隱藏洞（抽洞結果存在後端）
 let drawnHiddenHoles = [];
-let myRegisteredEvents = [];
+// 報名紀錄以後端為準：只靠本次操作累積的話，重新整理就會全部不見。
+let myRegistrations = [];      // [{event_id, title, date, location, time, fee, checked_in, payment_status}]
+let myRegisteredEvents = [];   // 只有 id，給首頁判斷「已完成報名」用
 
 // ============================================================
 //  LIFF INIT
@@ -1071,7 +1073,10 @@ async function initLiff() {
             console.warn('role fetch failed:', e.message);
         }
 
-        await loadEvents(systemScope);   // fetch events for the active scope
+        await Promise.all([
+            loadEvents(systemScope),     // fetch events for the active scope
+            loadMyRegistrations(),       // 報名紀錄要從後端還原，不能只靠本次操作
+        ]);
         hideLiffLoadingScreen();
         initApp();
     } catch (err) {
@@ -1179,6 +1184,20 @@ async function applyScopeChrome() {
 // ============================================================
 // Backend is the single source of truth for events; cache per scope.
 let eventsCache = { district: null, club: null };
+
+// 我的報名紀錄一律向後端要（/attendance/me 已含每筆報名與報到狀態），
+// 不分視角，所以切換地區／社內也看得到全部。
+async function loadMyRegistrations() {
+    try {
+        const d = await apiFetch('/attendance/me');
+        if (d.status === 'ok' && Array.isArray(d.events)) {
+            myRegistrations = d.events;
+            myRegisteredEvents = d.events.map(e => e.event_id);
+        }
+    } catch (e) {
+        console.warn('報名紀錄載入失敗:', e.message);
+    }
+}
 
 async function loadEvents(scope) {
     try {
@@ -2907,7 +2926,7 @@ async function confirmRegistration() {
         });
         if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-self-register');
-        if (currentActiveEvent && !myRegisteredEvents.includes(currentActiveEvent.id)) myRegisteredEvents.push(currentActiveEvent.id);
+        await loadMyRegistrations();     // 以後端為準，重新整理後也還在
         let msg = `已登記「${data.event_title}」。`;
         msg += digits ? `\n轉出末 5 碼：${digits}（待秘書處對帳）`
                       : '\n\n尚未提供帳號末 5 碼，完成匯款後請至「個人 → 回報匯款」補填。';
@@ -3077,6 +3096,8 @@ async function submitPaymentInfo() {
         if (data.status !== 'ok') { showAlert('回報失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-payment-info');
         document.getElementById('bank-digits').value = '';
+        await loadMyRegistrations();
+        renderPage(activeTab);
         showAlert('匯款資訊已登錄', `${data.event_title}\n末 5 碼：${digits}\n\n對帳完成後會通知您。`);
     } catch (err) {
         showAlert('連線失敗', err.message + '\n請確認網路後再試。');
@@ -3102,16 +3123,16 @@ function clickMenuItem(itemName, key) {
     }
 }
 
-// 我的報名紀錄（個人頁）
+// 我的報名紀錄（個人頁）。資料來自後端的 myRegistrations，若該活動剛好在快取裡
+// 就補上地點／時間／費用；不在快取（例如另一個視角的活動）也照樣列得出來。
 function renderMyRegistrations() {
     const box = document.getElementById('profile-registrations-list');
     if (!box) return;
     const all = getAllCombinedEvents();
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const mine = myRegisteredEvents
-        .map(id => all.find(e => e.id === id))
-        .filter(Boolean)
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const mine = myRegistrations
+        .map(r => ({ ...(all.find(e => e.id === r.event_id) || {}), ...r }))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));   // 最近的排前面
 
     document.getElementById('profile-registrations-count').textContent = `${mine.length} 筆`;
     if (!mine.length) {
@@ -3119,21 +3140,29 @@ function renderMyRegistrations() {
         return;
     }
     box.innerHTML = mine.map(ev => {
-        const upcoming = new Date(ev.date) >= today;
+        const upcoming = ev.date && new Date(ev.date) >= today;
+        const status = ev.checked_in
+            ? '<span class="text-[12px] font-bold text-emerald-700"><i class="fa-solid fa-user-check mr-1"></i>已報到</span>'
+            : ev.payment_status === 'confirmed'
+                ? '<span class="text-[12px] font-bold text-teal-700"><i class="fa-solid fa-circle-check mr-1"></i>已繳費</span>'
+                : ev.payment_status === 'uploaded'
+                    ? '<span class="text-[12px] font-bold text-amber-600"><i class="fa-regular fa-clock mr-1"></i>待秘書處對帳</span>'
+                    : '<span class="text-[12px] font-bold text-slate-500"><i class="fa-solid fa-circle-check mr-1"></i>報名成功 · 尚未繳費</span>';
         return `<div class="card p-3">
             <div class="flex justify-between items-center gap-2">
                 <span class="px-2 py-0.5 rounded text-white text-[12px] font-bold ${upcoming ? 'bg-emerald-500' : 'bg-slate-400'}">${upcoming ? '即將到來' : '已結束'}</span>
-                <span class="text-slate-500 font-bold text-[13px]">${_escHtml(ev.displayDate || ev.date)}</span>
+                <span class="text-slate-500 font-bold text-[13px]">${_escHtml(ev.displayDate || ev.date || '')}</span>
             </div>
             <h3 class="font-bold text-slate-900 text-[15px] leading-snug mt-1.5">${_escHtml(ev.title)}</h3>
             <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-slate-500 text-[13px] mt-1">
-                <span><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${_escHtml(ev.location || '—')}</span>
+                ${ev.location ? `<span><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${_escHtml(ev.location)}</span>` : ''}
                 ${ev.time ? `<span><i class="fa-regular fa-clock text-blue-500 mr-1"></i>${_escHtml(ev.time)}</span>` : ''}
                 ${ev.fee ? `<span><i class="fa-solid fa-tag text-amber-500 mr-1"></i>${_escHtml(ev.fee)}</span>` : ''}
             </div>
-            <div class="flex items-center justify-between pt-2 mt-2 border-t border-slate-100">
-                <span class="text-[12px] font-bold text-emerald-700"><i class="fa-solid fa-circle-check mr-1"></i>報名成功</span>
-                <button onclick="selectEvent(${ev.id})" class="min-h-[44px] px-4 rounded-lg bg-blue-50 text-blue-700 font-bold text-[13px]">查看</button>
+            <div class="flex items-center justify-between gap-2 pt-2 mt-2 border-t border-slate-100">
+                ${status}
+                ${all.some(e => e.id === ev.event_id)
+                    ? `<button onclick="selectEvent(${ev.event_id})" class="min-h-[44px] px-4 rounded-lg bg-blue-50 text-blue-700 font-bold text-[13px] shrink-0">查看</button>` : ''}
             </div>
         </div>`;
     }).join('');
