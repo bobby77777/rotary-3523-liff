@@ -1068,9 +1068,19 @@
 <div id="modal-alert" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-2xl max-w-xs w-full p-6 text-center space-y-4 shadow-2xl">
         <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center text-xl mx-auto"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <div class="space-y-1"><h4 class="font-bold text-gray-800" id="alert-title">系統提示</h4><p class="text-xs text-gray-500" id="alert-message"></p></div>
-        <button onclick="closeModal('modal-alert')" class="w-full bg-blue-900 text-white font-bold py-2.5 rounded-xl text-xs btn-3d btn-3d-dark mb-1">確定</button>
+        <div class="space-y-1"><h4 class="font-bold text-gray-800" id="alert-title">系統提示</h4><p class="text-[13px] text-gray-600 whitespace-pre-line text-left" id="alert-message"></p></div>
+        <button onclick="closeModal('modal-alert')" class="w-full bg-blue-900 text-white font-bold py-2.5 rounded-xl text-sm">確定</button>
     </div>
+</div>
+
+<!-- 浮現提示：短訊息用這個，2.6 秒自動消失。z 軸要在 alert(100)、gps(110) 之上、loading(200) 之下。 -->
+<div id="toast-container" class="fixed inset-x-0 z-[120] flex flex-col items-center gap-2 px-4 pointer-events-none"
+     style="bottom:calc(env(safe-area-inset-bottom) + 84px)"></div>
+
+<!-- 全屏等待（定位驗證這類「不能中途做別的事」的步驟） -->
+<div id="blocking-loader" class="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm hidden flex-col items-center justify-center gap-3">
+    <i class="fa-solid fa-circle-notch fa-spin text-white text-3xl"></i>
+    <p id="blocking-loader-text" class="text-white text-sm font-bold"></p>
 </div>
 
 <script>
@@ -3712,8 +3722,17 @@ async function sendReminderPush(btn, clubName) {
 // ============================================================
 //  UTILS
 // ============================================================
+// 遷移期的雙寫：仍寫進聊天區（尚未搬走的流程靠它），同時把訊息導到新的提示管道。
+// S7 會把所有呼叫點改掉並刪除本函式與聊天區。
 function addChatMessage(sender, html) {
+    // 遷移期一律走 toast：這裡不能開 alert，否則每則訊息都會蓋出一層要按確定的視窗
+    // （連歡迎詞都會擋住操作）。哪些該升級成 alert 由 S7 逐一決定。
+    if (sender !== 'user') {
+        const text = stripHtml(html);
+        if (text) showToast(text, /^[⚠❌]/.test(text) ? 'warn' : 'info', 3200);
+    }
     const area = document.getElementById('chat-messages');
+    if (!area) return;                     // 聊天區被移除後不能炸掉呼叫端
     const div = document.createElement('div');
     if (sender === 'user') {
         div.className = "flex items-start gap-2.5 justify-end";
@@ -3729,12 +3748,71 @@ function addChatMessage(sender, html) {
     area.scrollTop = area.scrollHeight;
 }
 
-function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
-function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+function openModal(id) {
+    document.getElementById(id)?.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+}
+function closeModal(id) {
+    document.getElementById(id)?.classList.add('hidden');
+    // 還有其他 modal 開著就別解鎖背景捲動（很多流程是一層疊一層開的）。
+    if (!document.querySelector('[id^="modal-"]:not(.hidden)')) {
+        document.body.classList.remove('overflow-hidden');
+    }
+}
 function showAlert(title, msg) {
     document.getElementById('alert-title').textContent = title;
     document.getElementById('alert-message').textContent = msg;
     openModal('modal-alert');
+}
+
+// ---- 浮現提示 / 全屏等待 ----------------------------------------------------
+// 一律 textContent：這些訊息常常夾著使用者或後端來的字串，不該當成 HTML 解析。
+const TOAST_STYLE = {
+    info:    ['fa-circle-info', 'text-blue-300'],
+    success: ['fa-circle-check', 'text-emerald-300'],
+    warn:    ['fa-triangle-exclamation', 'text-amber-300'],
+};
+
+function showToast(msg, type = 'info', ms = 2600) {
+    const box = document.getElementById('toast-container');
+    if (!box) return;
+    while (box.children.length >= 3) box.firstElementChild.remove();
+    const [icon, color] = TOAST_STYLE[type] || TOAST_STYLE.info;
+    const el = document.createElement('div');
+    el.className = 'bg-slate-900/95 text-white rounded-xl shadow-lg px-4 py-2.5 text-[13px] font-bold '
+                 + 'flex items-center gap-2 max-w-sm transition-opacity duration-200 opacity-0';
+    const i = document.createElement('i');
+    i.className = `fa-solid ${icon} ${color}`;
+    const span = document.createElement('span');
+    span.textContent = msg;
+    el.append(i, span);
+    box.appendChild(el);
+    requestAnimationFrame(() => el.classList.remove('opacity-0'));
+    setTimeout(() => {
+        el.classList.add('opacity-0');
+        setTimeout(() => el.remove(), 220);
+    }, ms);
+}
+
+function showBlockingLoader(msg) {
+    const el = document.getElementById('blocking-loader');
+    if (!el) return;
+    document.getElementById('blocking-loader-text').textContent = msg || '處理中…';
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+}
+
+function hideBlockingLoader() {
+    const el = document.getElementById('blocking-loader');
+    if (!el) return;
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+}
+
+function stripHtml(html) {
+    const d = document.createElement('div');
+    d.innerHTML = String(html ?? '').replace(/<br\s*\/?>/gi, '\n');
+    return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 // ============================================================
