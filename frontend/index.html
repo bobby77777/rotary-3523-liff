@@ -1026,7 +1026,6 @@
 const LIFF_ID = '2010535285-kh8rJmpS';
 // 必須與 bot 後端 (app) 的 APP_BASE_URL 相同。保留網址 → run.py 的 port 80。
 const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
-const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
 // ============================================================
 
 const golfPars = [4,3,5,4,4,3,4,5,4,4,4,3,5,4,4,3,5,4];
@@ -1284,20 +1283,6 @@ function renderHomePage() {
         <div id="home-events">
             <p class="section-title">近期活動</p>
             <div id="home-events-list" class="space-y-2"></div>
-        </div>
-
-        <div>
-            <p class="section-title">更多</p>
-            <div class="card divide-y divide-slate-100 overflow-hidden">
-                <button onclick="openCalendarPage()" class="row-item">
-                    <span class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-calendar-days"></i></span>
-                    <span class="flex-1 text-[14px] font-bold text-slate-700">年度行事曆</span>
-                    <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i></button>
-                <button onclick="clickMenuItem('官網首頁', 'home-website')" class="row-item">
-                    <span class="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-globe"></i></span>
-                    <span class="flex-1 text-[14px] font-bold text-slate-700">地區官網</span>
-                    <i class="fa-solid fa-arrow-up-right-from-square text-slate-300 text-xs"></i></button>
-            </div>
         </div>`;
 
     renderHomeEvents();
@@ -1337,11 +1322,6 @@ function renderHomeEvents() {
     }).join('');
 }
 
-function openCalendarPage() {
-    const url = new URL('calendar.html', location.href).href;
-    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) liff.openWindow({ url, external: false });
-    else window.open(url, '_blank');
-}
 
 // ============================================================
 //  PAGE ROUTER
@@ -3097,22 +3077,6 @@ async function submitPaymentInfo() {
 // ============================================================
 //  CALENDAR
 // ============================================================
-// 舊版把清單塞進聊天泡泡；現在清單就在頁面上，這裡只負責帶路。
-function clickMenuItem(itemName, key) {
-    if (key === 'home-calendar') {
-        switchTab('home');
-        scrollToSection('home-events');
-    } else if (key === 'profile-history') {
-        switchTab('profile');
-        scrollToSection('profile-registrations');
-    } else if (key === 'home-website') {
-        if (liff.isInClient()) liff.openWindow({ url: DISTRICT_WEBSITE, external: true });
-        else window.open(DISTRICT_WEBSITE, '_blank');
-    } else if (key === 'admin-contact') {
-        showAlert('秘書處聯絡資訊', '信箱：office@rotary3523.org.tw\n\n系統問題請附上活動名稱與畫面截圖。');
-    }
-}
-
 // 我的報名紀錄（個人頁）。資料來自後端的 myRegistrations，若該活動剛好在快取裡
 // 就補上地點／時間／費用；不在快取（例如另一個視角的活動）也照樣列得出來。
 function renderMyRegistrations() {
