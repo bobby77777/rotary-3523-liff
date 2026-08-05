@@ -10,10 +10,24 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; background: #f3f4f6; }
+        body { font-family: 'Noto Sans TC', sans-serif; background: #f8fafc; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        /* LINE 內建瀏覽器的網址列會吃掉 100vh，dvh 為主、vh 墊底 */
+        .app-shell { height: 100vh; height: 100dvh; }
+        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                   gap: 2px; padding: 8px 0 10px; min-height: 56px; font-size: 12px; font-weight: 700;
+                   color: #64748b; border-top: 3px solid transparent; transition: color .15s, border-color .15s; }
+        .nav-btn.nav-active { color: #1e3a8a; border-top-color: #facc15; }
+        .scope-seg { background: rgba(255,255,255,.12); color: #bfdbfe; }
+        .scope-seg.scope-active { background: #fff; color: #1e3a8a; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem;
+                box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+        .row-item { display: flex; align-items: center; gap: .75rem; width: 100%; text-align: left;
+                    padding: .75rem 1rem; min-height: 56px; transition: background-color .15s; }
+        .row-item:active { background: #f1f5f9; }
+        .section-title { font-size: 13px; font-weight: 700; color: #64748b; padding: 0 .25rem .25rem; }
         .btn-3d { transition: transform 0.1s cubic-bezier(0.4,0,0.2,1), box-shadow 0.1s cubic-bezier(0.4,0,0.2,1); }
         .btn-3d:active { transform: translateY(4px) !important; }
         .btn-3d-primary { box-shadow: 0 4px 0 #1e3a8a; }
@@ -32,12 +46,11 @@
         .btn-3d-indigo:active { box-shadow: 0 0px 0 #312e81; }
         .btn-3d-teal { box-shadow: 0 4px 0 #134e4a; }
         .btn-3d-teal:active { box-shadow: 0 0px 0 #134e4a; }
-        .active-tab { color: #1e3a8a; background: white; border-bottom: 4px solid #ffd700; }
         .truncate-2-lines { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         #loading-screen { transition: opacity 0.4s ease; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col bg-[#7494c0]">
+<body class="bg-slate-50">
 
 <!-- ===================== LOADING SCREEN ===================== -->
 <div id="loading-screen" class="fixed inset-0 bg-blue-950 z-[200] flex flex-col items-center justify-center gap-4">
@@ -55,140 +68,64 @@
 </div>
 
 <!-- ===================== MAIN APP ===================== -->
-<div id="app" class="hidden flex flex-col h-screen overflow-hidden">
+<div id="app" class="app-shell hidden flex flex-col">
 
-    <!-- LINE-style Header -->
-    <div class="bg-[#243447] text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 sticky top-0 z-20">
-        <div class="flex items-center gap-3">
-            <div class="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center border border-white/20 overflow-hidden shadow-inner">
-                <img src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=100&auto=format&fit=crop&q=60" alt="Rotary" class="w-full h-full object-cover">
+    <!-- Header：社名 / 目前視角切換 / 個人頭像 -->
+    <header class="bg-blue-900 text-white shrink-0 z-20 shadow-md">
+        <div class="px-4 pt-3 pb-2 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <h1 class="font-bold text-base truncate flex items-center gap-1.5" id="header-title">
+                    國際扶輪 3523 地區 <i class="fa-solid fa-circle-check text-yellow-400 text-xs"></i>
+                </h1>
+                <p class="text-[12px] text-blue-200 truncate" id="header-subtitle">全年度活動系統</p>
             </div>
-            <div>
-                <div class="font-bold text-sm flex items-center gap-1" id="header-title">
-                    國際扶輪3523地區 <i class="fa-solid fa-circle-check text-blue-400 text-xs"></i>
-                </div>
-                <span class="text-[10px] text-gray-400" id="header-subtitle">官方帳號 · 全年度活動系統</span>
-            </div>
-        </div>
-        <!-- User avatar pulled from LINE profile -->
-        <div class="flex items-center gap-2">
-            <img id="user-avatar" src="" alt="" class="hidden w-8 h-8 rounded-full border border-white/30 shadow-sm object-cover">
-            <div id="user-avatar-fallback" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                <i class="fa-solid fa-user text-white/60 text-sm"></i>
-            </div>
-        </div>
-    </div>
-
-    <!-- Scope Toggle Bar -->
-    <div class="bg-gradient-to-r from-gray-800 to-gray-900 text-white flex justify-between items-center px-4 py-2 border-b border-gray-700 cursor-pointer shrink-0 sticky top-[60px] z-10" onclick="toggleSystemScope()">
-        <div class="flex items-center gap-2">
-            <div class="w-6 h-6 rounded-full bg-blue-600 border border-white/20 flex items-center justify-center shadow-inner" id="scope-icon-bg">
-                <i class="fa-solid fa-globe text-white text-xs" id="scope-icon"></i>
-            </div>
-            <div class="flex flex-col">
-                <span class="text-[10px] text-gray-400 font-bold -mb-0.5">目前作業視角</span>
-                <span class="text-xs font-bold tracking-wide text-yellow-400" id="ui-current-scope">🌐 3523 地區總部</span>
-            </div>
-        </div>
-        <div class="bg-gray-700/80 border border-gray-500 px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
-            <i class="fa-solid fa-retweet text-blue-300"></i> 切換
-        </div>
-    </div>
-
-    <!-- Chat Messages -->
-    <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar pb-4 bg-[#7494c0]">
-        <!-- Messages appended here by JS -->
-    </div>
-
-    <!-- ===================== BOTTOM RICH MENU ===================== -->
-    <div class="bg-white shadow-[0_-6px_20px_rgba(0,0,0,0.15)] shrink-0 rounded-t-3xl overflow-hidden safe-bottom">
-
-        <!-- Tab Headers -->
-        <!-- 管理分頁只有管理團隊看得到（setRole 會切換 grid-cols-3/4），一般社友不必看鎖頭。 -->
-        <div id="rm-tab-headers" class="grid grid-cols-3 bg-gray-50 text-center text-[13px] font-bold border-b border-gray-200">
-            <button onclick="switchTab('home')" id="tab-home" class="py-3.5 text-gray-500 relative transition-all active-tab">
-                <i class="fa-solid fa-house-chimney mr-1 text-blue-600"></i>首頁
-            </button>
-            <button onclick="switchTab('profile')" id="tab-profile" class="py-3.5 text-gray-500 relative transition-all">
-                <i class="fa-solid fa-id-card mr-1"></i>個人
-            </button>
-            <button onclick="switchTab('ebooks')" id="tab-ebooks" class="py-3.5 text-gray-500 relative transition-all">
-                <i class="fa-solid fa-book-open mr-1"></i>刊物
-            </button>
-            <button onclick="switchTab('admin')" id="tab-admin" class="hidden py-3.5 text-gray-500 relative items-center justify-center gap-1 transition-all">
-                <i class="fa-solid fa-star text-yellow-500"></i><span id="tab-admin-label">主委</span>
+            <button onclick="switchTab('profile')" class="shrink-0 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center overflow-hidden border border-white/25" aria-label="個人">
+                <img id="user-avatar" src="" alt="" class="hidden w-full h-full object-cover">
+                <span id="user-avatar-fallback" class="text-white/70"><i class="fa-solid fa-user"></i></span>
             </button>
         </div>
-
-        <!-- Tab Content -->
-        <div id="rm-tab-content" class="bg-slate-200/80 h-60 relative p-2">
-
-            <!-- TAB 1: HOME -->
-            <div id="menu-content-home" class="grid grid-cols-3 grid-rows-2 h-full gap-2">
-                <div class="col-span-2 row-span-2 flex flex-col bg-transparent rounded-2xl overflow-hidden">
-                    <div onclick="triggerMainBannerClick()" id="banner-bg-gradient" class="flex-1 bg-gradient-to-tr from-blue-950 via-blue-900 to-indigo-800 p-2.5 flex flex-col justify-between cursor-pointer text-white relative btn-3d btn-3d-dark mb-1 rounded-t-xl">
-                        <div class="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-xl -mr-6 -mt-6"></div>
-                        <div class="z-10 flex-1 flex flex-col justify-between">
-                            <div>
-                                <div class="flex items-center justify-between">
-                                    <span id="banner-tag" class="text-[12px] bg-yellow-500 text-blue-950 font-extrabold px-2 py-0.5 rounded shadow-sm tracking-wider uppercase">--</span>
-                                    <span id="banner-date" class="text-[12px] text-yellow-300 font-semibold bg-black/20 px-2 py-0.5 rounded-full">--</span>
-                                </div>
-                                <h4 id="banner-title" class="font-black text-base mt-1 tracking-wide leading-snug drop-shadow-md truncate-2-lines min-h-[3rem] overflow-hidden">載入中...</h4>
-                                <p id="banner-loc-text" class="text-[12px] text-gray-300 mt-0.5 truncate flex items-center"><i class="fa-solid fa-location-dot text-rose-400 mr-1.5"></i>--</p>
-                            </div>
-                            <div class="flex items-center justify-between mt-auto pt-1">
-                                <span class="text-yellow-400 text-[15px] font-black tracking-widest drop-shadow-md flex items-center gap-1.5 bg-black/30 px-2.5 py-1 rounded-md border border-yellow-400/30">
-                                    <i class="fa-solid fa-pen-to-square text-sm"></i>我要報名
-                                </span>
-                                <i class="fa-solid fa-circle-arrow-right text-yellow-400 text-xl animate-pulse drop-shadow-md"></i>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- 執秘專用，一般社友不顯示（setRole 控制） -->
-                    <div id="home-admin-actions" class="hidden grid grid-cols-2 gap-1.5 shrink-0 pt-0.5">
-                        <button onclick="clickHelpRegister(event)" class="bg-white text-slate-700 min-h-[44px] py-2.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 btn-3d btn-3d-white mb-1">
-                            <i class="fa-solid fa-user-plus text-blue-500 text-sm"></i>執秘報名
-                        </button>
-                        <button onclick="clickCheckRegistration(event)" class="bg-white text-slate-700 min-h-[44px] py-2.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 btn-3d btn-3d-white mb-1">
-                            <i class="fa-solid fa-list-check text-purple-500 text-sm"></i>查名單
-                        </button>
-                    </div>
-                </div>
-                <div onclick="clickMenuItem('行事曆', 'home-calendar')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-11 h-11 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shadow-inner"><i class="fa-solid fa-calendar-days"></i></div>
-                    <span class="text-[13px] font-bold text-slate-700">行事曆</span>
-                </div>
-                <div onclick="clickMenuItem('官網首頁', 'home-website')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-11 h-11 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-lg shadow-inner"><i class="fa-solid fa-globe"></i></div>
-                    <span class="text-[13px] font-bold text-slate-700">官網</span>
-                </div>
-            </div>
-
-            <!-- TAB 2: PROFILE -->
-            <div id="menu-content-profile" class="hidden grid grid-cols-3 h-full gap-2"></div>
-
-            <!-- TAB 3: EBOOKS -->
-            <div id="menu-content-ebooks" class="hidden grid grid-cols-3 h-full gap-2"></div>
-
-            <!-- TAB 4: ADMIN -->
-            <div id="menu-content-admin" class="hidden h-full">
-                <div id="admin-gate-unauthorized" class="h-full bg-slate-900 rounded-2xl flex flex-col items-center justify-center p-4 text-center text-white shadow-inner">
-                    <i class="fa-solid fa-lock text-3xl text-red-500 mb-2"></i>
-                    <h4 class="text-xs font-bold">【權限不符】</h4>
-                    <p class="text-[10px] text-gray-400 mt-1 max-w-[80%]">本專區僅限管理團隊進入。</p>
-                </div>
-                <div id="admin-gate-authorized" class="hidden grid grid-cols-3 h-full gap-2"></div>
-            </div>
-
+        <!-- 視角切換：分段控制，看得出目前在哪一邊 -->
+        <div id="scope-switch" class="px-4 pb-3 flex gap-1.5">
+            <button onclick="setScope('district')" data-scope="district" class="scope-seg flex-1 min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
+                <i class="fa-solid fa-globe mr-1"></i>地區
+            </button>
+            <button onclick="setScope('club')" data-scope="club" class="scope-seg flex-1 min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
+                <i class="fa-solid fa-house-flag mr-1"></i><span id="ui-current-scope">本社</span>
+            </button>
         </div>
+    </header>
 
-        <!-- Toggle bar -->
-        <div onclick="toggleRichMenu()" class="bg-gray-100 text-gray-600 pt-2.5 pb-3.5 text-center text-[13px] font-semibold cursor-pointer border-t border-gray-200 flex items-center justify-center gap-1.5">
-            <span id="rm-toggle-text">收合選單</span>
-            <i id="rm-toggle-icon" class="fa-solid fa-chevron-down text-[11px] text-gray-400"></i>
-        </div>
-    </div>
+    <!-- 四個分頁各自是一整頁；只有一個 section 會顯示 -->
+    <main id="page-container" class="flex-1 min-h-0 relative">
+        <section id="page-home" class="page absolute inset-0 overflow-y-auto p-4 space-y-4"></section>
+        <section id="page-profile" class="page absolute inset-0 overflow-y-auto p-4 space-y-4 hidden"></section>
+        <section id="page-ebooks" class="page absolute inset-0 overflow-y-auto p-4 space-y-4 hidden"></section>
+        <section id="page-admin" class="page absolute inset-0 overflow-y-auto p-4 space-y-4 hidden">
+            <div id="admin-gate-unauthorized" class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center">
+                <i class="fa-solid fa-lock text-3xl text-rose-500 mb-3"></i>
+                <h4 class="text-base font-bold text-slate-800">權限不符</h4>
+                <p class="text-[13px] text-slate-500 mt-1">本專區僅限管理團隊進入。</p>
+            </div>
+            <div id="admin-gate-authorized" class="hidden space-y-4"></div>
+        </section>
+    </main>
+
+    <!-- 底部導覽：貼齊畫面最下緣。管理分頁只有管理團隊看得到（setRole 控制） -->
+    <nav id="bottom-nav" class="shrink-0 grid grid-cols-3 bg-white border-t border-slate-200 z-30"
+         style="padding-bottom:env(safe-area-inset-bottom)">
+        <button onclick="switchTab('home')" id="tab-home" class="nav-btn nav-active">
+            <i class="fa-solid fa-house-chimney text-lg"></i><span>首頁</span>
+        </button>
+        <button onclick="switchTab('profile')" id="tab-profile" class="nav-btn">
+            <i class="fa-solid fa-id-card text-lg"></i><span>個人</span>
+        </button>
+        <button onclick="switchTab('ebooks')" id="tab-ebooks" class="nav-btn">
+            <i class="fa-solid fa-book-open text-lg"></i><span>刊物</span>
+        </button>
+        <button onclick="switchTab('admin')" id="tab-admin" class="nav-btn hidden">
+            <i class="fa-solid fa-star text-lg"></i><span id="tab-admin-label">主委</span>
+        </button>
+    </nav>
 </div>
 
 <!-- ===================== MODALS ===================== -->
@@ -836,19 +773,18 @@
             </div>
             <button onclick="closeModal('modal-matchmaking')" class="text-white/70 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
         </div>
-        <div class="p-6 flex flex-col space-y-4 bg-slate-50">
-            <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-xs text-indigo-800 leading-relaxed shadow-sm">
+        <div class="p-5 flex flex-col space-y-3 bg-slate-50 max-h-[75vh] overflow-y-auto">
+            <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-[13px] text-indigo-800 leading-relaxed">
                 <i class="fa-solid fa-circle-info mr-1"></i>
                 請描述您需要的產業、產品或服務，系統會從社友的職業名片中，為您找出最相關的社友與專屬優惠！
             </div>
-            <button onclick="openMyBusinessModal()" class="text-[11px] text-indigo-600 font-bold underline text-left self-start"><i class="fa-solid fa-id-card mr-1"></i>填寫 / 編輯我的職業名片（填了才會被媒合到）</button>
-            <div>
-                <textarea id="matchmaking-query" rows="3" class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="例如：公司要搬家，需要找辦公室裝潢與水電工程..."></textarea>
+            <button onclick="openMyBusinessModal()" class="text-[12px] text-indigo-600 font-bold underline text-left self-start"><i class="fa-solid fa-id-card mr-1"></i>填寫 / 編輯我的職業名片（填了才會被媒合到）</button>
+            <textarea id="matchmaking-query" rows="3" class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="例如：公司要搬家，需要找辦公室裝潢與水電工程..."></textarea>
+            <div class="flex gap-2 w-full">
+                <button onclick="closeModal('modal-matchmaking')" class="w-1/3 min-h-[44px] rounded-xl border border-gray-300 font-bold text-gray-600 text-sm bg-white">關閉</button>
+                <button onclick="submitMatchmakingQuery()" class="w-2/3 min-h-[44px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1 transition-colors"><i class="fa-solid fa-magnifying-glass"></i> AI 尋找</button>
             </div>
-            <div class="flex gap-2 w-full pt-2">
-                <button onclick="closeModal('modal-matchmaking')" class="w-1/2 py-2.5 rounded-xl border border-gray-300 font-bold text-gray-600 text-sm bg-white hover:bg-gray-50 transition-colors btn-3d btn-3d-white mb-1">取消</button>
-                <button onclick="submitMatchmakingQuery()" class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1 transition-all btn-3d btn-3d-indigo mb-1"><i class="fa-solid fa-magnifying-glass"></i> AI 尋找</button>
-            </div>
+            <div id="matchmaking-result"></div>
         </div>
     </div>
 </div>
@@ -1068,9 +1004,19 @@
 <div id="modal-alert" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-2xl max-w-xs w-full p-6 text-center space-y-4 shadow-2xl">
         <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center text-xl mx-auto"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <div class="space-y-1"><h4 class="font-bold text-gray-800" id="alert-title">系統提示</h4><p class="text-xs text-gray-500" id="alert-message"></p></div>
-        <button onclick="closeModal('modal-alert')" class="w-full bg-blue-900 text-white font-bold py-2.5 rounded-xl text-xs btn-3d btn-3d-dark mb-1">確定</button>
+        <div class="space-y-1"><h4 class="font-bold text-gray-800" id="alert-title">系統提示</h4><p class="text-[13px] text-gray-600 whitespace-pre-line text-left" id="alert-message"></p></div>
+        <button onclick="closeModal('modal-alert')" class="w-full bg-blue-900 text-white font-bold py-2.5 rounded-xl text-sm">確定</button>
     </div>
+</div>
+
+<!-- 浮現提示：短訊息用這個，2.6 秒自動消失。z 軸要在 alert(100)、gps(110) 之上、loading(200) 之下。 -->
+<div id="toast-container" class="fixed inset-x-0 z-[120] flex flex-col items-center gap-2 px-4 pointer-events-none"
+     style="bottom:calc(env(safe-area-inset-bottom) + 84px)"></div>
+
+<!-- 全屏等待（定位驗證這類「不能中途做別的事」的步驟） -->
+<div id="blocking-loader" class="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm hidden flex-col items-center justify-center gap-3">
+    <i class="fa-solid fa-circle-notch fa-spin text-white text-3xl"></i>
+    <p id="blocking-loader-text" class="text-white text-sm font-bold"></p>
 </div>
 
 <script>
@@ -1096,7 +1042,6 @@ let isGolfCheckedIn = false;
 let isNewNewPeoriaDrawn = false;   // 本次賽事是否已抽出隱藏洞（抽洞結果存在後端）
 let drawnHiddenHoles = [];
 let myRegisteredEvents = [];
-let isRichMenuOpen = true;
 
 // ============================================================
 //  LIFF INIT
@@ -1134,7 +1079,7 @@ async function initLiff() {
         // Fallback: still show app without LINE data (useful during dev/desktop preview)
         hideLiffLoadingScreen();
         initApp();
-        addChatMessage("system", "⚠️ LIFF 連線失敗，以訪客模式執行。<br><small>" + err.message + "</small>");
+        showToast('LINE 連線失敗，以訪客模式執行', 'warn', 4000);
     }
 }
 
@@ -1182,46 +1127,51 @@ function updateAdminTabLabel() {
 
 function initApp() {
     currentActiveEvent = findClosestUpcomingEvent();
-    updateAdminTabLabel();
-    updateBanner();
-    renderEbooksMenu();
-    renderProfileMenu();
-    renderAdminMenu();
+    renderHeader();
     renderGolfScorecard();
-    addChatMessage("bot", `歡迎回來！<b>${lineProfile ? lineProfile.displayName : '社友'}</b> 🎉<br>最近活動：<b>${currentActiveEvent?.title || '--'}</b><br>請使用下方選單操作。`);
+    switchTab(activeTab);        // 畫出目前這頁（預設首頁）
     handleDeepLink();
 }
 
 // ============================================================
 //  SCOPE TOGGLE
 // ============================================================
+// 分段控制直接指定視角；toggleSystemScope 保留給既有呼叫點（切換鈕以外的地方）。
+async function setScope(scope) {
+    if (scope !== 'district' && scope !== 'club') return;
+    if (scope === systemScope) return;
+    systemScope = scope;
+    await applyScopeChrome();
+    showToast(`已切換至：${scope === 'district' ? '地區總部' : (myClubName || '本社') + '專區'}`);
+}
+
 async function toggleSystemScope() {
-    systemScope = (systemScope === 'district') ? 'club' : 'district';
+    await setScope(systemScope === 'district' ? 'club' : 'district');
+}
+
+// 頁首與分段控制：載入時與切換視角時都要一致
+function renderHeader() {
     const clubLabel = myClubName || '本社';
     updateAdminTabLabel();
-    await loadEvents(systemScope);
-
+    document.getElementById('ui-current-scope').textContent = clubLabel;
+    document.querySelectorAll('#scope-switch .scope-seg').forEach(seg => {
+        seg.classList.toggle('scope-active', seg.dataset.scope === systemScope);
+    });
     if (systemScope === 'district') {
-        document.getElementById('ui-current-scope').textContent = '🌐 3523 地區總部';
-        document.getElementById('ui-current-scope').className = 'text-xs font-bold tracking-wide text-yellow-400';
-        document.getElementById('scope-icon').className = 'fa-solid fa-globe text-white text-xs';
-        document.getElementById('scope-icon-bg').className = 'w-6 h-6 rounded-full bg-blue-600 border border-white/20 flex items-center justify-center shadow-inner';
-        document.getElementById('header-title').innerHTML = '國際扶輪3523地區 <i class="fa-solid fa-circle-check text-blue-400 text-xs"></i>';
-        document.getElementById('header-subtitle').textContent = '官方帳號 · 全年度活動系統';
+        document.getElementById('header-title').innerHTML = '國際扶輪 3523 地區 <i class="fa-solid fa-circle-check text-yellow-400 text-xs"></i>';
+        document.getElementById('header-subtitle').textContent = '全年度活動系統';
     } else {
-        document.getElementById('ui-current-scope').textContent = `🏠 ${clubLabel}專區`;
-        document.getElementById('ui-current-scope').className = 'text-xs font-bold tracking-wide text-emerald-300';
-        document.getElementById('scope-icon').className = 'fa-solid fa-house-flag text-emerald-900 text-xs';
-        document.getElementById('scope-icon-bg').className = 'w-6 h-6 rounded-full bg-emerald-400 border border-white/20 flex items-center justify-center shadow-inner';
-        document.getElementById('header-title').innerHTML = `${clubLabel} <i class="fa-solid fa-star text-yellow-400 text-xs"></i>`;
-        document.getElementById('header-subtitle').textContent = '社內獨立專區 (資料已隔離)';
+        document.getElementById('header-title').innerHTML = `${_escHtml(clubLabel)} <i class="fa-solid fa-star text-yellow-400 text-xs"></i>`;
+        document.getElementById('header-subtitle').textContent = '社內專區 · 資料獨立';
     }
+}
 
+// 視角變動後要重畫的一切：頁首、活動快取、目前這頁。
+async function applyScopeChrome() {
+    await loadEvents(systemScope);
+    renderHeader();
     currentActiveEvent = findClosestUpcomingEvent();
-    updateBanner();
-    renderEbooksMenu();
-    switchTab(activeTab);   // stay on the current tab instead of jumping back to 首頁
-    addChatMessage("system", `🔄 已切換至：<b>${systemScope === 'district' ? '地區總部' : '社內專區'}</b>`);
+    renderActivePages();
 }
 
 // ============================================================
@@ -1258,173 +1208,297 @@ function selectEvent(eventId) {
     if (!ev) return;
     currentActiveEvent = ev;
     if (ev.id !== 106) isGolfCheckedIn = false;
-    updateBanner();
-    addChatMessage("system", `🔄 已切換活動：<b>${ev.title}</b>`);
     switchTab('home');
+    document.getElementById('page-home').scrollTop = 0;
+    showToast(`已切換活動：${ev.title}`);
 }
 
 // ============================================================
-//  BANNER UPDATE
+//  首頁
 // ============================================================
-function updateBanner() {
-    if (!currentActiveEvent) return;
-    const gradient = systemScope === 'district'
-        ? 'from-blue-950 via-blue-900 to-indigo-800'
-        : 'from-emerald-900 via-emerald-800 to-teal-800';
-    document.getElementById('banner-bg-gradient').className = `flex-1 bg-gradient-to-tr ${gradient} p-2.5 flex flex-col justify-between cursor-pointer text-white relative btn-3d btn-3d-dark mb-1 rounded-t-xl`;
-    document.getElementById('banner-title').textContent = currentActiveEvent.title;
-    document.getElementById('banner-date').textContent = currentActiveEvent.displayDate || currentActiveEvent.date;
-    document.getElementById('banner-tag').textContent = currentActiveEvent.type;
-    const locIcon = systemScope === 'district' ? 'text-rose-400' : 'text-yellow-400';
-    document.getElementById('banner-loc-text').innerHTML = `<i class="fa-solid fa-location-dot ${locIcon} mr-1.5"></i>${currentActiveEvent.location}`;
-    renderProfileMenu();
-    renderAdminMenu();
+// 舊版叫 updateBanner，只改那塊 240px 的磚；現在首頁就是一整頁。
+function updateBanner() { if (activeTab === 'home') renderHomePage(); }
+
+function renderHomePage() {
+    const c = document.getElementById('page-home');
+    if (!c) return;
+    const ev = currentActiveEvent;
+    const isAdmin = isAdminUser();
+
+    // 沒有活動也要有東西看 —— 訪客模式 / 後端連不上都會走到這裡
+    const hero = ev ? `
+        <div class="card overflow-hidden">
+            <div class="bg-gradient-to-tr ${systemScope === 'district' ? 'from-blue-950 via-blue-900 to-indigo-800' : 'from-emerald-900 via-emerald-800 to-teal-800'} text-white p-4">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-[12px] bg-yellow-400 text-blue-950 font-extrabold px-2 py-0.5 rounded">${_escHtml(ev.type || '活動')}</span>
+                    <span class="text-[13px] text-yellow-200 font-bold">${_escHtml(ev.displayDate || ev.date || '')}</span>
+                </div>
+                <h2 class="font-black text-lg mt-2 leading-snug">${_escHtml(ev.title)}</h2>
+                <p class="text-[13px] text-blue-100 mt-1.5 flex items-start gap-1.5">
+                    <i class="fa-solid fa-location-dot text-rose-300 mt-0.5"></i><span>${_escHtml(ev.location || '地點未定')}</span></p>
+                <p class="text-[13px] text-blue-100 mt-1 flex items-center gap-1.5">
+                    <i class="fa-regular fa-clock text-blue-200"></i>${_escHtml(ev.time || '時間未定')}
+                    <span class="mx-1 text-blue-300">·</span><i class="fa-solid fa-tag text-blue-200"></i>${_escHtml(ev.fee || '—')}</p>
+            </div>
+            <div class="p-3 flex gap-2">
+                ${myRegisteredEvents.includes(ev.id)
+                    ? `<div class="flex-1 min-h-[44px] rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[14px] flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i>已完成報名</div>`
+                    : `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-pen-to-square"></i>我要報名</button>`}
+                ${eventPdfButtonHTML(ev)}
+            </div>
+        </div>`
+        : `<div class="card p-8 text-center">
+            <i class="fa-regular fa-calendar text-3xl text-slate-300 mb-3"></i>
+            <p class="text-[14px] font-bold text-slate-600">目前沒有近期活動</p>
+            <p class="text-[13px] text-slate-400 mt-1">${eventsCache[systemScope] ? '待秘書處建立活動後就會出現在這裡。' : '活動資料載入失敗，請確認網路後重開。'}</p>
+        </div>`;
+
+    c.innerHTML = `
+        ${hero}
+        <div id="home-admin-actions" class="${isAdmin ? '' : 'hidden '}grid grid-cols-2 gap-2">
+            <button onclick="clickHelpRegister(event)" class="card min-h-[44px] py-3 text-[13px] font-bold text-slate-700 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-user-plus text-blue-600"></i>執秘報名</button>
+            <button onclick="clickCheckRegistration(event)" class="card min-h-[44px] py-3 text-[13px] font-bold text-slate-700 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-list-check text-purple-600"></i>查名單</button>
+        </div>
+
+        <div id="home-events">
+            <p class="section-title">近期活動</p>
+            <div id="home-events-list" class="space-y-2"></div>
+        </div>
+
+        <div>
+            <p class="section-title">更多</p>
+            <div class="card divide-y divide-slate-100 overflow-hidden">
+                <button onclick="openCalendarPage()" class="row-item">
+                    <span class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-calendar-days"></i></span>
+                    <span class="flex-1 text-[14px] font-bold text-slate-700">年度行事曆</span>
+                    <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i></button>
+                <button onclick="clickMenuItem('官網首頁', 'home-website')" class="row-item">
+                    <span class="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-globe"></i></span>
+                    <span class="flex-1 text-[14px] font-bold text-slate-700">地區官網</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-slate-300 text-xs"></i></button>
+            </div>
+        </div>`;
+
+    renderHomeEvents();
 }
 
-// ============================================================
-//  TAB SWITCHING
-// ============================================================
-function switchTab(tabId) {
-    activeTab = tabId;
-    ['home','profile','ebooks','admin'].forEach(t => {
-        document.getElementById(`tab-${t}`)?.classList.remove('active-tab');
-        document.getElementById(`tab-${t}`)?.classList.add('text-gray-500');
-        document.getElementById(`menu-content-${t}`)?.classList.add('hidden');
-    });
-    const btn = document.getElementById(`tab-${tabId}`);
-    btn?.classList.add('active-tab');
-    btn?.classList.remove('text-gray-500');
-    document.getElementById(`menu-content-${tabId}`)?.classList.remove('hidden');
+// 近期活動：原本要點「行事曆」才會吐一坨聊天泡泡，現在開首頁就在。
+function renderHomeEvents() {
+    const box = document.getElementById('home-events-list');
+    if (!box) return;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 10);
+    const list = getActiveEventsData()
+        .filter(e => e.date && new Date(e.date) >= cutoff)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .slice(0, 10);
 
-    if (tabId === 'profile') renderProfileMenu();
-    if (tabId === 'admin') renderAdminMenu();
-}
-
-function toggleRichMenu() {
-    isRichMenuOpen = !isRichMenuOpen;
-    const contentArea = document.getElementById('rm-tab-content');
-    const tabHeaders = document.getElementById('rm-tab-headers');
-    const icon = document.getElementById('rm-toggle-icon');
-    const text = document.getElementById('rm-toggle-text');
-    if (isRichMenuOpen) {
-        contentArea?.classList.remove('hidden');
-        tabHeaders?.classList.remove('hidden');
-        icon.className = 'fa-solid fa-chevron-down text-[11px] text-gray-400';
-        text.textContent = '收合選單';
-    } else {
-        contentArea?.classList.add('hidden');
-        tabHeaders?.classList.add('hidden');
-        icon.className = 'fa-solid fa-chevron-up text-[11px] text-gray-400';
-        text.textContent = '展開選單';
+    if (!list.length) {
+        box.innerHTML = `<div class="card p-5 text-center text-[13px] text-slate-400">目前沒有排定中的活動。</div>`;
+        return;
     }
+    box.innerHTML = list.map(ev => {
+        const upcoming = new Date(ev.date) >= today;
+        const isCurrent = currentActiveEvent && currentActiveEvent.id === ev.id;
+        return `<div class="card p-3 ${isCurrent ? 'ring-2 ring-blue-500' : ''}">
+            <div class="flex justify-between items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-white text-[12px] font-bold ${upcoming ? 'bg-emerald-500' : 'bg-slate-400'}">${upcoming ? '即將到來' : '已結束'}</span>
+                <span class="text-slate-500 font-bold text-[13px]">${_escHtml(ev.displayDate || ev.date)}</span>
+            </div>
+            <h3 class="font-bold text-slate-900 text-[15px] leading-snug mt-1.5">${_escHtml(ev.title)}</h3>
+            <p class="text-slate-500 text-[13px] mt-0.5"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${_escHtml(ev.location || '地點未定')}</p>
+            <div class="flex gap-2 mt-2.5">
+                <button onclick="selectEvent(${ev.id})" class="flex-1 min-h-[44px] rounded-lg ${isCurrent ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-700'} font-bold text-[13px] flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-hand-pointer"></i>${isCurrent ? '目前選取中' : '查看與報名'}</button>
+                ${eventPdfButtonHTML(ev)}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function openCalendarPage() {
+    const url = new URL('calendar.html', location.href).href;
+    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) liff.openWindow({ url, external: false });
+    else window.open(url, '_blank');
+}
+
+// ============================================================
+//  PAGE ROUTER
+// ============================================================
+const PAGES = ['home', 'profile', 'ebooks', 'admin'];
+const pageScroll = {};   // display:none 會重設 scrollTop，切回來要還原
+
+function switchTab(tabId) {
+    if (!PAGES.includes(tabId)) return;
+    const prev = document.getElementById(`page-${activeTab}`);
+    if (prev && !prev.classList.contains('hidden')) pageScroll[activeTab] = prev.scrollTop;
+
+    activeTab = tabId;
+    PAGES.forEach(t => {
+        document.getElementById(`tab-${t}`)?.classList.remove('nav-active');
+        document.getElementById(`page-${t}`)?.classList.add('hidden');
+    });
+    document.getElementById(`tab-${tabId}`)?.classList.add('nav-active');
+    const page = document.getElementById(`page-${tabId}`);
+    if (!page) { console.error('缺少頁面容器 page-' + tabId); return; }
+    page.classList.remove('hidden');
+
+    renderPage(tabId);
+    page.scrollTop = pageScroll[tabId] || 0;
+}
+
+// 每個分頁的內容都是進頁時現畫，資料才不會是上一次的
+function renderPage(tabId) {
+    if (tabId === 'home')    renderHomePage();
+    if (tabId === 'profile') renderProfilePage();
+    if (tabId === 'ebooks')  renderEbooksPage();
+    if (tabId === 'admin')   renderAdminPage();
+}
+
+// 資料變動（切視角、換活動）後重畫目前這頁，其餘等切過去時再畫
+function renderActivePages() {
+    renderPage(activeTab);
+}
+
+function scrollToSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ============================================================
 //  MENU RENDERERS
 // ============================================================
 // 尚未上線的刊物用灰階 + 「尚未上線」標示，不要跟能看的長得一模一樣讓人白點一次。
-function renderEbooksMenu() {
-    const c = document.getElementById('menu-content-ebooks');
+function renderEbooksPage() {
+    const c = document.getElementById('page-ebooks');
+    if (!c) return;
     const books = systemScope === 'district'
-        ? [['地區活動手冊', '活動手冊', 'fa-book-open-reader', 'from-blue-600 to-blue-400'],
-           ['年度成果冊', '年度成果冊', 'fa-award', 'from-amber-500 to-yellow-400'],
-           ['捐贈成果報告', '捐贈報告', 'fa-hand-holding-heart', 'from-rose-500 to-pink-500']]
-        : [['本社社刊', '每週社刊', 'fa-newspaper', 'from-emerald-600 to-emerald-400'],
-           ['財務報表', '財務報表', 'fa-file-invoice-dollar', 'from-teal-500 to-teal-400'],
-           ['社友名錄', '社友名錄', 'fa-address-book', 'from-indigo-500 to-purple-500']];
-    c.innerHTML = books.map(([key, label, icon, grad]) => {
-        const online = !!EBOOK_PAGES[key];
-        return `<div onclick="clickEbook('${key}')" class="relative bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1 ${online ? '' : 'opacity-60'}">
-            <div class="w-12 h-12 rounded-full bg-gradient-to-tr ${grad} text-white flex items-center justify-center text-xl ${online ? '' : 'grayscale'}"><i class="fa-solid ${icon}"></i></div>
-            <span class="text-[13px] font-extrabold text-slate-800">${label}</span>
-            ${online ? '' : '<span class="absolute top-1.5 right-1.5 text-[10px] bg-gray-200 text-gray-500 font-bold px-1.5 py-0.5 rounded">尚未上線</span>'}
+        ? [['地區活動手冊', '活動手冊', '各項地區活動的完整手冊', 'fa-book-open-reader', 'from-blue-600 to-blue-400'],
+           ['年度成果冊', '年度成果冊', '本年度地區服務成果', 'fa-award', 'from-amber-500 to-yellow-400'],
+           ['捐贈成果報告', '捐贈報告', '捐贈項目與運用說明', 'fa-hand-holding-heart', 'from-rose-500 to-pink-500']]
+        : [['本社社刊', '每週社刊', '每場例會的社刊，可線上翻閱', 'fa-newspaper', 'from-emerald-600 to-emerald-400'],
+           ['財務報表', '財務報表', '本社收支與請款彙整', 'fa-file-invoice-dollar', 'from-teal-500 to-teal-400'],
+           ['社友名錄', '社友名錄', '社友通訊與職業資料', 'fa-address-book', 'from-indigo-500 to-purple-500']];
+
+    c.innerHTML = `
+        <p class="section-title">${systemScope === 'district' ? '地區刊物' : '本社刊物'}</p>
+        <div class="card divide-y divide-slate-100 overflow-hidden">
+            ${books.map(([key, label, hint, icon, grad]) => {
+                const online = !!EBOOK_PAGES[key];
+                return `<button onclick="clickEbook('${key}')" class="row-item ${online ? '' : 'opacity-60'}">
+                    <span class="w-11 h-11 rounded-xl bg-gradient-to-tr ${grad} text-white flex items-center justify-center text-lg shrink-0 ${online ? '' : 'grayscale'}"><i class="fa-solid ${icon}"></i></span>
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-[15px] font-bold text-slate-800">${label}</span>
+                        <span class="block text-[12px] text-slate-400 truncate">${hint}</span>
+                    </span>
+                    ${online
+                        ? '<i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>'
+                        : '<span class="text-[11px] bg-slate-200 text-slate-500 font-bold px-2 py-1 rounded shrink-0">尚未上線</span>'}
+                </button>`;
+            }).join('')}
+        </div>
+
+        <p class="section-title">編輯與工具</p>
+        <div class="card divide-y divide-slate-100 overflow-hidden">
+            <button onclick="openCalendarPage()" class="row-item">
+                <span class="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calendar-days"></i></span>
+                <span class="flex-1"><span class="block text-[15px] font-bold text-slate-800">行事曆與議程</span>
+                    <span class="block text-[12px] text-slate-400">查看年度活動；幹部可編輯議程</span></span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-slate-300 text-xs"></i>
+            </button>
         </div>`;
-    }).join('');
 }
 
-function renderProfileMenu() {
-    const c = document.getElementById('menu-content-profile');
-    const isGolf = currentActiveEvent?.id === 106;
-    const isAnnual = currentActiveEvent?.id === 109;
-    const grad = systemScope === 'district' ? 'from-teal-800 to-emerald-700' : 'from-indigo-800 to-blue-700';
-    const title = systemScope === 'district' ? '大會' : '本社';
+// 個人頁：以前是三種互斥的磚版型（高球／年會／一般），現在是同一頁裡的條件式區塊。
+function renderProfilePage() {
+    const c = document.getElementById('page-profile');
+    if (!c) return;
+    const ev = currentActiveEvent;
+    const isGolf = ev?.id === 106 || ev?.type === '地區運動';
+    const roleLabel = { chairperson: systemScope === 'club' ? '社長／幹部' : '主委' }[userRole] || '社友';
 
-    if (isGolf && isGolfCheckedIn) {
-        c.innerHTML = `
-            <div class="col-span-2 bg-gradient-to-br from-emerald-950 via-emerald-800 to-green-950 p-2.5 text-white flex flex-col justify-between rounded-2xl btn-3d btn-3d-dark mb-1">
-                <div>
-                    <span class="text-[11px] bg-yellow-500 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-sm">報到成功</span>
-                    <h4 class="font-black text-[11px] text-yellow-100 mt-1">${lineProfile?.displayName || '社友'}，歡迎！</h4>
-                    <p class="text-[11px] text-emerald-200 mt-0.5">置物櫃: 88 號 ｜ 第 18 組</p>
-                </div>
-            </div>
-            <div onclick="openGolfScorecard()" class="bg-gradient-to-tr from-yellow-500 via-amber-400 to-yellow-300 p-2 text-slate-900 flex flex-col items-center justify-center gap-1.5 cursor-pointer rounded-2xl btn-3d btn-3d-warning mb-1">
-                <div class="w-10 h-10 rounded-full bg-white text-emerald-700 flex items-center justify-center shadow-md animate-pulse">
-                    <i class="fa-solid fa-golf-ball-tee text-lg"></i>
-                </div>
-                <span class="block text-xs font-black text-emerald-950">我要計分</span>
-            </div>`;
-    } else if (isAnnual) {
-        c.innerHTML = `
-            <div class="col-span-2 flex flex-col gap-2 h-full">
-                <div onclick="launchScannerModal()" class="flex-1 bg-gradient-to-br ${grad} p-2.5 text-white flex flex-col justify-center gap-1 cursor-pointer rounded-2xl btn-3d btn-3d-dark mb-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[11px] bg-white/20 font-extrabold px-1.5 py-0.5 rounded">LIFF 已綁定</span>
-                        <i class="fa-solid fa-qrcode text-lg opacity-80 text-yellow-300"></i>
-                    </div>
-                    <h4 class="font-bold text-sm mt-1">讀取大會報到 QR</h4>
-                </div>
-                <div class="grid grid-cols-2 gap-2 h-[38%] shrink-0">
-                    <button onclick="clickMyAwards()" class="bg-white text-slate-800 text-[10px] font-bold flex items-center justify-center gap-1 rounded-xl btn-3d btn-3d-white mb-1">
-                        <i class="fa-solid fa-trophy text-yellow-500"></i>我得什麼獎
-                    </button>
-                    <button onclick="clickClubAwards()" class="bg-white text-slate-800 text-[10px] font-bold flex items-center justify-center gap-1 rounded-xl btn-3d btn-3d-white mb-1">
-                        <i class="fa-solid fa-medal text-amber-500"></i>社內名單
-                    </button>
-                </div>
-            </div>
-            <div class="grid grid-rows-2 gap-2">
-                <div onclick="clickMenuItem('查詢紀錄','profile-history')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-clock-rotate-left text-2xl text-indigo-500"></i><span class="text-[13px] font-bold text-slate-700">報名紀錄</span>
-                </div>
-                <div onclick="openModal('modal-payment-info')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-money-check-dollar text-2xl text-teal-600"></i><span class="text-[13px] font-bold text-slate-700">回報匯款</span>
-                </div>
-            </div>`;
-    } else {
-        c.innerHTML = `
-            <div onclick="launchScannerModal()" class="col-span-2 bg-gradient-to-br ${grad} p-3 text-white flex flex-col justify-between rounded-2xl cursor-pointer btn-3d btn-3d-dark mb-1">
-                <div>
-                    <span class="text-[11px] bg-white/20 font-extrabold px-2 py-0.5 rounded">LIFF 身份已綁定</span>
-                    <h4 class="font-bold text-base mt-1.5">讀取${title}報到 QR</h4>
-                    <p class="text-[11px] text-white/80 mt-1">請掃描現場條碼完成報到。</p>
-                </div>
-                <div class="flex items-center justify-between text-[13px] font-bold text-yellow-300">
-                    <span>開啟相機 <i class="fa-solid fa-camera ml-1"></i></span>
-                    <i class="fa-solid fa-qrcode text-xl opacity-80"></i>
-                </div>
-            </div>
-            <div class="grid grid-rows-2 gap-2">
-                ${systemScope === 'district' ? `
-                <div onclick="openMatchmakingModal()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-robot text-2xl text-blue-500"></i><span class="text-[13px] font-bold text-slate-700">產業媒合</span>
-                </div>
-                <div onclick="openModal('modal-payment-info')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-money-check-dollar text-2xl text-teal-600"></i><span class="text-[13px] font-bold text-slate-700">回報匯款</span>
-                </div>` : `
-                <div onclick="openAttendanceModal('me')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-id-card-clip text-2xl text-emerald-600"></i><span class="text-[13px] font-bold text-slate-700">出席累計</span>
-                </div>
-                <div onclick="openMyDuesModal()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-file-invoice-dollar text-2xl text-rose-500"></i><span class="text-[13px] font-bold text-slate-700">本月社費</span>
-                </div>`}
-            </div>`;
-    }
+    const row = (onclick, icon, iconCls, label, hint) => `
+        <button onclick="${onclick}" class="row-item">
+            <span class="w-9 h-9 rounded-full ${iconCls} flex items-center justify-center shrink-0"><i class="fa-solid ${icon}"></i></span>
+            <span class="flex-1 min-w-0">
+                <span class="block text-[14px] font-bold text-slate-700">${label}</span>
+                ${hint ? `<span class="block text-[12px] text-slate-400">${hint}</span>` : ''}
+            </span>
+            <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+        </button>`;
 
-    if (activeTab === 'profile') c.classList.remove('hidden');
-    else c.classList.add('hidden');
+    const golfCard = isGolf ? `
+        <div class="card p-4 bg-gradient-to-br from-emerald-900 to-teal-800 text-white border-0">
+            <div class="flex items-center justify-between">
+                <span class="text-[12px] bg-yellow-400 text-emerald-950 font-black px-2 py-0.5 rounded">${isGolfCheckedIn ? '報到成功' : '高球賽事'}</span>
+                <i class="fa-solid fa-golf-ball-tee text-yellow-300 text-lg"></i>
+            </div>
+            <h3 class="font-bold text-base mt-2">${_escHtml(ev.title)}</h3>
+            <button onclick="openGolfScorecard()" class="w-full mt-3 min-h-[44px] rounded-lg bg-yellow-400 text-emerald-950 font-black text-[14px]">
+                <i class="fa-solid fa-pen-to-square mr-1.5"></i>我要計分</button>
+        </div>` : '';
+
+    c.innerHTML = `
+        <div class="card p-4 flex items-center gap-3">
+            <div class="w-14 h-14 rounded-full bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                ${lineProfile?.pictureUrl
+                    ? `<img src="${_escAttr(lineProfile.pictureUrl)}" alt="" class="w-full h-full object-cover">`
+                    : '<i class="fa-solid fa-user text-slate-400 text-xl"></i>'}
+            </div>
+            <div class="min-w-0">
+                <p class="font-bold text-slate-900 text-[16px] truncate">${_escHtml(lineProfile?.displayName || '社友')}</p>
+                <p class="text-[13px] text-slate-500 truncate">${_escHtml(myClubName || '尚未綁定社別')}</p>
+                <span class="inline-block mt-1 text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700">${roleLabel}</span>
+            </div>
+        </div>
+
+        ${golfCard}
+
+        <div>
+            <p class="section-title">報到</p>
+            <div class="card divide-y divide-slate-100 overflow-hidden">
+                ${row('launchScannerModal()', 'fa-qrcode', 'bg-emerald-100 text-emerald-600', '掃描報到 QR', '在活動現場掃描工作人員的條碼')}
+                ${row('openMyQrModal()', 'fa-id-badge', 'bg-blue-100 text-blue-600', '我的報到條碼', '讓工作人員掃描')}
+            </div>
+        </div>
+
+        <div id="profile-registrations">
+            <p class="section-title flex items-center justify-between">
+                <span>我的報名紀錄</span><span id="profile-registrations-count" class="text-slate-400 font-bold">—</span>
+            </p>
+            <div id="profile-registrations-list" class="space-y-2"></div>
+        </div>
+
+        <div>
+            <p class="section-title">繳費與出席</p>
+            <div class="card divide-y divide-slate-100 overflow-hidden">
+                ${row("openModal('modal-payment-info')", 'fa-money-check-dollar', 'bg-teal-100 text-teal-600', '回報匯款', '填寫帳號末 5 碼供秘書處對帳')}
+                ${systemScope === 'club' ? row('openMyDuesModal()', 'fa-file-invoice-dollar', 'bg-rose-100 text-rose-600', '本月社費', '查看帳單與回報繳款') : ''}
+                ${systemScope === 'club' ? row("openAttendanceModal('me')", 'fa-id-card-clip', 'bg-emerald-100 text-emerald-600', '我的出席累計', '') : ''}
+            </div>
+        </div>
+
+        ${systemScope === 'district' ? `
+        <div>
+            <p class="section-title">職業服務</p>
+            <div class="card divide-y divide-slate-100 overflow-hidden">
+                ${row('openMatchmakingModal()', 'fa-robot', 'bg-blue-100 text-blue-600', 'AI 產業媒合', '用需求找到能幫上忙的社友')}
+                ${row('openMyBusinessModal()', 'fa-address-card', 'bg-indigo-100 text-indigo-600', '我的職業名片', '讓其他社友找得到你')}
+            </div>
+        </div>` : ''}
+
+        <div id="profile-awards">
+            <p class="section-title">得獎查詢</p>
+            <div class="card divide-y divide-slate-100 overflow-hidden">
+                ${row('clickMyAwards()', 'fa-trophy', 'bg-amber-100 text-amber-600', '我得什麼獎', '')}
+                ${row('clickClubAwards()', 'fa-medal', 'bg-yellow-100 text-yellow-700', '社內得獎名單', '')}
+            </div>
+            <div id="profile-awards-result" class="mt-2"></div>
+        </div>`;
+
+    renderMyRegistrations();
 }
-
 
 // 地區 + 社內活動，標上範圍標籤給報名專區的活動下拉用。兩邊都取自後端快取。
 function getAllCombinedEvents() {
@@ -1436,6 +1510,7 @@ function getAllCombinedEvents() {
 // ---- AI 產業媒合 ----
 function openMatchmakingModal() {
     document.getElementById('matchmaking-query').value = '';
+    document.getElementById('matchmaking-result').innerHTML = '';
     openModal('modal-matchmaking');
 }
 
@@ -1449,31 +1524,33 @@ async function submitMatchmakingQuery() {
         showAlert('請輸入需求', '請告訴助理您需要尋找什麼產業或服務喔！');
         return;
     }
-    closeModal('modal-matchmaking');
-    addChatMessage("user", `產業媒合：${query}`);
-    addChatMessage("bot", `🤖 <b>分析中...</b><br>正在檢索社友職業名片，尋找符合「${_escHtml(query)}」的專業社友...`);
+    // 結果留在 modal 裡，方便對照輸入內容再查一次
+    const box = document.getElementById('matchmaking-result');
+    box.innerHTML = `<div class="flex items-center gap-2 text-[13px] text-slate-500 py-3">
+        <i class="fa-solid fa-circle-notch fa-spin"></i>正在檢索社友職業名片…</div>`;
     try {
         const data = await apiFetch('/matchmaking?q=' + encodeURIComponent(query));
         if (data.status !== 'ok' || !data.count) {
-            addChatMessage("bot", `😅 目前查無符合「${_escHtml(query)}」的社友職業名片。<br><span class="text-[11px] text-gray-500">歡迎社友到「AI 產業媒合 → 填寫我的職業名片」建立資料，讓彼此更容易媒合！</span>`);
+            box.innerHTML = `<div class="py-3 text-[13px] text-slate-500">
+                目前查無符合「${_escHtml(query)}」的社友職業名片。
+                <p class="text-[12px] text-slate-400 mt-1">歡迎到「我的職業名片」建立資料，讓彼此更容易媒合。</p></div>`;
             return;
         }
-        let html = `✅ <b>【產業媒合結果】</b><br>為您找到 ${data.count} 位相關社友：<br><br>`;
-        html += data.matches.map(m => {
-            const title = _escHtml(m.company || m.industry || '社友');
-            const club = m.club ? ` (${_escHtml(m.club)})` : '';
-            const industry = m.industry ? `<p class="text-xs text-gray-700">💼 <b>職業分類：</b>${_escHtml(m.industry)}</p>` : '';
-            const intro = m.intro ? `<p class="text-xs text-gray-700 mt-1">📝 <b>公司簡介：</b><br>${_escHtml(m.intro)}</p>` : '';
-            const offer = m.offer ? `<div class="mt-2 bg-yellow-100 border border-yellow-300 p-1.5 rounded text-yellow-800 text-[10px] font-bold">🎁 <b>社友專屬優惠：</b><br>${_escHtml(m.offer)}</div>` : '';
-            return `<div class="bg-indigo-50 border border-indigo-200 p-2 rounded-lg mb-2 shadow-sm">
-                <p class="font-bold text-indigo-900 text-sm mb-1"><i class="fa-solid fa-building text-indigo-500"></i> ${title}</p>
-                <p class="text-xs text-gray-700">👤 <b>${_escHtml(m.name)}</b>${club}</p>
-                ${industry}${intro}${offer}
-            </div>`;
-        }).join('');
-        addChatMessage("bot", html);
+        box.innerHTML = `<p class="text-[13px] font-bold text-slate-700 py-2">為您找到 ${data.count} 位相關社友</p>`
+            + data.matches.map(m => {
+                const title = _escHtml(m.company || m.industry || '社友');
+                const club = m.club ? `（${_escHtml(m.club)}）` : '';
+                const industry = m.industry ? `<p class="text-[13px] text-slate-600">💼 ${_escHtml(m.industry)}</p>` : '';
+                const intro = m.intro ? `<p class="text-[13px] text-slate-600 mt-1">📝 ${_escHtml(m.intro)}</p>` : '';
+                const offer = m.offer ? `<div class="mt-2 bg-amber-50 border border-amber-200 p-2 rounded text-amber-800 text-[12px] font-bold">🎁 社友專屬優惠：${_escHtml(m.offer)}</div>` : '';
+                return `<div class="border border-slate-200 rounded-lg p-3 mb-2">
+                    <p class="font-bold text-slate-900 text-[14px]"><i class="fa-solid fa-building text-indigo-500 mr-1"></i>${title}</p>
+                    <p class="text-[13px] text-slate-600">👤 ${_escHtml(m.name)}${club}</p>
+                    ${industry}${intro}${offer}
+                </div>`;
+            }).join('');
     } catch (e) {
-        addChatMessage("bot", "⚠️ 產業媒合暫時無法使用，請稍後再試。");
+        box.innerHTML = `<p class="py-3 text-[13px] text-rose-500">產業媒合暫時無法使用，請稍後再試。</p>`;
     }
 }
 
@@ -1505,7 +1582,7 @@ async function saveMyBusiness() {
         const r = await apiFetch('/me/business', { method: 'POST', body: JSON.stringify(payload) });
         if (r.status !== 'ok') { showAlert('儲存失敗', r.message || '請稍後再試。'); return; }
         closeModal('modal-my-business');
-        addChatMessage("system", "✅ 職業名片已儲存，其他社友即可透過「AI 產業媒合」找到您。");
+        showToast('職業名片已儲存', 'success');
     } catch (e) {
         showAlert('儲存失敗', e.message);
     }
@@ -1551,21 +1628,21 @@ function runAnnualLbsGate(onPass) {
         showAlert('無法定位', '您的裝置不支援定位功能，請洽現場工作人員協助報到。');
         return;
     }
-    addChatMessage("system", `📍 <b>【LBS 定位驗證中】</b><br>正在獲取您的實際 GPS 定位，以核對是否在「${_escHtml(ev.location || '會場')}」活動現場 (允許誤差 100 公尺)...`);
+    showBlockingLoader(`正在確認您是否在「${ev.location || '會場'}」現場…`);
     navigator.geolocation.getCurrentPosition(
         (pos) => {
+            hideBlockingLoader();
             const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, venue.lat, venue.lng);
             if (dist <= 100) {
-                addChatMessage("system", `✅ <b>定位驗證通過</b><br>距離會場：${Math.round(dist)} 公尺。`);
+                showToast(`定位驗證通過，距離會場 ${Math.round(dist)} 公尺`, 'success');
                 onPass();
             } else {
                 openGpsMapModal(pos.coords.latitude, pos.coords.longitude, venue.lat, venue.lng, Math.round(dist));
-                addChatMessage("system", `❌ <b>定位驗證失敗</b><br>距離會場 <b>${Math.round(dist)} 公尺</b>，超過允許範圍。`);
             }
         },
         () => {
-            addChatMessage("system", `❌ <b>定位驗證失敗</b><br>未取得定位授權，無法確認您在會場。請於裝置設定開啟定位權限後重試，或洽現場工作人員。`);
-            showAlert('需要定位權限', '報到需確認您人在會場，請開啟定位權限後再試一次。');
+            hideBlockingLoader();
+            showAlert('需要定位權限', '報到需確認您人在會場，請於裝置設定開啟定位權限後再試一次，或洽現場工作人員。');
         },
         { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -1678,9 +1755,8 @@ async function submitClubFinance() {
         const r = await apiFetch('/club/finance', { method: 'POST', body: JSON.stringify(payload) });
         if (r.status !== 'ok') { showAlert('儲存失敗', r.message || '請稍後再試。'); return; }
         closeModal('modal-club-finance');
-        let msg = `✅ <b>【社務對帳已儲存】</b><br>${r.month} 本期請款總額：<b class="text-green-600">NT$ ${(r.total || 0).toLocaleString()}</b>。`;
-        if (r.advance_count > 0) msg += `<br><span class="text-[11px] text-gray-600">含 ${r.advance_count} 筆社友代墊款，已一併存檔。</span>`;
-        addChatMessage("system", msg);
+        showToast(`社務對帳已儲存，本期 NT$ ${(r.total || 0).toLocaleString()}`
+                  + (r.advance_count > 0 ? `（含 ${r.advance_count} 筆代墊款）` : ''), 'success', 3500);
     } catch (e) {
         showAlert('儲存失敗', e.message);
     }
@@ -1801,7 +1877,7 @@ async function sendClubSurvey() {
         if (r.status !== 'ok') { showAlert('發送失敗', r.message || '請稍後再試。'); return; }
         await loadEventSurveyData();
         const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
-        addChatMessage("system", `📩 <b>【已發送調查表】</b><br>已向 ${r.sent} 位社友推播 <b>${_escHtml(eventObj ? eventObj.title : '活動')}</b> 的參加意願調查表，社友在 LINE 點「參加」即完成報名。`);
+        showToast(`已向 ${r.sent} 位社友發送出席調查`, 'success', 3200);
         showAlert('發送成功', `已推播報名調查表給 ${r.sent} 位社友！`);
     } catch (err) {
         showAlert('連線失敗', err.message);
@@ -1846,7 +1922,7 @@ async function remindPendingMembers() {
         if (r.status === 'none_pending') { surveyState = r; renderSurveyStats(); showAlert('無須跟催', '目前沒有尚未回覆的社友喔！'); return; }
         if (r.status !== 'ok') { showAlert('跟催失敗', r.message || '請稍後再試。'); return; }
         await loadEventSurveyData();
-        addChatMessage("system", `⚠️ <b>【二次意願確認】</b><br>已向 ${r.reminded} 位尚未回覆的社友發送跟催推播。`);
+        showToast(`已跟催 ${r.reminded} 位尚未回覆的社友`, 'success', 3200);
         showAlert('跟催發送成功', `已向 ${r.reminded} 位尚未回覆的社友發送二次推播。`);
     } catch (err) {
         showAlert('連線失敗', err.message);
@@ -1865,8 +1941,9 @@ async function reportToPresident() {
         if (r.status !== 'ok') { showAlert('呈報失敗', r.message || '請稍後再試。'); return; }
         const eventObj = getAllCombinedEvents().find(e => e.id == eventId);
         closeModal('modal-club-reg-admin');
-        const to = r.to_self ? '（系統查無社長帳號，已改傳給您本人）' : `已於 LINE 傳送給 <b>社長</b> 進行後續關心。`;
-        addChatMessage("system", `📄 <b>【未回覆名單呈報】</b><br><b>${_escHtml(eventObj ? eventObj.title : '活動')}</b> 尚未回覆的 ${r.names.length} 位社友：<br><span class="text-gray-500">${r.names.map(_escHtml).join('、')}</span><br><br>👉 ${to}`);
+        const to = r.to_self ? '系統查無社長帳號，已改傳給您本人。' : '已於 LINE 傳送給社長進行後續關心。';
+        showAlert(`${eventObj ? eventObj.title : '活動'} 未回覆名單`,
+                  `尚未回覆的 ${r.names.length} 位社友：\n${r.names.join('、')}\n\n${to}`);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -1959,7 +2036,7 @@ async function publishSeating() {
         });
         if (data.status !== 'ok') { showAlert('公布失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-seating');
-        addChatMessage('bot', `🪑 <b>【桌次已公布】</b><br>已透過 LINE 通知 ${data.notified} 位與會者自己的桌次。`);
+        showToast(`桌次已公布，已通知 ${data.notified} 位與會者`, 'success', 3200);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -2053,7 +2130,6 @@ async function drawPrize(prizeId, redraw) {
         const names = data.winners.map(w => w.name + (w.club ? `（${w.club}）` : '')).join('\n');
         const short = data.short ? '\n\n※ 可抽人數不足，已抽出全部符合資格者。' : '';
         showAlert(`🎉 ${data.prize} 中獎名單`, names + short);
-        addChatMessage('bot', `🎟️ <b>【${_escHtml(data.prize)} 抽出】</b><br>${data.winners.map(w => _escHtml(w.name)).join('、')}<br><span class="text-[10px] text-gray-500">※ 已透過 LINE 通知中獎人。</span>`);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -2204,7 +2280,7 @@ async function notifyRye() {
     const data = await _ryePost('/admin/rye/notify', { event_id: ryeState.eventId || currentActiveEvent?.id });
     if (!data) return;
     closeModal('modal-rye');
-    addChatMessage('bot', `📋 <b>【面試時段已通知】</b><br>已透過 LINE 通知 ${data.notified} 位學生自己的面試時間。`);
+    showToast(`已通知 ${data.notified} 位學生面試時間`, 'success', 3200);
 }
 
 // ============================================================
@@ -2570,7 +2646,7 @@ async function saveClubDues() {
         });
         if (data.status !== 'ok') { showAlert('儲存失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-club-dues');
-        addChatMessage('bot', `💰 <b>帳單已產出並推播</b><br>${month} 帳單每月總計應繳：<b class="text-pink-600">NT$ ${data.total.toLocaleString()}</b><br><span class="text-[10px] text-gray-500">※ 已透過 LINE 通知該社友。</span>`);
+        showAlert('帳單已產出', `${month} 應繳總計 NT$ ${data.total.toLocaleString()}\n\n已透過 LINE 通知該社友。`);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -2619,7 +2695,7 @@ async function submitMyDues() {
         const data = await apiFetch('/dues/pay', { method: 'POST', body: JSON.stringify({ bank_digits: digits }) });
         if (data.status !== 'ok') { showAlert('回報失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-my-dues');
-        addChatMessage('bot', `✅ <b>社費繳款已回報</b><br>末 5 碼：<b class="text-pink-600">${digits}</b><br>執秘對帳後狀態將更新為「已收繳費」。`);
+        showToast(`社費繳款已回報（末 5 碼 ${digits}）`, 'success', 3200);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -2631,54 +2707,78 @@ function _adminTile(onclick, icon, iconCls, label) {
         <span class="text-[13px] font-bold text-slate-700">${label}</span></div>`;
 }
 
-function renderAdminMenu() {
+function renderAdminPage() {
     const c = document.getElementById('admin-gate-authorized');
+    if (!c) return;
     const ev = currentActiveEvent;
     const isGolf   = ev?.id === 106 || ev?.type === '地區運動';
     const isRye    = ev?.id === 107 || (ev?.title || '').includes('RYE');
     const isAnnual = ev?.type === '地區年會';
     const isClub   = systemScope === 'club';
 
-    // 版型固定：四個大磚 + 長按鈕。不論社內、高球、RYE、年會都長一樣，只換磚上的
-    // 功能，主委才不用每次重新找按鈕在哪。
-    const scanner = (label) => _adminTile('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', label);
-    const vip     = _adminTile('openVIPListModal()', 'fa-microphone-lines', 'bg-purple-100 text-purple-600', '貴賓介紹');
-    const btn = (onclick, icon, label, cls, shadow, full) =>
-        `<button onclick="${onclick}" class="${full ? 'col-span-2 ' : ''}${cls} text-white rounded-xl min-h-[44px] py-2.5 flex items-center justify-center gap-1.5 text-[13px] font-bold btn-3d" style="box-shadow:0 4px 0 ${shadow}"><i class="fa-solid ${icon}"></i> ${label}</button>`;
+    const row = (onclick, icon, iconCls, label, hint) => `
+        <button onclick="${onclick}" class="row-item">
+            <span class="w-9 h-9 rounded-full ${iconCls} flex items-center justify-center shrink-0"><i class="fa-solid ${icon}"></i></span>
+            <span class="flex-1 min-w-0">
+                <span class="block text-[14px] font-bold text-slate-700">${label}</span>
+                ${hint ? `<span class="block text-[12px] text-slate-400 truncate">${hint}</span>` : ''}
+            </span>
+            <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+        </button>`;
+    const group = (title, rows) => rows.filter(Boolean).length
+        ? `<div><p class="section-title">${title}</p>
+             <div class="card divide-y divide-slate-100 overflow-hidden">${rows.filter(Boolean).join('')}</div></div>`
+        : '';
 
-    let tiles;
-    if (isClub) {
-        tiles = _adminTile("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率')
-              + _adminTile('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')
-              + _adminTile('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區')
-              + _adminTile('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費');
-    } else if (isGolf) {
-        tiles = _adminTile('openSwapGroupModal()', 'fa-people-arrows', 'bg-blue-100 text-blue-600', '即時調組')
-              + _adminTile('openGolfLeaderboard()', 'fa-ranking-star', 'bg-amber-100 text-amber-600', '賽事成績')
-              + _adminTile('openDrawHolesModal()', 'fa-dice', 'bg-indigo-100 text-indigo-600', '新貝抽洞')
-              + scanner('報到相機');
+    // 現場作業依目前活動類型換內容，但位置與樣式固定
+    let onSite;
+    if (isGolf) {
+        onSite = [row('openSwapGroupModal()', 'fa-people-arrows', 'bg-blue-100 text-blue-600', '即時調組', '對調兩位球友的組別'),
+                  row('openGolfLeaderboard()', 'fa-ranking-star', 'bg-amber-100 text-amber-600', '賽事成績', '總桿與新貝利亞淨桿'),
+                  row('openDrawHolesModal()', 'fa-dice', 'bg-indigo-100 text-indigo-600', '新貝利亞抽洞', ''),
+                  row('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', '報到相機', '掃描社友的報到條碼')];
     } else if (isRye) {
-        tiles = _adminTile("openRyeModal('interview')", 'fa-users-viewfinder', 'bg-sky-100 text-sky-600', '面試安排')
-              + _adminTile("openRyeModal('consent')", 'fa-file-signature', 'bg-teal-100 text-teal-600', '同意書審核')
-              + vip + scanner('報到相機');
+        onSite = [row("openRyeModal('interview')", 'fa-users-viewfinder', 'bg-sky-100 text-sky-600', '面試安排', '排定時段並通知學生'),
+                  row("openRyeModal('consent')", 'fa-file-signature', 'bg-teal-100 text-teal-600', '同意書審核', '家長同意書收件與審核'),
+                  row('openVIPListModal()', 'fa-microphone-lines', 'bg-purple-100 text-purple-600', '貴賓介紹', '報到與唱名'),
+                  row('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', '報到相機', '')];
     } else if (isAnnual) {
-        tiles = _adminTile('openSeatingModal()', 'fa-chair', 'bg-amber-100 text-amber-600', '桌次安排')
-              + _adminTile('openRaffleModal()', 'fa-ticket', 'bg-rose-100 text-rose-600', '摸彩系統')
-              + vip + scanner('報到相機');
+        onSite = [row('openSeatingModal()', 'fa-chair', 'bg-amber-100 text-amber-600', '桌次安排', '排桌、換位與公布桌次'),
+                  row('openRaffleModal()', 'fa-ticket', 'bg-rose-100 text-rose-600', '摸彩系統', '從已報到者抽獎'),
+                  row('openVIPListModal()', 'fa-microphone-lines', 'bg-purple-100 text-purple-600', '貴賓介紹', '報到與唱名'),
+                  row('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', '報到相機', '')];
     } else {
-        tiles = scanner('現場相機')
-              + _adminTile('clickHelpRegister(event)', 'fa-user-plus', 'bg-blue-100 text-blue-600', '執秘報名')
-              + _adminTile('clickCheckRegistration(event)', 'fa-list-check', 'bg-purple-100 text-purple-600', '查名單')
-              + vip;
+        onSite = [row('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', '現場相機', '掃描社友的報到條碼'),
+                  row('openVIPListModal()', 'fa-microphone-lines', 'bg-purple-100 text-purple-600', '貴賓介紹', '報到與唱名')];
     }
-    // 社內：一顆長按鈕開行事曆。地區：多一顆看板（活動當天最常看的），兩顆並排。
-    const calendarBtn = btn('openEventAdminModal()', 'fa-calendar-plus',
-                            isClub ? '新增／修改活動' : '新增活動', 'bg-indigo-600', '#312e81', isClub);
-    const statsBtn = btn('openStatisticsModal(event)', 'fa-chart-line', '繳費看板',
-                         'bg-yellow-500 !text-slate-900', '#a16207', false);
-    c.innerHTML = `<div class="col-span-3 grid grid-cols-2 gap-2 h-full" style="grid-template-rows:1fr 1fr auto">
-        ${tiles}${isClub ? calendarBtn : statsBtn + calendarBtn}
-    </div>`;
+
+    c.innerHTML = `
+        <div class="card p-3 flex items-center gap-2">
+            <i class="fa-solid fa-circle-info text-blue-500"></i>
+            <p class="text-[13px] text-slate-600 min-w-0">目前活動：<b class="text-slate-800">${_escHtml(ev?.title || '尚無活動')}</b></p>
+        </div>
+
+        ${group('活動管理', [
+            row('openEventAdminModal()', 'fa-calendar-plus', 'bg-indigo-100 text-indigo-600', '新增／修改活動', '維護行事曆與活動內容'),
+            row('clickHelpRegister(event)', 'fa-user-plus', 'bg-blue-100 text-blue-600', '執秘代為報名', '一次替多位社友與來賓報名'),
+            row('clickCheckRegistration(event)', 'fa-list-check', 'bg-purple-100 text-purple-600', '查報名名單', '含報到與繳費狀態'),
+        ])}
+
+        ${group('報名與繳費', [
+            row('openStatisticsModal(event)', 'fa-chart-line', 'bg-yellow-100 text-yellow-700', '報名與繳費看板', '各社報名、繳費、報到統計'),
+            isClub ? row('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區', '發送出席意願調查與跟催') : '',
+            isClub ? row('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費', '產出帳單並推播') : '',
+            isClub ? row('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳', '固定支出與社友代墊款') : '',
+        ])}
+
+        ${group(`現場作業${ev ? '' : ''}`, onSite)}
+
+        ${group('社務', [
+            isClub ? row("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率', '每位社友的出席統計') : '',
+            isClub ? row('openBoardModal()', 'fa-user-tie', 'bg-slate-200 text-slate-700', '理監事專區', '議案線上表決') : '',
+        ])}
+
+        <div id="admin-registrants"></div>`;
 }
 
 // ============================================================
@@ -2690,13 +2790,11 @@ function setRole(role) {
     userRole = role;
     const admin = role === 'chairperson';
     // 管理分頁 / 管理按鈕只給管理團隊看：一般社友點了也只會得到「權限不足」。
-    const tab = document.getElementById('tab-admin');
-    tab.classList.toggle('hidden', !admin);
-    tab.classList.toggle('flex', admin);
-    const headers = document.getElementById('rm-tab-headers');
-    headers.classList.toggle('grid-cols-4', admin);
-    headers.classList.toggle('grid-cols-3', !admin);
-    document.getElementById('home-admin-actions').classList.toggle('hidden', !admin);
+    document.getElementById('tab-admin').classList.toggle('hidden', !admin);
+    const nav = document.getElementById('bottom-nav');
+    nav.classList.toggle('grid-cols-4', admin);
+    nav.classList.toggle('grid-cols-3', !admin);
+    document.getElementById('home-admin-actions')?.classList.toggle('hidden', !admin);
     document.getElementById('admin-gate-unauthorized').classList.toggle('hidden', admin);
     document.getElementById('admin-gate-authorized').classList.toggle('hidden', !admin);
     if (!admin && activeTab === 'admin') switchTab('home');
@@ -2771,9 +2869,9 @@ async function handleQrScanResult(qrValue) {
     try {
         const data = await apiFetch('/checkin', { method: 'POST', body: JSON.stringify(body) });
         if (data.status === 'ok') {
-            addChatMessage("bot", `✅ <b>${data.name}</b> 報到成功！<br>${data.event_title}<br>目前已報到 <b>${data.checked_in}</b> / ${data.total} 人`);
+            showToast(`${data.name} 報到成功（${data.checked_in}/${data.total}）`, 'success', 3500);
         } else if (data.status === 'already') {
-            addChatMessage("bot", `⚠️ <b>${data.name}</b> 先前已完成報到，未重複計算。`);
+            showToast(`${data.name} 先前已完成報到`, 'warn', 3500);
         } else if (data.status === 'not_registered') {
             showAlert('尚未報名', `${data.name || '此社友'} 沒有「${data.event_title || '本活動'}」的報名紀錄，無法報到。`);
         } else if (data.status === 'forbidden') {
@@ -2794,7 +2892,6 @@ async function handleQrScanResult(qrValue) {
 //  REGISTRATION HANDLERS
 // ============================================================
 function triggerMainBannerClick() {
-    addChatMessage("user", `我要報名 ${currentActiveEvent?.title}`);
     document.getElementById('self-reg-event-title').textContent = currentActiveEvent?.title || '--';
     document.getElementById('self-bank-digits').value = '';
     openModal('modal-self-register');
@@ -2811,10 +2908,11 @@ async function confirmRegistration() {
         if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-self-register');
         if (currentActiveEvent && !myRegisteredEvents.includes(currentActiveEvent.id)) myRegisteredEvents.push(currentActiveEvent.id);
-        let msg = `🎉 <b>報名成功！</b><br>已登記 <b>${data.event_title}</b>。`;
-        if (digits) msg += `<br>轉出末 5 碼：<b class="text-blue-600">${digits}</b>（待秘書處對帳）`;
-        else msg += `<br>⚠️ 未提供帳號末 5 碼，完成匯款後請至「個人中心→回報匯款」補填。`;
-        addChatMessage("bot", msg);
+        let msg = `已登記「${data.event_title}」。`;
+        msg += digits ? `\n轉出末 5 碼：${digits}（待秘書處對帳）`
+                      : '\n\n尚未提供帳號末 5 碼，完成匯款後請至「個人 → 回報匯款」補填。';
+        showAlert('🎉 報名成功', msg);
+        renderPage(activeTab);
         // 不用 liff.sendMessages 回報名結果：那會用「社友本人」的身分在聊天室發話，
         // 機器人又聽不懂那句話，只會回一句「請使用下方選單按鈕操作」。
     } catch (err) {
@@ -2910,51 +3008,59 @@ async function submitExecSecRegistration() {
         });
         if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-exec-sec-register');
-        let msg = `✅ <b>執秘批次報名完成</b><br>${data.event_title}<br>新報名 <b>${data.members_new}</b> 人`;
+        let msg = `${data.event_title}\n新報名 ${data.members_new} 人`;
         if (data.members_dup) msg += `（${data.members_dup} 人先前已報名）`;
-        if (data.guests)      msg += `<br>附加來賓 <b>${data.guests}</b> 位`;
-        if (digits)           msg += `<br>末 5 碼：<b class="text-blue-600">${digits}</b>`;
-        addChatMessage("bot", msg);
+        if (data.guests)      msg += `\n附加來賓 ${data.guests} 位`;
+        if (digits)           msg += `\n末 5 碼：${digits}`;
+        showAlert('✅ 執秘批次報名完成', msg);
     } catch (err) {
         showAlert('連線失敗', err.message + '\n請確認網路後再試。');
     }
 }
 
+// 報名名單：寫進社長頁的 #admin-registrants，不再擠進聊天泡泡。
 async function clickCheckRegistration(e) {
     e && e.stopPropagation();
-    addChatMessage("user", "查詢名單");
+    switchTab('admin');
+    const box = document.getElementById('admin-registrants');
+    if (!box) return;
+    const paint = (inner) => {
+        box.innerHTML = `<p class="section-title">報名名單</p><div class="card p-4">${inner}</div>`;
+        scrollToSection('admin-registrants');
+    };
+    paint('<p class="text-[13px] text-slate-400">載入中…</p>');
+
     const clubFilter = systemScope === 'club' ? myClubName : '';
     let data;
     try {
         const q = `?event=${currentActiveEvent?.id || ''}${clubFilter ? '&club=' + encodeURIComponent(clubFilter) : ''}`;
         data = await apiFetch('/admin/registrants' + q);
     } catch (err) {
-        addChatMessage("bot", `⚠️ 名單載入失敗：${err.message}`);
+        paint(`<p class="text-[13px] text-rose-500">名單載入失敗：${_escHtml(err.message)}</p>`);
         return;
     }
-    if (data.status === 'forbidden') { addChatMessage("bot", "⚠️ 您沒有查詢名單的權限。"); return; }
+    if (data.status === 'forbidden') { paint('<p class="text-[13px] text-rose-500">您沒有查詢名單的權限。</p>'); return; }
+
     const list = data.registrants || [];
-    const scopeLabel = clubFilter || '3523地區';
-    let html = `🔍 <b>【${data.event_title || currentActiveEvent?.title}】報名名單</b><br><br>`;
-    html += `<div class="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2 text-xs"><b>${scopeLabel}</b> 目前報名：${data.count} 人</div>`;
-    if (!list.length) {
-        html += `<div class="text-xs text-gray-400 italic">目前尚無人報名此活動。</div>`;
-    } else {
-        html += `<div class="space-y-1 text-xs pl-1 border-l-2 border-blue-200 ml-1">`;
-        list.forEach(m => {
-            const icon = m.checked_in ? '<i class="fa-solid fa-user-check text-emerald-500 mr-1"></i>'
-                       : (m.paid ? '<i class="fa-solid fa-circle-check text-teal-500 mr-1"></i>'
-                       : (m.uploaded ? '<i class="fa-solid fa-clock text-amber-500 mr-1"></i>'
-                       : '<i class="fa-solid fa-circle text-gray-300 mr-1"></i>'));
-            const tag = m.checked_in ? ' <span class="text-emerald-600">已報到</span>'
-                      : (m.paid ? ' <span class="text-teal-600">已繳費</span>'
-                      : (m.uploaded ? ' <span class="text-amber-600">待確認</span>' : ''));
-            const by = m.by_secretary ? ' <span class="text-[11px] text-gray-400">(執秘代報)</span>' : '';
-            html += `<div>${icon}${m.name}${tag}${by}</div>`;
-        });
-        html += `</div>`;
-    }
-    setTimeout(() => addChatMessage("bot", html), 400);
+    const scopeLabel = clubFilter || '3523 地區';
+    const head = `<div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-100">
+            <p class="font-bold text-slate-800 text-[14px] min-w-0 truncate">${_escHtml(data.event_title || currentActiveEvent?.title || '活動')}</p>
+            <span class="text-[12px] bg-blue-50 text-blue-700 font-bold px-2 py-1 rounded shrink-0">${_escHtml(scopeLabel)} ${data.count} 人</span>
+        </div>`;
+    if (!list.length) { paint(head + '<p class="text-[13px] text-slate-400">目前尚無人報名此活動。</p>'); return; }
+
+    const rows = list.map(m => {
+        const [icon, tag] = m.checked_in ? ['fa-user-check text-emerald-500', '<span class="text-[12px] text-emerald-600 font-bold">已報到</span>']
+            : m.paid     ? ['fa-circle-check text-teal-500', '<span class="text-[12px] text-teal-600 font-bold">已繳費</span>']
+            : m.uploaded ? ['fa-clock text-amber-500', '<span class="text-[12px] text-amber-600 font-bold">待確認</span>']
+            : ['fa-circle text-slate-300', ''];
+        const by = m.by_secretary ? '<span class="text-[11px] text-slate-400">執秘代報</span>' : '';
+        return `<div class="flex items-center gap-2 py-1.5 border-b border-slate-50 last:border-0">
+            <i class="fa-solid ${icon}"></i>
+            <span class="flex-1 text-[13px] text-slate-700 min-w-0 truncate">${_escHtml(m.name)}</span>${by}${tag}
+        </div>`;
+    }).join('');
+    paint(head + rows);
 }
 
 // ============================================================
@@ -2971,7 +3077,7 @@ async function submitPaymentInfo() {
         if (data.status !== 'ok') { showAlert('回報失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-payment-info');
         document.getElementById('bank-digits').value = '';
-        addChatMessage("bot", `✅ <b>匯款資訊已登錄</b><br>${data.event_title}<br>末 5 碼：<b class="text-blue-600">${digits}</b><br>對帳完成後將通知您！`);
+        showAlert('匯款資訊已登錄', `${data.event_title}\n末 5 碼：${digits}\n\n對帳完成後會通知您。`);
     } catch (err) {
         showAlert('連線失敗', err.message + '\n請確認網路後再試。');
     }
@@ -2980,88 +3086,63 @@ async function submitPaymentInfo() {
 // ============================================================
 //  CALENDAR
 // ============================================================
+// 舊版把清單塞進聊天泡泡；現在清單就在頁面上，這裡只負責帶路。
 function clickMenuItem(itemName, key) {
-    addChatMessage("user", itemName);
-    setTimeout(() => {
-        if (key === 'home-calendar') {
-            const today = new Date();   // 之前寫死 2026-06-01，過期活動會一直標成「即將到來」
-            const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 10);
-            const filtered = getActiveEventsData()
-                .filter(e => new Date(e.date) >= cutoff)
-                .sort((a, b) => new Date(a.date) - new Date(b.date))
-                .slice(0, 10);
+    if (key === 'home-calendar') {
+        switchTab('home');
+        scrollToSection('home-events');
+    } else if (key === 'profile-history') {
+        switchTab('profile');
+        scrollToSection('profile-registrations');
+    } else if (key === 'home-website') {
+        if (liff.isInClient()) liff.openWindow({ url: DISTRICT_WEBSITE, external: true });
+        else window.open(DISTRICT_WEBSITE, '_blank');
+    } else if (key === 'admin-contact') {
+        showAlert('秘書處聯絡資訊', '信箱：office@rotary3523.org.tw\n\n系統問題請附上活動名稱與畫面截圖。');
+    }
+}
 
-            let html = `<p class="font-bold text-blue-900 text-[13px] border-b border-gray-200 pb-2 mb-2">📅 ${systemScope === 'district' ? '3523地區' : '本社'} 近期活動</p><div class="space-y-3">`;
-            filtered.forEach(ev => {
-                const upcoming = new Date(ev.date) >= today;
-                html += `<div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm space-y-1.5">
-                    <div class="flex justify-between items-center">
-                        <span class="px-2 py-0.5 rounded text-white text-[10px] font-bold ${upcoming ? 'bg-emerald-500' : 'bg-gray-400'}">${upcoming ? '即將到來' : '已結束'}</span>
-                        <span class="text-gray-500 font-black text-xs">${ev.displayDate || ev.date}</span>
-                    </div>
-                    <h5 class="font-bold text-gray-900 text-sm leading-snug">${ev.title}</h5>
-                    <p class="text-gray-600 text-xs"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${ev.location}</p>
-                    <div class="flex gap-2 mt-1 mb-1">
-                        <button onclick="selectEvent(${ev.id})" class="flex-1 bg-blue-600 text-white font-bold py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1 btn-3d btn-3d-primary">
-                            <i class="fa-solid fa-hand-pointer"></i> 帶入首頁查看與報名
-                        </button>
-                        ${eventPdfButtonHTML(ev)}
-                    </div>
-                </div>`;
-            });
-            html += '</div>';
-            addChatMessage("bot", html);
-        } else if (key === 'profile-history') {
-            const all = getAllCombinedEvents();
-            const mine = myRegisteredEvents
-                .map(id => all.find(e => e.id === id))
-                .filter(Boolean)
-                .sort((a, b) => new Date(a.date) - new Date(b.date));
-            const today = new Date();
+// 我的報名紀錄（個人頁）
+function renderMyRegistrations() {
+    const box = document.getElementById('profile-registrations-list');
+    if (!box) return;
+    const all = getAllCombinedEvents();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const mine = myRegisteredEvents
+        .map(id => all.find(e => e.id === id))
+        .filter(Boolean)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-            let html = `<p class="font-bold text-blue-900 text-[13px] border-b border-gray-200 pb-2 mb-2">🔎 我的報名紀錄 · 共 ${mine.length} 筆</p>`;
-            if (mine.length === 0) {
-                html += `<p class="text-gray-500 text-xs py-2">目前尚無報名紀錄，快到「首頁」報名近期活動吧！</p>`;
-            } else {
-                html += `<div class="space-y-3">`;
-                mine.forEach(ev => {
-                    const upcoming = new Date(ev.date) >= today;
-                    html += `<div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm space-y-1.5">
-                        <div class="flex justify-between items-center">
-                            <span class="px-2 py-0.5 rounded text-white text-[10px] font-bold ${upcoming ? 'bg-emerald-500' : 'bg-gray-400'}">${upcoming ? '即將到來' : '已結束'}</span>
-                            <span class="text-gray-500 font-black text-xs">${ev.displayDate || ev.date}</span>
-                        </div>
-                        <h5 class="font-bold text-gray-900 text-sm leading-snug">${ev.title}</h5>
-                        <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-gray-600 text-xs">
-                            <span><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${ev.location}</span>
-                            ${ev.time ? `<span><i class="fa-solid fa-clock text-blue-500 mr-1"></i>${ev.time}</span>` : ''}
-                            ${ev.fee ? `<span><i class="fa-solid fa-tag text-amber-500 mr-1"></i>${ev.fee}</span>` : ''}
-                        </div>
-                        <div class="flex items-center justify-between pt-1">
-                            <span class="text-[10px] font-bold text-emerald-700"><i class="fa-solid fa-circle-check mr-1"></i>報名成功</span>
-                            <button onclick="selectEvent(${ev.id})" class="bg-blue-600 text-white font-bold py-1 px-2.5 rounded-lg text-[11px] flex items-center gap-1 btn-3d btn-3d-primary mb-1">
-                                <i class="fa-solid fa-hand-pointer"></i> 查看
-                            </button>
-                        </div>
-                    </div>`;
-                });
-                html += '</div>';
-            }
-            addChatMessage("bot", html);
-        } else if (key === 'home-website') {
-            if (liff.isInClient()) liff.openWindow({ url: DISTRICT_WEBSITE, external: true });
-            else window.open(DISTRICT_WEBSITE, '_blank');
-        } else if (key === 'admin-contact') {
-            addChatMessage("bot", "☎️ <b>秘書處聯絡資訊</b><br>信箱：office@rotary3523.org.tw");
-        }
-    }, 400);
+    document.getElementById('profile-registrations-count').textContent = `${mine.length} 筆`;
+    if (!mine.length) {
+        box.innerHTML = `<div class="card p-5 text-center text-[13px] text-slate-400">目前尚無報名紀錄，可到首頁報名近期活動。</div>`;
+        return;
+    }
+    box.innerHTML = mine.map(ev => {
+        const upcoming = new Date(ev.date) >= today;
+        return `<div class="card p-3">
+            <div class="flex justify-between items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-white text-[12px] font-bold ${upcoming ? 'bg-emerald-500' : 'bg-slate-400'}">${upcoming ? '即將到來' : '已結束'}</span>
+                <span class="text-slate-500 font-bold text-[13px]">${_escHtml(ev.displayDate || ev.date)}</span>
+            </div>
+            <h3 class="font-bold text-slate-900 text-[15px] leading-snug mt-1.5">${_escHtml(ev.title)}</h3>
+            <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-slate-500 text-[13px] mt-1">
+                <span><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${_escHtml(ev.location || '—')}</span>
+                ${ev.time ? `<span><i class="fa-regular fa-clock text-blue-500 mr-1"></i>${_escHtml(ev.time)}</span>` : ''}
+                ${ev.fee ? `<span><i class="fa-solid fa-tag text-amber-500 mr-1"></i>${_escHtml(ev.fee)}</span>` : ''}
+            </div>
+            <div class="flex items-center justify-between pt-2 mt-2 border-t border-slate-100">
+                <span class="text-[12px] font-bold text-emerald-700"><i class="fa-solid fa-circle-check mr-1"></i>報名成功</span>
+                <button onclick="selectEvent(${ev.id})" class="min-h-[44px] px-4 rounded-lg bg-blue-50 text-blue-700 font-bold text-[13px]">查看</button>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 // E-books that are already online, mapped to their page (relative to this file).
 const EBOOK_PAGES = { '本社社刊': 'bulletin.html' };
 
 async function clickEbook(name) {
-    addChatMessage("user", name);
     const page = EBOOK_PAGES[name];
     if (page) {
         // 社刊改成「每個例會一份」：編輯是從行事曆的例會列開啟。這個「每週社刊」磚一律開
@@ -3072,7 +3153,7 @@ async function clickEbook(name) {
         else window.open(url, '_blank');
         return;
     }
-    setTimeout(() => addChatMessage("bot", `📖 《${name}》電子書建置中，上線後即可於此線上翻閱。`), 400);
+    showAlert(name, '電子書建置中，上線後即可於此線上翻閱。');
 }
 
 // 行事曆活動卡的 PDF 鈕路由：
@@ -3248,34 +3329,46 @@ function _awardLine(a) {
     return `• <b>${a['獎項'] || '—'}</b>${who ? '　' + who : ''}${slot}${note}`;
 }
 
+// 得獎查詢結果寫進個人頁的區塊（原本是塞聊天泡泡，長名單根本讀不了）
+function _awardsBox(title, bodyHtml) {
+    const box = document.getElementById('profile-awards-result');
+    if (!box) return;
+    box.innerHTML = `<div class="card p-4">
+        <p class="font-bold text-slate-800 text-[14px] mb-2">${title}</p>
+        <div class="text-[13px] text-slate-600 leading-relaxed space-y-1">${bodyHtml}</div></div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 async function clickMyAwards() {
-    addChatMessage("user", "我得什麼獎");
+    _awardsBox('🏆 個人得獎查詢', '<p class="text-slate-400">查詢中…</p>');
     try {
         const data = await apiFetch('/awards/me');
         if (data.status !== 'ok' || !data.count) {
-            addChatMessage("bot", `🏆 <b>個人得獎查詢</b><br>${lineProfile?.displayName || '社友'} 您好，目前查無您的得獎紀錄。<br><small class="text-gray-400">若您剛更新資料，請稍後再查，或確認個人資料的姓名 / Nickname 與頒獎名單一致。</small>`);
+            _awardsBox('🏆 個人得獎查詢',
+                `<p>${_escHtml(lineProfile?.displayName || '社友')} 您好，目前查無您的得獎紀錄。</p>
+                 <p class="text-slate-400 text-[12px]">若剛更新過資料請稍後再查，或確認個人資料的姓名 / Nickname 與頒獎名單一致。</p>`);
             return;
         }
-        const list = data.awards.map(_awardLine).join('<br>');
-        addChatMessage("bot", `🏆 <b>個人得獎查詢</b><br>恭喜 <b>${data.name || lineProfile?.displayName || '社友'}</b>，共 ${data.count} 項：<br><br>${list}`);
+        _awardsBox(`🏆 恭喜 ${_escHtml(data.name || lineProfile?.displayName || '社友')}，共 ${data.count} 項`,
+                   data.awards.map(_awardLine).join('<br>'));
     } catch (e) {
-        addChatMessage("bot", "⚠️ 得獎查詢暫時無法使用，請稍後再試。");
+        _awardsBox('🏆 個人得獎查詢', '<p class="text-rose-500">查詢暫時無法使用，請稍後再試。</p>');
     }
 }
 
 async function clickClubAwards() {
-    addChatMessage("user", "社內得獎名單");
+    _awardsBox('🏅 社內得獎名單', '<p class="text-slate-400">查詢中…</p>');
     try {
         const data = await apiFetch('/awards/club');
         const clubName = data.club || myClubName || '本社';
         if (data.status !== 'ok' || !data.count) {
-            addChatMessage("bot", `🏅 <b>【${clubName} - 得獎名單】</b><br>目前查無得獎紀錄。`);
+            _awardsBox(`🏅 ${_escHtml(clubName)} 得獎名單`, '<p>目前查無得獎紀錄。</p>');
             return;
         }
-        const list = data.awards.map(_awardLine).join('<br>');
-        addChatMessage("bot", `🏅 <b>【${clubName} - 得獎名單】</b><br>共 ${data.count} 項：<br><br>${list}`);
+        _awardsBox(`🏅 ${_escHtml(clubName)} 得獎名單 · 共 ${data.count} 項`,
+                   data.awards.map(_awardLine).join('<br>'));
     } catch (e) {
-        addChatMessage("bot", "⚠️ 得獎查詢暫時無法使用，請稍後再試。");
+        _awardsBox('🏅 社內得獎名單', '<p class="text-rose-500">查詢暫時無法使用，請稍後再試。</p>');
     }
 }
 
@@ -3589,7 +3682,7 @@ async function executeGroupSwap() {
         if (data.status !== 'ok') { showAlert('調組失敗', data.message || '請稍後再試。'); return; }
         await reloadGolfGroups();
         closeModal('modal-swap-group');
-        addChatMessage("bot", `✅ <b>即時調組成功</b><br>${_escHtml(data.a.name)}（第 ${data.a.group_no} 組）↔ ${_escHtml(data.b.name)}（第 ${data.b.group_no} 組）<br><span class="text-[10px] text-gray-500">※ 已透過 LINE 通知兩位球友。</span>`);
+        showAlert('即時調組成功', `${data.a.name} → 第 ${data.a.group_no} 組\n${data.b.name} → 第 ${data.b.group_no} 組\n\n已透過 LINE 通知兩位球友。`);
     } catch (err) {
         showAlert('連線失敗', err.message);
     }
@@ -3612,7 +3705,7 @@ async function executeDrawHoles() {
         closeModal('modal-draw-holes');
         const holes = data.holes.map(h => h + 1).join('、H');
         const note = data.already ? '（先前已抽出，維持不變）' : '';
-        addChatMessage('bot', `🎲 <b>【新貝利亞抽洞完成】</b>${note}<br><br>隱藏洞：<br><b class="text-emerald-600">H${holes}</b><br><br>👉 淨桿排行已依此 6 洞重新結算，主委可於賽事成績看板檢視。`);
+        showAlert('新貝利亞抽洞完成', `隱藏洞：H${holes}${note ? '（先前已抽出，維持不變）' : ''}\n\n淨桿排行已依此 6 洞重新結算。`);
     } catch (e) {
         showAlert('抽洞失敗', e.message);
     }
@@ -3712,29 +3805,65 @@ async function sendReminderPush(btn, clubName) {
 // ============================================================
 //  UTILS
 // ============================================================
-function addChatMessage(sender, html) {
-    const area = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    if (sender === 'user') {
-        div.className = "flex items-start gap-2.5 justify-end";
-        div.innerHTML = `<div class="max-w-[80%]"><div class="bg-[#8bf26c] text-slate-900 rounded-2xl rounded-tr-none p-3 text-sm shadow-sm">${html}</div><span class="text-[11px] text-white/60 text-right block mt-1">剛剛</span></div>`;
-    } else if (sender === 'system') {
-        div.className = "flex justify-center";
-        div.innerHTML = `<div class="bg-black/20 text-white/80 rounded-full px-3 py-1 text-[10px] text-center">${html}</div>`;
-    } else {
-        div.className = "flex items-start gap-2.5";
-        div.innerHTML = `<div class="w-8 h-8 rounded-full bg-blue-800 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm">3523</div><div class="max-w-[82%]"><div class="bg-white text-gray-800 rounded-2xl rounded-tl-none p-3 text-sm shadow-sm leading-relaxed">${html}</div><span class="text-[11px] text-white/60 ml-1 mt-1 block">剛剛</span></div>`;
-    }
-    area.appendChild(div);
-    area.scrollTop = area.scrollHeight;
+function openModal(id) {
+    document.getElementById(id)?.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
 }
-
-function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
-function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+function closeModal(id) {
+    document.getElementById(id)?.classList.add('hidden');
+    // 還有其他 modal 開著就別解鎖背景捲動（很多流程是一層疊一層開的）。
+    if (!document.querySelector('[id^="modal-"]:not(.hidden)')) {
+        document.body.classList.remove('overflow-hidden');
+    }
+}
 function showAlert(title, msg) {
     document.getElementById('alert-title').textContent = title;
     document.getElementById('alert-message').textContent = msg;
     openModal('modal-alert');
+}
+
+// ---- 浮現提示 / 全屏等待 ----------------------------------------------------
+// 一律 textContent：這些訊息常常夾著使用者或後端來的字串，不該當成 HTML 解析。
+const TOAST_STYLE = {
+    info:    ['fa-circle-info', 'text-blue-300'],
+    success: ['fa-circle-check', 'text-emerald-300'],
+    warn:    ['fa-triangle-exclamation', 'text-amber-300'],
+};
+
+function showToast(msg, type = 'info', ms = 2600) {
+    const box = document.getElementById('toast-container');
+    if (!box) return;
+    while (box.children.length >= 3) box.firstElementChild.remove();
+    const [icon, color] = TOAST_STYLE[type] || TOAST_STYLE.info;
+    const el = document.createElement('div');
+    el.className = 'bg-slate-900/95 text-white rounded-xl shadow-lg px-4 py-2.5 text-[13px] font-bold '
+                 + 'flex items-center gap-2 max-w-sm transition-opacity duration-200 opacity-0';
+    const i = document.createElement('i');
+    i.className = `fa-solid ${icon} ${color}`;
+    const span = document.createElement('span');
+    span.textContent = msg;
+    el.append(i, span);
+    box.appendChild(el);
+    requestAnimationFrame(() => el.classList.remove('opacity-0'));
+    setTimeout(() => {
+        el.classList.add('opacity-0');
+        setTimeout(() => el.remove(), 220);
+    }, ms);
+}
+
+function showBlockingLoader(msg) {
+    const el = document.getElementById('blocking-loader');
+    if (!el) return;
+    document.getElementById('blocking-loader-text').textContent = msg || '處理中…';
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+}
+
+function hideBlockingLoader() {
+    const el = document.getElementById('blocking-loader');
+    if (!el) return;
+    el.classList.add('hidden');
+    el.classList.remove('flex');
 }
 
 // ============================================================
@@ -3742,16 +3871,12 @@ function showAlert(title, msg) {
 // ============================================================
 // Re-render scope-dependent menus after a deep link changes systemScope.
 async function applyScopeTheme() {
-    updateAdminTabLabel();
-    await loadEvents(systemScope);
-    currentActiveEvent = findClosestUpcomingEvent();
-    updateBanner();
-    renderEbooksMenu();
-    renderProfileMenu();
-    renderAdminMenu();
+    await applyScopeChrome();
 }
 
-function handleDeepLink() {
+// 必須 async：以前沒等 applyScopeTheme（內含 loadEvents）就派送 action，
+// ?scope=club&action=club_finance 會拿到地區的活動清單。
+async function handleDeepLink() {
     const p = new URLSearchParams(location.search);
     const tab = p.get('tab');
     const action = p.get('action');
@@ -3759,12 +3884,12 @@ function handleDeepLink() {
 
     if (scope === 'club' || scope === 'district') {
         systemScope = scope;
-        applyScopeTheme();
+        await applyScopeTheme();
     }
-    if (tab && ['home','profile','ebooks','admin'].includes(tab)) switchTab(tab);
+    if (tab && PAGES.includes(tab)) switchTab(tab);
 
     if (action === 'payment') setTimeout(() => openModal('modal-payment-info'), 300);
-    if (action === 'calendar') setTimeout(() => clickMenuItem('年度活動行事曆', 'home-calendar'), 300);
+    if (action === 'calendar') setTimeout(() => { switchTab('home'); scrollToSection('home-events'); }, 300);
     if (action === 'qrcode')  setTimeout(() => openMyQrModal(), 300);
     if (action === 'scanner') {
         checkinEventId = parseInt(p.get('event')) || null;
