@@ -1414,6 +1414,24 @@ function renderActivePages() {
     renderPage(activeTab);
 }
 
+// 深連結帶的 event=N 要真的變成「目前活動」。活動可能在另一個視角，
+// 快取裡找不到就把兩邊都載進來再找一次。
+async function setActiveEventById(eventId) {
+    if (!eventId) return false;
+    let ev = getAllCombinedEvents().find(e => e.id === eventId);
+    if (!ev) {
+        await Promise.all([
+            eventsCache.district ? Promise.resolve() : loadEvents('district'),
+            eventsCache.club ? Promise.resolve() : loadEvents('club'),
+        ]);
+        ev = getAllCombinedEvents().find(e => e.id === eventId);
+    }
+    if (!ev) return false;
+    currentActiveEvent = ev;
+    if (ev.id !== 106) isGolfCheckedIn = false;
+    return true;
+}
+
 function scrollToSection(id) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -3952,6 +3970,9 @@ async function handleDeepLink() {
         systemScope = scope;
         await applyScopeTheme();
     }
+    // 連結指定了活動就把它設為目前活動：社長頁的「現場作業」與抽洞這類操作
+    // 都是看 currentActiveEvent，不設的話會對到「最近的一場」而不是連結指定的那場。
+    await setActiveEventById(parseInt(p.get('event')) || null);
     if (tab && PAGES.includes(tab)) switchTab(tab);
 
     if (action === 'payment') setTimeout(() => openModal('modal-payment-info'), 300);
