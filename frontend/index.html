@@ -3153,15 +3153,29 @@ function renderMyRegistrations() {
     if (!box) return;
     const all = getAllCombinedEvents();
     const today = new Date(); today.setHours(0, 0, 0, 0);
+    // 只列目前視角的活動；活動被刪掉、查不到 scope 的紀錄不過濾掉，免得整筆消失。
+    const inScope = r => !r.scope || r.scope === systemScope;
     const mine = myRegistrations
+        .filter(inScope)
         .map(r => ({ ...(all.find(e => e.id === r.event_id) || {}), ...r }))
         .sort((a, b) => new Date(b.date) - new Date(a.date));   // 最近的排前面
+    const otherCount = myRegistrations.length - mine.length;
+    const otherLabel = systemScope === 'district' ? '本社' : '地區';
 
     document.getElementById('profile-registrations-count').textContent = `${mine.length} 筆`;
     if (!mine.length) {
-        box.innerHTML = `<div class="card p-5 text-center text-[13px] text-slate-400">目前尚無報名紀錄，可到首頁報名近期活動。</div>`;
+        // 另一個視角還有紀錄的話要講清楚，不然會以為紀錄不見了
+        box.innerHTML = `<div class="card p-5 text-center text-[13px] text-slate-400">
+            目前沒有${systemScope === 'district' ? '地區' : '本社'}的報名紀錄。
+            ${otherCount ? `<br><button onclick="setScope('${systemScope === 'district' ? 'club' : 'district'}')" class="text-blue-600 font-bold underline mt-1">${otherLabel}還有 ${otherCount} 筆，切過去看</button>`
+                         : '<br>可到首頁報名近期活動。'}
+        </div>`;
         return;
     }
+    const otherHint = otherCount
+        ? `<button onclick="setScope('${systemScope === 'district' ? 'club' : 'district'}')" class="w-full text-center text-[12px] text-slate-400 py-1">
+             ${otherLabel}還有 ${otherCount} 筆報名紀錄，點此切換</button>`
+        : '';
     box.innerHTML = mine.map(ev => {
         const upcoming = ev.date && new Date(ev.date) >= today;
         const status = ev.checked_in
@@ -3188,7 +3202,7 @@ function renderMyRegistrations() {
                     ? `<button onclick="selectEvent(${ev.event_id})" class="min-h-[44px] px-4 rounded-lg bg-blue-50 text-blue-700 font-bold text-[13px] shrink-0">查看</button>` : ''}
             </div>
         </div>`;
-    }).join('');
+    }).join('') + otherHint;
 }
 
 // E-books that are already online, mapped to their page (relative to this file).

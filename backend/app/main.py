@@ -1782,6 +1782,8 @@ async def attendance_me(request: Request):
             "location": ev["location"] if ev else "",
             "time": ev["time"] if ev else "",
             "fee": ev["fee"] if ev else "",
+            # 前端的「我的報名紀錄」依目前視角過濾，所以要知道這筆屬於地區還是社內
+            "scope": ev["scope"] if ev else "",
             "checked_in": bool(r["checked_in"]),
             "payment_status": r["payment_status"],
         })
