@@ -86,7 +86,7 @@
                 <i class="fa-solid fa-globe text-white text-xs" id="scope-icon"></i>
             </div>
             <div class="flex flex-col">
-                <span class="text-[8px] text-gray-400 font-bold -mb-0.5">目前作業視角</span>
+                <span class="text-[10px] text-gray-400 font-bold -mb-0.5">目前作業視角</span>
                 <span class="text-xs font-bold tracking-wide text-yellow-400" id="ui-current-scope">🌐 3523 地區總部</span>
             </div>
         </div>
@@ -104,23 +104,24 @@
     <div class="bg-white shadow-[0_-6px_20px_rgba(0,0,0,0.15)] shrink-0 rounded-t-3xl overflow-hidden safe-bottom">
 
         <!-- Tab Headers -->
-        <div id="rm-tab-headers" class="grid grid-cols-4 bg-gray-50 text-center text-[10px] font-bold border-b border-gray-200">
-            <button onclick="switchTab('home')" id="tab-home" class="py-3 text-gray-500 relative transition-all active-tab">
-                <i class="fa-solid fa-house-chimney mr-0.5 text-blue-600"></i>首頁
+        <!-- 管理分頁只有管理團隊看得到（setRole 會切換 grid-cols-3/4），一般社友不必看鎖頭。 -->
+        <div id="rm-tab-headers" class="grid grid-cols-3 bg-gray-50 text-center text-[13px] font-bold border-b border-gray-200">
+            <button onclick="switchTab('home')" id="tab-home" class="py-3.5 text-gray-500 relative transition-all active-tab">
+                <i class="fa-solid fa-house-chimney mr-1 text-blue-600"></i>首頁
             </button>
-            <button onclick="switchTab('profile')" id="tab-profile" class="py-3 text-gray-500 relative transition-all">
-                <i class="fa-solid fa-id-card mr-0.5"></i>個人
+            <button onclick="switchTab('profile')" id="tab-profile" class="py-3.5 text-gray-500 relative transition-all">
+                <i class="fa-solid fa-id-card mr-1"></i>個人
             </button>
-            <button onclick="switchTab('ebooks')" id="tab-ebooks" class="py-3 text-gray-500 relative transition-all">
-                <i class="fa-solid fa-book-open mr-0.5"></i>刊物
+            <button onclick="switchTab('ebooks')" id="tab-ebooks" class="py-3.5 text-gray-500 relative transition-all">
+                <i class="fa-solid fa-book-open mr-1"></i>刊物
             </button>
-            <button onclick="switchTab('admin')" id="tab-admin" class="py-3 text-gray-500 relative flex items-center justify-center gap-0.5 transition-all">
+            <button onclick="switchTab('admin')" id="tab-admin" class="hidden py-3.5 text-gray-500 relative items-center justify-center gap-1 transition-all">
                 <i class="fa-solid fa-star text-yellow-500"></i><span id="tab-admin-label">主委</span>
             </button>
         </div>
 
         <!-- Tab Content -->
-        <div id="rm-tab-content" class="bg-slate-200/80 h-48 relative p-2">
+        <div id="rm-tab-content" class="bg-slate-200/80 h-60 relative p-2">
 
             <!-- TAB 1: HOME -->
             <div id="menu-content-home" class="grid grid-cols-3 grid-rows-2 h-full gap-2">
@@ -130,36 +131,37 @@
                         <div class="z-10 flex-1 flex flex-col justify-between">
                             <div>
                                 <div class="flex items-center justify-between">
-                                    <span id="banner-tag" class="text-[9px] bg-yellow-500 text-blue-950 font-extrabold px-1.5 py-0.5 rounded shadow-sm tracking-wider uppercase">--</span>
-                                    <span id="banner-date" class="text-[9px] text-yellow-300 font-semibold bg-black/20 px-1.5 py-0.5 rounded-full">--</span>
+                                    <span id="banner-tag" class="text-[12px] bg-yellow-500 text-blue-950 font-extrabold px-2 py-0.5 rounded shadow-sm tracking-wider uppercase">--</span>
+                                    <span id="banner-date" class="text-[12px] text-yellow-300 font-semibold bg-black/20 px-2 py-0.5 rounded-full">--</span>
                                 </div>
-                                <h4 id="banner-title" class="font-black text-sm mt-1 tracking-wide leading-snug drop-shadow-md truncate-2-lines h-8 overflow-hidden">載入中...</h4>
-                                <p id="banner-loc-text" class="text-[9px] text-gray-300 mt-0.5 truncate flex items-center"><i class="fa-solid fa-location-dot text-rose-400 mr-1.5"></i>--</p>
+                                <h4 id="banner-title" class="font-black text-base mt-1 tracking-wide leading-snug drop-shadow-md truncate-2-lines min-h-[3rem] overflow-hidden">載入中...</h4>
+                                <p id="banner-loc-text" class="text-[12px] text-gray-300 mt-0.5 truncate flex items-center"><i class="fa-solid fa-location-dot text-rose-400 mr-1.5"></i>--</p>
                             </div>
                             <div class="flex items-center justify-between mt-auto pt-1">
-                                <span class="text-yellow-400 text-[13px] font-black tracking-widest drop-shadow-md flex items-center gap-1.5 bg-black/30 px-2 py-0.5 rounded-md border border-yellow-400/30">
-                                    <i class="fa-solid fa-pen-to-square text-xs"></i>我要報名
+                                <span class="text-yellow-400 text-[15px] font-black tracking-widest drop-shadow-md flex items-center gap-1.5 bg-black/30 px-2.5 py-1 rounded-md border border-yellow-400/30">
+                                    <i class="fa-solid fa-pen-to-square text-sm"></i>我要報名
                                 </span>
-                                <i class="fa-solid fa-circle-arrow-right text-yellow-400 text-lg animate-pulse drop-shadow-md"></i>
+                                <i class="fa-solid fa-circle-arrow-right text-yellow-400 text-xl animate-pulse drop-shadow-md"></i>
                             </div>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-1.5 shrink-0 pt-0.5">
-                        <button onclick="clickHelpRegister(event)" class="bg-white text-slate-700 py-1.5 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 btn-3d btn-3d-white mb-1">
+                    <!-- 執秘專用，一般社友不顯示（setRole 控制） -->
+                    <div id="home-admin-actions" class="hidden grid grid-cols-2 gap-1.5 shrink-0 pt-0.5">
+                        <button onclick="clickHelpRegister(event)" class="bg-white text-slate-700 min-h-[44px] py-2.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 btn-3d btn-3d-white mb-1">
                             <i class="fa-solid fa-user-plus text-blue-500 text-sm"></i>執秘報名
                         </button>
-                        <button onclick="clickCheckRegistration(event)" class="bg-white text-slate-700 py-1.5 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 btn-3d btn-3d-white mb-1">
+                        <button onclick="clickCheckRegistration(event)" class="bg-white text-slate-700 min-h-[44px] py-2.5 rounded-xl text-[12px] font-bold flex items-center justify-center gap-1.5 btn-3d btn-3d-white mb-1">
                             <i class="fa-solid fa-list-check text-purple-500 text-sm"></i>查名單
                         </button>
                     </div>
                 </div>
                 <div onclick="clickMenuItem('行事曆', 'home-calendar')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-calendar-days"></i></div>
-                    <span class="text-[10px] font-bold text-slate-700">行事曆</span>
+                    <div class="w-11 h-11 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shadow-inner"><i class="fa-solid fa-calendar-days"></i></div>
+                    <span class="text-[13px] font-bold text-slate-700">行事曆</span>
                 </div>
                 <div onclick="clickMenuItem('官網首頁', 'home-website')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <div class="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm shadow-inner"><i class="fa-solid fa-globe"></i></div>
-                    <span class="text-[10px] font-bold text-slate-700">官網</span>
+                    <div class="w-11 h-11 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-lg shadow-inner"><i class="fa-solid fa-globe"></i></div>
+                    <span class="text-[13px] font-bold text-slate-700">官網</span>
                 </div>
             </div>
 
@@ -182,10 +184,9 @@
         </div>
 
         <!-- Toggle bar -->
-        <div onclick="toggleRichMenu()" class="bg-gray-100 text-gray-500 pt-2 pb-3 text-center text-[11px] font-semibold cursor-pointer border-t border-gray-200 flex items-center justify-center gap-1.5">
-            <i class="fa-solid fa-keyboard text-gray-400"></i>
-            <span id="rm-toggle-text">隱藏選單</span>
-            <i id="rm-toggle-icon" class="fa-solid fa-chevron-down text-[9px] text-gray-400"></i>
+        <div onclick="toggleRichMenu()" class="bg-gray-100 text-gray-600 pt-2.5 pb-3.5 text-center text-[13px] font-semibold cursor-pointer border-t border-gray-200 flex items-center justify-center gap-1.5">
+            <span id="rm-toggle-text">收合選單</span>
+            <i id="rm-toggle-icon" class="fa-solid fa-chevron-down text-[11px] text-gray-400"></i>
         </div>
     </div>
 </div>
@@ -344,7 +345,7 @@
                 </div>
                 <div onclick="openUnpaidDetailsModal()" class="bg-white p-3 rounded-2xl border border-rose-100 shadow-sm flex items-center gap-2 cursor-pointer hover:bg-rose-50 active:bg-rose-100 transition-colors relative">
                     <div class="w-9 h-9 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center"><i class="fa-solid fa-hourglass-half"></i></div>
-                    <div><span class="text-[10px] text-gray-400 block font-bold">待繳費 <i class="fa-solid fa-chevron-right text-[8px] text-rose-300"></i></span><span class="text-lg font-black text-rose-600" id="kpi-total-unpay">0 筆</span></div>
+                    <div><span class="text-[10px] text-gray-400 block font-bold">待繳費 <i class="fa-solid fa-chevron-right text-[10px] text-rose-300"></i></span><span class="text-lg font-black text-rose-600" id="kpi-total-unpay">0 筆</span></div>
                 </div>
             </div>
             <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -424,7 +425,7 @@
         <div class="overflow-y-auto p-4 space-y-4 flex-1 bg-gray-50 no-scrollbar">
             <div class="bg-purple-50 border border-purple-200 p-2.5 rounded-xl text-xs text-purple-800 flex justify-between items-center shadow-sm">
                 <span><i class="fa-solid fa-clock mr-1"></i> 切割基準時間：<b class="text-purple-900 font-black" id="vip-cutoff">--:--</b></span>
-                <span class="text-[9px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold shadow-sm">開場後抵達列入補介紹</span>
+                <span class="text-[11px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold shadow-sm">開場後抵達列入補介紹</span>
             </div>
             <div class="bg-white border border-gray-200 rounded-xl p-2.5 shadow-sm flex gap-1.5">
                 <input type="text" id="vip-new-name" placeholder="貴賓姓名" class="w-1/3 bg-gray-50 border border-gray-300 rounded-lg py-1.5 px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-purple-500">
@@ -1308,50 +1309,37 @@ function toggleRichMenu() {
     if (isRichMenuOpen) {
         contentArea?.classList.remove('hidden');
         tabHeaders?.classList.remove('hidden');
-        icon.className = 'fa-solid fa-chevron-down text-[9px] text-gray-400';
-        text.textContent = '隱藏選單';
+        icon.className = 'fa-solid fa-chevron-down text-[11px] text-gray-400';
+        text.textContent = '收合選單';
     } else {
         contentArea?.classList.add('hidden');
         tabHeaders?.classList.add('hidden');
-        icon.className = 'fa-solid fa-chevron-up text-[9px] text-gray-400';
-        text.textContent = '顯示選單';
+        icon.className = 'fa-solid fa-chevron-up text-[11px] text-gray-400';
+        text.textContent = '展開選單';
     }
 }
 
 // ============================================================
 //  MENU RENDERERS
 // ============================================================
+// 尚未上線的刊物用灰階 + 「尚未上線」標示，不要跟能看的長得一模一樣讓人白點一次。
 function renderEbooksMenu() {
     const c = document.getElementById('menu-content-ebooks');
-    if (systemScope === 'district') {
-        c.innerHTML = `
-            <div onclick="clickEbook('地區活動手冊')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-book-open-reader"></i></div>
-                <span class="text-xs font-extrabold text-slate-800">活動手冊</span>
-            </div>
-            <div onclick="clickEbook('年度成果冊')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-award"></i></div>
-                <span class="text-xs font-extrabold text-slate-800">年度成果冊</span>
-            </div>
-            <div onclick="clickEbook('捐贈成果報告')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-rose-500 to-pink-500 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-hand-holding-heart"></i></div>
-                <span class="text-xs font-extrabold text-slate-800">捐贈報告</span>
-            </div>`;
-    } else {
-        c.innerHTML = `
-            <div onclick="clickEbook('本社社刊')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-emerald-600 to-emerald-400 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-newspaper"></i></div>
-                <span class="text-xs font-extrabold text-slate-800">每週社刊</span>
-            </div>
-            <div onclick="clickEbook('財務報表')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-teal-500 to-teal-400 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-file-invoice-dollar"></i></div>
-                <span class="text-xs font-extrabold text-slate-800">財務報表</span>
-            </div>
-            <div onclick="clickEbook('社友名錄')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-address-book"></i></div>
-                <span class="text-xs font-extrabold text-slate-800">社友名錄</span>
-            </div>`;
-    }
+    const books = systemScope === 'district'
+        ? [['地區活動手冊', '活動手冊', 'fa-book-open-reader', 'from-blue-600 to-blue-400'],
+           ['年度成果冊', '年度成果冊', 'fa-award', 'from-amber-500 to-yellow-400'],
+           ['捐贈成果報告', '捐贈報告', 'fa-hand-holding-heart', 'from-rose-500 to-pink-500']]
+        : [['本社社刊', '每週社刊', 'fa-newspaper', 'from-emerald-600 to-emerald-400'],
+           ['財務報表', '財務報表', 'fa-file-invoice-dollar', 'from-teal-500 to-teal-400'],
+           ['社友名錄', '社友名錄', 'fa-address-book', 'from-indigo-500 to-purple-500']];
+    c.innerHTML = books.map(([key, label, icon, grad]) => {
+        const online = !!EBOOK_PAGES[key];
+        return `<div onclick="clickEbook('${key}')" class="relative bg-white rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer p-2 btn-3d btn-3d-white mb-1 ${online ? '' : 'opacity-60'}">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-tr ${grad} text-white flex items-center justify-center text-xl ${online ? '' : 'grayscale'}"><i class="fa-solid ${icon}"></i></div>
+            <span class="text-[13px] font-extrabold text-slate-800">${label}</span>
+            ${online ? '' : '<span class="absolute top-1.5 right-1.5 text-[10px] bg-gray-200 text-gray-500 font-bold px-1.5 py-0.5 rounded">尚未上線</span>'}
+        </div>`;
+    }).join('');
 }
 
 function renderProfileMenu() {
@@ -1365,9 +1353,9 @@ function renderProfileMenu() {
         c.innerHTML = `
             <div class="col-span-2 bg-gradient-to-br from-emerald-950 via-emerald-800 to-green-950 p-2.5 text-white flex flex-col justify-between rounded-2xl btn-3d btn-3d-dark mb-1">
                 <div>
-                    <span class="text-[9px] bg-yellow-500 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-sm">報到成功</span>
+                    <span class="text-[11px] bg-yellow-500 text-slate-950 font-black px-1.5 py-0.5 rounded shadow-sm">報到成功</span>
                     <h4 class="font-black text-[11px] text-yellow-100 mt-1">${lineProfile?.displayName || '社友'}，歡迎！</h4>
-                    <p class="text-[9px] text-emerald-200 mt-0.5">置物櫃: 88 號 ｜ 第 18 組</p>
+                    <p class="text-[11px] text-emerald-200 mt-0.5">置物櫃: 88 號 ｜ 第 18 組</p>
                 </div>
             </div>
             <div onclick="openGolfScorecard()" class="bg-gradient-to-tr from-yellow-500 via-amber-400 to-yellow-300 p-2 text-slate-900 flex flex-col items-center justify-center gap-1.5 cursor-pointer rounded-2xl btn-3d btn-3d-warning mb-1">
@@ -1381,7 +1369,7 @@ function renderProfileMenu() {
             <div class="col-span-2 flex flex-col gap-2 h-full">
                 <div onclick="launchScannerModal()" class="flex-1 bg-gradient-to-br ${grad} p-2.5 text-white flex flex-col justify-center gap-1 cursor-pointer rounded-2xl btn-3d btn-3d-dark mb-1">
                     <div class="flex items-center justify-between">
-                        <span class="text-[9px] bg-white/20 font-extrabold px-1.5 py-0.5 rounded">LIFF 已綁定</span>
+                        <span class="text-[11px] bg-white/20 font-extrabold px-1.5 py-0.5 rounded">LIFF 已綁定</span>
                         <i class="fa-solid fa-qrcode text-lg opacity-80 text-yellow-300"></i>
                     </div>
                     <h4 class="font-bold text-sm mt-1">讀取大會報到 QR</h4>
@@ -1397,21 +1385,21 @@ function renderProfileMenu() {
             </div>
             <div class="grid grid-rows-2 gap-2">
                 <div onclick="clickMenuItem('查詢紀錄','profile-history')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-clock-rotate-left text-lg text-indigo-500"></i><span class="text-xxs font-bold text-slate-700">報名紀錄</span>
+                    <i class="fa-solid fa-clock-rotate-left text-2xl text-indigo-500"></i><span class="text-[13px] font-bold text-slate-700">報名紀錄</span>
                 </div>
                 <div onclick="openModal('modal-payment-info')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-money-check-dollar text-lg text-teal-600"></i><span class="text-xxs font-bold text-slate-700">回報匯款</span>
+                    <i class="fa-solid fa-money-check-dollar text-2xl text-teal-600"></i><span class="text-[13px] font-bold text-slate-700">回報匯款</span>
                 </div>
             </div>`;
     } else {
         c.innerHTML = `
             <div onclick="launchScannerModal()" class="col-span-2 bg-gradient-to-br ${grad} p-3 text-white flex flex-col justify-between rounded-2xl cursor-pointer btn-3d btn-3d-dark mb-1">
                 <div>
-                    <span class="text-[10px] bg-white/20 font-extrabold px-1.5 py-0.5 rounded">LIFF 身份已綁定</span>
-                    <h4 class="font-bold text-sm mt-1.5">讀取${title}報到 QR</h4>
-                    <p class="text-[9px] text-white/80 mt-1">請掃描現場條碼完成報到。</p>
+                    <span class="text-[11px] bg-white/20 font-extrabold px-2 py-0.5 rounded">LIFF 身份已綁定</span>
+                    <h4 class="font-bold text-base mt-1.5">讀取${title}報到 QR</h4>
+                    <p class="text-[11px] text-white/80 mt-1">請掃描現場條碼完成報到。</p>
                 </div>
-                <div class="flex items-center justify-between text-[10px] font-bold text-yellow-300">
+                <div class="flex items-center justify-between text-[13px] font-bold text-yellow-300">
                     <span>開啟相機 <i class="fa-solid fa-camera ml-1"></i></span>
                     <i class="fa-solid fa-qrcode text-xl opacity-80"></i>
                 </div>
@@ -1419,16 +1407,16 @@ function renderProfileMenu() {
             <div class="grid grid-rows-2 gap-2">
                 ${systemScope === 'district' ? `
                 <div onclick="openMatchmakingModal()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-robot text-lg text-blue-500"></i><span class="text-[10px] font-bold text-slate-700">產業媒合</span>
+                    <i class="fa-solid fa-robot text-2xl text-blue-500"></i><span class="text-[13px] font-bold text-slate-700">產業媒合</span>
                 </div>
                 <div onclick="openModal('modal-payment-info')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-money-check-dollar text-lg text-teal-600"></i><span class="text-[10px] font-bold text-slate-700">回報匯款</span>
+                    <i class="fa-solid fa-money-check-dollar text-2xl text-teal-600"></i><span class="text-[13px] font-bold text-slate-700">回報匯款</span>
                 </div>` : `
                 <div onclick="openAttendanceModal('me')" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-id-card-clip text-lg text-emerald-600"></i><span class="text-[10px] font-bold text-slate-700">出席累計</span>
+                    <i class="fa-solid fa-id-card-clip text-2xl text-emerald-600"></i><span class="text-[13px] font-bold text-slate-700">出席累計</span>
                 </div>
                 <div onclick="openMyDuesModal()" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-                    <i class="fa-solid fa-file-invoice-dollar text-lg text-rose-500"></i><span class="text-[10px] font-bold text-slate-700">本月社費</span>
+                    <i class="fa-solid fa-file-invoice-dollar text-2xl text-rose-500"></i><span class="text-[13px] font-bold text-slate-700">本月社費</span>
                 </div>`}
             </div>`;
     }
@@ -1769,9 +1757,9 @@ async function loadEventSurveyData() {
     } else {
         const badge = t => {
             if (!t) return '';
-            if (t.status === 'attending') return `<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已回覆參加</span>`;
-            if (t.status === 'leave') return `<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">已請假</span>`;
-            return `<span class="text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold">${t.reminded ? '已跟催' : '已發送'}</span>`;
+            if (t.status === 'attending') return `<span class="text-[11px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已回覆參加</span>`;
+            if (t.status === 'leave') return `<span class="text-[11px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">已請假</span>`;
+            return `<span class="text-[11px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold">${t.reminded ? '已跟催' : '已發送'}</span>`;
         };
         listContainer.innerHTML = surveyRoster.map(m => {
             const name = _escHtml(m.full_name + (m.nickname ? `（${m.nickname}）` : ''));
@@ -2143,10 +2131,10 @@ function renderRyeList() {
                 </div></div>`;
         }
         const badge = {
-            approved: '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已通過</span>',
-            rejected: '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">需補件</span>',
-            pending:  '<span class="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">待審核</span>',
-            none:     '<span class="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">未收件</span>',
+            approved: '<span class="text-[11px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已通過</span>',
+            rejected: '<span class="text-[11px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">需補件</span>',
+            pending:  '<span class="text-[11px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">待審核</span>',
+            none:     '<span class="text-[11px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-bold">未收件</span>',
         }[a.consent_status] || '';
         const link = a.consent_url
             ? `<a href="${_escAttr(a.consent_url)}" target="_blank" class="text-[10px] text-blue-600 underline truncate block">開啟同意書</a>` : '';
@@ -2255,9 +2243,9 @@ function renderBoardMotions() {
     const names = list => list.map(_escHtml).join('、');
     box.innerHTML = boardState.motions.map(m => {
         const closed = m.status !== 'open';
-        const badge = { open: '<span class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">表決中</span>',
-                        passed: '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已通過</span>',
-                        rejected: '<span class="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">已否決</span>' }[m.status];
+        const badge = { open: '<span class="text-[11px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">表決中</span>',
+                        passed: '<span class="text-[11px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">已通過</span>',
+                        rejected: '<span class="text-[11px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">已否決</span>' }[m.status];
         const row = (label, cls, list) => list.length
             ? `<div class="flex items-start gap-2 text-[10px]"><span class="${cls} px-1.5 rounded font-bold shrink-0">${label}</span><span class="text-gray-600">${names(list)}</span></div>` : '';
         const actions = closed ? '' : `<div class="flex gap-1.5 pt-2 border-t border-gray-100">
@@ -2270,9 +2258,9 @@ function renderBoardMotions() {
             </div>
             ${m.detail ? `<p class="text-[11px] text-gray-500 leading-relaxed">${_escHtml(m.detail)}</p>` : ''}
             <div class="grid grid-cols-3 gap-1.5 text-center">
-                <div class="bg-emerald-50 border border-emerald-200 rounded-lg py-1"><span class="block text-[9px] text-emerald-700 font-bold">同意</span><span class="block text-sm font-black text-emerald-600">${m.yes.length}</span></div>
-                <div class="bg-rose-50 border border-rose-200 rounded-lg py-1"><span class="block text-[9px] text-rose-700 font-bold">反對</span><span class="block text-sm font-black text-rose-600">${m.no.length}</span></div>
-                <div class="bg-gray-100 border border-gray-200 rounded-lg py-1"><span class="block text-[9px] text-gray-600 font-bold">棄權/未投</span><span class="block text-sm font-black text-gray-700">${m.abstain.length + m.pending.length}</span></div>
+                <div class="bg-emerald-50 border border-emerald-200 rounded-lg py-1"><span class="block text-[11px] text-emerald-700 font-bold">同意</span><span class="block text-sm font-black text-emerald-600">${m.yes.length}</span></div>
+                <div class="bg-rose-50 border border-rose-200 rounded-lg py-1"><span class="block text-[11px] text-rose-700 font-bold">反對</span><span class="block text-sm font-black text-rose-600">${m.no.length}</span></div>
+                <div class="bg-gray-100 border border-gray-200 rounded-lg py-1"><span class="block text-[11px] text-gray-600 font-bold">棄權/未投</span><span class="block text-sm font-black text-gray-700">${m.abstain.length + m.pending.length}</span></div>
             </div>
             ${row('同意', 'bg-emerald-100 text-emerald-700', m.yes)}
             ${row('反對', 'bg-rose-100 text-rose-700', m.no)}
@@ -2397,7 +2385,7 @@ function renderVIPList() {
         let h = `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div class="px-4 py-2 ${headBg} border-b flex justify-between items-center">
                 <span class="text-xs font-bold ${headText}"><i class="fa-solid ${icon} mr-1"></i> ${label}</span>
-                <span class="${badgeBg} text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">${list.length} 人</span>
+                <span class="${badgeBg} text-white text-[11px] px-1.5 py-0.5 rounded shadow-sm">${list.length} 人</span>
             </div><div class="divide-y divide-gray-100">`;
         if (!list.length) h += `<div class="p-4 text-center text-xs text-gray-400 italic">${emptyText}</div>`;
         list.forEach((v, i) => { h += generateVIPRow(v, i + 1, isPending); });
@@ -2421,7 +2409,7 @@ function generateVIPRow(v, index, isPending) {
     if (isPending) {
         return `<div class="p-2.5 flex justify-between items-center bg-gray-50">
             <div class="flex items-center gap-2"><span class="w-5 text-center text-[10px] font-bold text-gray-400">${index}.</span>
-            <div><div class="text-xs font-bold text-gray-600">${_escHtml(v.name)}</div><div class="text-[9px] text-gray-400">${_escHtml(v.title)}</div></div></div>
+            <div><div class="text-xs font-bold text-gray-600">${_escHtml(v.name)}</div><div class="text-[11px] text-gray-400">${_escHtml(v.title)}</div></div></div>
             <div class="flex items-center gap-1">
                 <button onclick="setVIPArrived(${v.id}, true)" class="text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-200 text-[10px] font-black active:scale-95"><i class="fa-solid fa-right-to-bracket"></i> 報到</button>
                 ${del}
@@ -2434,7 +2422,7 @@ function generateVIPRow(v, index, isPending) {
     return `<div class="p-3 flex justify-between items-center transition-all ${called ? 'opacity-50 grayscale bg-gray-50' : 'bg-white hover:bg-purple-50'}">
         <div class="flex items-center gap-2"><span class="w-5 text-center text-xs font-black text-gray-400">${index}.</span>
         <div><div class="text-[13px] font-black text-gray-800 flex items-center gap-1.5">${_escHtml(v.name)}
-            <button onclick="setVIPArrived(${v.id}, false)" class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5" title="取消報到"><i class="fa-solid fa-clock"></i> ${_escHtml(v.arrive_time)}</button></div>
+            <button onclick="setVIPArrived(${v.id}, false)" class="text-[11px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5" title="取消報到"><i class="fa-solid fa-clock"></i> ${_escHtml(v.arrive_time)}</button></div>
         <div class="text-[10px] text-gray-500 font-bold mt-0.5">${_escHtml(v.title)}</div></div></div>
         <div class="flex items-center gap-1">${btn}${del}</div></div>`;
 }
@@ -2639,8 +2627,8 @@ async function submitMyDues() {
 
 function _adminTile(onclick, icon, iconCls, label) {
     return `<div onclick="${onclick}" class="bg-white rounded-2xl flex flex-col items-center justify-center gap-1.5 cursor-pointer p-2 btn-3d btn-3d-white mb-1">
-        <div class="w-8 h-8 rounded-full ${iconCls} flex items-center justify-center"><i class="fa-solid ${icon} text-sm"></i></div>
-        <span class="text-[10px] font-bold text-slate-700">${label}</span></div>`;
+        <div class="w-11 h-11 rounded-full ${iconCls} flex items-center justify-center"><i class="fa-solid ${icon} text-lg"></i></div>
+        <span class="text-[13px] font-bold text-slate-700">${label}</span></div>`;
 }
 
 function renderAdminMenu() {
@@ -2650,68 +2638,68 @@ function renderAdminMenu() {
     const isRye    = ev?.id === 107 || (ev?.title || '').includes('RYE');
     const isAnnual = ev?.type === '地區年會';
     const isClub   = systemScope === 'club';
-    const theme = isClub ? 'from-emerald-950 to-teal-900' : 'from-slate-900 to-blue-950';
 
+    // 版型固定：四個大磚 + 長按鈕。不論社內、高球、RYE、年會都長一樣，只換磚上的
+    // 功能，主委才不用每次重新找按鈕在哪。
     const scanner = (label) => _adminTile('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', label);
     const vip     = _adminTile('openVIPListModal()', 'fa-microphone-lines', 'bg-purple-100 text-purple-600', '貴賓介紹');
-    const support = _adminTile("clickMenuItem('後台支援','admin-contact')", 'fa-headset', 'bg-gray-100 text-gray-500', '後台支援');
-    const statsBtn = `<button onclick="openStatisticsModal(event)" class="bg-yellow-500 text-slate-900 py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-warning"><i class="fa-solid fa-chart-line"></i>報名與繳費看板</button>`;
-    const box = (badge, title, inner) => `<div class="col-span-2 bg-gradient-to-br ${theme} p-2.5 text-white flex flex-col justify-between rounded-2xl btn-3d btn-3d-dark mb-1">
-        <div><span class="text-[10px] bg-amber-500 text-slate-950 font-extrabold px-1.5 py-0.5 rounded">${badge}</span><h4 class="font-bold text-[13px] mt-1.5">${title}</h4></div>
-        <div class="flex flex-col gap-1.5 mt-1">${inner}</div></div>`;
-    const miniRow = (a, b) => `<div class="grid grid-cols-2 gap-1.5">${a}${b}</div>`;
-    const mini = (onclick, icon, label) => `<button onclick="${onclick}" class="bg-white/10 text-white py-1.5 rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-dark"><i class="fa-solid ${icon}"></i>${label}</button>`;
+    const btn = (onclick, icon, label, cls, shadow, full) =>
+        `<button onclick="${onclick}" class="${full ? 'col-span-2 ' : ''}${cls} text-white rounded-xl min-h-[44px] py-2.5 flex items-center justify-center gap-1.5 text-[13px] font-bold btn-3d" style="box-shadow:0 4px 0 ${shadow}"><i class="fa-solid ${icon}"></i> ${label}</button>`;
 
+    let tiles;
     if (isClub) {
-        c.innerHTML = `<div class="col-span-3 grid grid-cols-2 gap-2 h-full" style="grid-template-rows:1fr 1fr auto">
-            ${_adminTile("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率')}
-            ${_adminTile('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')}
-            ${_adminTile('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區')}
-            ${_adminTile('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費')}
-            <button onclick="openEventAdminModal()" class="col-span-2 bg-indigo-600 text-white rounded-xl py-1.5 flex items-center justify-center gap-2 text-[11px] font-bold btn-3d btn-3d-primary"><i class="fa-solid fa-calendar-days"></i> 行事曆管理</button>
-        </div>`;
-        return;
-    }
-
-    let left, rightTop;
-    if (isGolf) {
-        left = box('高爾夫主委', '賽事即時總看板',
-            miniRow(mini('openSwapGroupModal()', 'fa-people-arrows', '即時調組'),
-                    mini('openGolfLeaderboard()', 'fa-flag', '賽事成績')) +
-            miniRow(mini('openDrawHolesModal()', 'fa-dice', '新貝抽洞'),
-                    mini('openGolfLeaderboard()', 'fa-ranking-star', '總桿排行')) + statsBtn);
-        rightTop = scanner('報到相機');
+        tiles = _adminTile("openAttendanceModal('club')", 'fa-chart-pie', 'bg-blue-100 text-blue-600', '社友出席率')
+              + _adminTile('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳')
+              + _adminTile('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區')
+              + _adminTile('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費');
+    } else if (isGolf) {
+        tiles = _adminTile('openSwapGroupModal()', 'fa-people-arrows', 'bg-blue-100 text-blue-600', '即時調組')
+              + _adminTile('openGolfLeaderboard()', 'fa-ranking-star', 'bg-amber-100 text-amber-600', '賽事成績')
+              + _adminTile('openDrawHolesModal()', 'fa-dice', 'bg-indigo-100 text-indigo-600', '新貝抽洞')
+              + scanner('報到相機');
     } else if (isRye) {
-        left = box('RYE 主委', 'RYE 報名與審核看板',
-            miniRow(mini("openRyeModal('interview')", 'fa-users-viewfinder', '面試安排'),
-                    mini("openRyeModal('consent')", 'fa-file-signature', '同意書審核')) + statsBtn);
-        rightTop = vip;
+        tiles = _adminTile("openRyeModal('interview')", 'fa-users-viewfinder', 'bg-sky-100 text-sky-600', '面試安排')
+              + _adminTile("openRyeModal('consent')", 'fa-file-signature', 'bg-teal-100 text-teal-600', '同意書審核')
+              + vip + scanner('報到相機');
     } else if (isAnnual) {
-        left = box('年會主委', '地區年會 管理總看板',
-            miniRow(mini('openSeatingModal()', 'fa-chair', '桌次安排'),
-                    mini('openRaffleModal()', 'fa-ticket', '摸彩系統')) + statsBtn);
-        rightTop = vip;
+        tiles = _adminTile('openSeatingModal()', 'fa-chair', 'bg-amber-100 text-amber-600', '桌次安排')
+              + _adminTile('openRaffleModal()', 'fa-ticket', 'bg-rose-100 text-rose-600', '摸彩系統')
+              + vip + scanner('報到相機');
     } else {
-        left = box('主委專用', '報名/繳費 動態統計看板',
-            `<button onclick="openStatisticsModal(event)" class="w-full bg-yellow-500 text-slate-900 py-2 rounded-xl flex items-center justify-center gap-1 text-[10px] font-bold btn-3d btn-3d-warning">進入看板 <i class="fa-solid fa-chart-line"></i></button>`);
-        rightTop = scanner('現場相機');
+        tiles = scanner('現場相機')
+              + _adminTile('clickHelpRegister(event)', 'fa-user-plus', 'bg-blue-100 text-blue-600', '執秘報名')
+              + _adminTile('clickCheckRegistration(event)', 'fa-list-check', 'bg-purple-100 text-purple-600', '查名單')
+              + vip;
     }
-    const calMini = mini('openEventAdminModal()', 'fa-calendar-days', '行事曆管理');
-    c.innerHTML = left + `<div class="grid grid-rows-3 gap-2">${rightTop}${calMini}${support}</div>`;
+    // 社內：一顆長按鈕開行事曆。地區：多一顆看板（活動當天最常看的），兩顆並排。
+    const calendarBtn = btn('openEventAdminModal()', 'fa-calendar-plus',
+                            isClub ? '新增／修改活動' : '新增活動', 'bg-indigo-600', '#312e81', isClub);
+    const statsBtn = btn('openStatisticsModal(event)', 'fa-chart-line', '繳費看板',
+                         'bg-yellow-500 !text-slate-900', '#a16207', false);
+    c.innerHTML = `<div class="col-span-3 grid grid-cols-2 gap-2 h-full" style="grid-template-rows:1fr 1fr auto">
+        ${tiles}${isClub ? calendarBtn : statsBtn + calendarBtn}
+    </div>`;
 }
 
 // ============================================================
 //  ROLE MANAGEMENT  (set from backend in production)
 // ============================================================
+function isAdminUser() { return userRole === 'chairperson'; }
+
 function setRole(role) {
     userRole = role;
-    if (role === 'chairperson') {
-        document.getElementById('admin-gate-unauthorized').classList.add('hidden');
-        document.getElementById('admin-gate-authorized').classList.remove('hidden');
-    } else {
-        document.getElementById('admin-gate-unauthorized').classList.remove('hidden');
-        document.getElementById('admin-gate-authorized').classList.add('hidden');
-    }
+    const admin = role === 'chairperson';
+    // 管理分頁 / 管理按鈕只給管理團隊看：一般社友點了也只會得到「權限不足」。
+    const tab = document.getElementById('tab-admin');
+    tab.classList.toggle('hidden', !admin);
+    tab.classList.toggle('flex', admin);
+    const headers = document.getElementById('rm-tab-headers');
+    headers.classList.toggle('grid-cols-4', admin);
+    headers.classList.toggle('grid-cols-3', !admin);
+    document.getElementById('home-admin-actions').classList.toggle('hidden', !admin);
+    document.getElementById('admin-gate-unauthorized').classList.toggle('hidden', admin);
+    document.getElementById('admin-gate-authorized').classList.toggle('hidden', !admin);
+    if (!admin && activeTab === 'admin') switchTab('home');
 }
 
 // ============================================================
@@ -2961,7 +2949,7 @@ async function clickCheckRegistration(e) {
             const tag = m.checked_in ? ' <span class="text-emerald-600">已報到</span>'
                       : (m.paid ? ' <span class="text-teal-600">已繳費</span>'
                       : (m.uploaded ? ' <span class="text-amber-600">待確認</span>' : ''));
-            const by = m.by_secretary ? ' <span class="text-[9px] text-gray-400">(執秘代報)</span>' : '';
+            const by = m.by_secretary ? ' <span class="text-[11px] text-gray-400">(執秘代報)</span>' : '';
             html += `<div>${icon}${m.name}${tag}${by}</div>`;
         });
         html += `</div>`;
@@ -2996,7 +2984,7 @@ function clickMenuItem(itemName, key) {
     addChatMessage("user", itemName);
     setTimeout(() => {
         if (key === 'home-calendar') {
-            const today = new Date("2026-06-01");
+            const today = new Date();   // 之前寫死 2026-06-01，過期活動會一直標成「即將到來」
             const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 10);
             const filtered = getActiveEventsData()
                 .filter(e => new Date(e.date) >= cutoff)
@@ -3524,7 +3512,7 @@ function renderGolfLeaderboard(players) {
         const rank = p.rank <= 3 ? medals[p.rank] : p.rank;
         return `<tr class="hover:bg-emerald-50 ${p.rank === 1 ? 'bg-yellow-50/30' : ''}">
             <td class="py-3 px-3 text-center font-black">${rank}</td>
-            <td class="py-3 px-3 font-bold text-gray-900">${p.name}<span class="block text-[9px] text-gray-400 font-normal">${p.club || ''}</span></td>
+            <td class="py-3 px-3 font-bold text-gray-900">${p.name}<span class="block text-[11px] text-gray-400 font-normal">${p.club || ''}</span></td>
             <td class="py-3 px-2 text-center text-gray-500">${p.gross}</td>
             <td class="py-3 px-2 text-center text-gray-500">${p.handicap}</td>
             <td class="py-3 px-2 text-center font-black text-emerald-700 bg-emerald-50/50">${p.net}</td>
@@ -3729,13 +3717,13 @@ function addChatMessage(sender, html) {
     const div = document.createElement('div');
     if (sender === 'user') {
         div.className = "flex items-start gap-2.5 justify-end";
-        div.innerHTML = `<div class="max-w-[80%]"><div class="bg-[#8bf26c] text-slate-900 rounded-2xl rounded-tr-none p-3 text-sm shadow-sm">${html}</div><span class="text-[9px] text-white/60 text-right block mt-1">剛剛</span></div>`;
+        div.innerHTML = `<div class="max-w-[80%]"><div class="bg-[#8bf26c] text-slate-900 rounded-2xl rounded-tr-none p-3 text-sm shadow-sm">${html}</div><span class="text-[11px] text-white/60 text-right block mt-1">剛剛</span></div>`;
     } else if (sender === 'system') {
         div.className = "flex justify-center";
         div.innerHTML = `<div class="bg-black/20 text-white/80 rounded-full px-3 py-1 text-[10px] text-center">${html}</div>`;
     } else {
         div.className = "flex items-start gap-2.5";
-        div.innerHTML = `<div class="w-8 h-8 rounded-full bg-blue-800 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm">3523</div><div class="max-w-[82%]"><div class="bg-white text-gray-800 rounded-2xl rounded-tl-none p-3 text-sm shadow-sm leading-relaxed">${html}</div><span class="text-[9px] text-white/60 ml-1 mt-1 block">剛剛</span></div>`;
+        div.innerHTML = `<div class="w-8 h-8 rounded-full bg-blue-800 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm">3523</div><div class="max-w-[82%]"><div class="bg-white text-gray-800 rounded-2xl rounded-tl-none p-3 text-sm shadow-sm leading-relaxed">${html}</div><span class="text-[11px] text-white/60 ml-1 mt-1 block">剛剛</span></div>`;
     }
     area.appendChild(div);
     area.scrollTop = area.scrollHeight;
