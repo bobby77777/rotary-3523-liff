@@ -1146,8 +1146,25 @@ async function setScope(scope) {
     if (scope !== 'district' && scope !== 'club') return;
     if (scope === systemScope) return;
     systemScope = scope;
-    await applyScopeChrome();
+
+    // 先把畫面切過去再談網路：頁首、分頁標籤與（快取裡的）活動立刻換掉，
+    // 點下去就有反應。以前是先 await /events，整個 UI 會卡在舊視角不動。
+    const cached = !!eventsCache[scope];
+    renderHeader();
+    currentActiveEvent = findClosestUpcomingEvent();
+    renderActivePages();
     showToast(`已切換至：${scope === 'district' ? '地區總部' : (myClubName || '本社') + '專區'}`);
+
+    // 有快取 → 背景更新，內容真的變了才重畫（重畫會把捲動位置歸零）
+    // 沒快取 → 得等後端，但先讓頁面顯示「載入中」而不是「目前沒有活動」
+    const pending = loadEvents(scope, { background: cached });   // eventsLoading 在此同步設定
+    if (!cached) renderActivePages();
+    const changed = await pending;
+    if (systemScope !== scope) return;           // 使用者又切回去了，別蓋掉新畫面
+    if (changed || !cached) {
+        currentActiveEvent = findClosestUpcomingEvent();
+        renderActivePages();
+    }
 }
 
 async function toggleSystemScope() {
@@ -1199,15 +1216,24 @@ async function loadMyRegistrations() {
     }
 }
 
-async function loadEvents(scope) {
+let eventsLoading = false;   // 沒有快取、正在等後端 → 頁面顯示載入中而不是「沒有活動」
+
+// 回傳「資料是否有變動」，背景更新時才知道要不要重畫（重畫會把捲動位置歸零）。
+async function loadEvents(scope, { background = false } = {}) {
+    if (!background) eventsLoading = true;
     try {
+        const before = JSON.stringify(eventsCache[scope] || null);
         const data = await apiFetch('/events?scope=' + scope);
         if (data.status === 'ok' && Array.isArray(data.events)) {
             eventsCache[scope] = data.events.map(e => ({ ...e, displayDate: e.displayDate || e.date }));
+            return JSON.stringify(eventsCache[scope]) !== before;
         }
     } catch (e) {
         console.warn('loadEvents fallback:', e.message);
+    } finally {
+        if (!background) eventsLoading = false;
     }
+    return false;
 }
 
 // 後端是活動資料的唯一來源。連不上時回空陣列 —— 顯示不存在的活動只會讓社友
@@ -1266,6 +1292,11 @@ function renderHomePage() {
                 ${eventPdfButtonHTML(ev)}
             </div>
         </div>`
+        : eventsLoading
+        ? `<div class="card p-8 text-center text-slate-400">
+            <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-3"></i>
+            <p class="text-[14px] font-bold">載入活動中…</p>
+        </div>`
         : `<div class="card p-8 text-center">
             <i class="fa-regular fa-calendar text-3xl text-slate-300 mb-3"></i>
             <p class="text-[14px] font-bold text-slate-600">目前沒有近期活動</p>
@@ -1315,7 +1346,9 @@ function renderHomeEvents() {
         .slice(0, 10);
 
     if (!list.length) {
-        box.innerHTML = `<div class="card p-5 text-center text-[13px] text-slate-400">目前沒有排定中的活動。</div>`;
+        box.innerHTML = eventsLoading
+            ? `<div class="card p-5 text-center text-[13px] text-slate-400"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>載入中…</div>`
+            : `<div class="card p-5 text-center text-[13px] text-slate-400">目前沒有排定中的活動。</div>`;
         return;
     }
     box.innerHTML = list.map(ev => {
