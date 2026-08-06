@@ -1131,7 +1131,6 @@ def _handle_text(reply_token: str, user_id: str, text: str) -> None:
     if stripped in ("得獎查詢", "得獎", "查獎", "獎項", "查詢得獎"):
         _handle_postback(reply_token, user_id, "action=award_search")
         return
-    # 社刊不再吃關鍵字：打「社刊」一律導回下方選單，統一從選單／LIFF 進入。
     if stripped in ("行事曆", "行事曆管理", "編輯行事曆", "議程", "活動議程"):
         _reply_calendar_link(reply_token, user_id)
         return
