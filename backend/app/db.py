@@ -296,6 +296,9 @@ def ensure_registrations_table() -> None:
     execute("ALTER TABLE registrations ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ")
     execute("ALTER TABLE registrations ADD COLUMN IF NOT EXISTS bank_digits TEXT")
     execute("ALTER TABLE registrations ADD COLUMN IF NOT EXISTS registered_by TEXT")
+    # 高球賽事報名時登錄的個人差點，供「報名差點」淨桿榜使用（與新貝利亞抽洞各算各的）。
+    # NULL = 未登錄，該球員就不會出現在報名差點榜上。
+    execute("ALTER TABLE registrations ADD COLUMN IF NOT EXISTS handicap REAL")
 
 
 def ensure_club_dues_table() -> None:
@@ -395,9 +398,12 @@ def get_golf_score(event_id: int, line_user_id: str) -> dict | None:
 def get_golf_scores(event_id: int) -> list[dict]:
     return query(
         """
-        SELECT g.line_user_id, g.player_name, g.scores, pi.club_name, pi.full_name
+        SELECT g.line_user_id, g.player_name, g.scores, pi.club_name, pi.full_name,
+               r.handicap AS reg_handicap
         FROM golf_scores g
         LEFT JOIN personal_information pi ON pi.line_user_id = g.line_user_id
+        LEFT JOIN registrations r
+               ON r.line_user_id = g.line_user_id AND r.event_id = g.event_id
         WHERE g.event_id = %s
         """,
         (event_id,),
@@ -853,9 +859,11 @@ def register_event(line_user_id: str, event_id: int) -> bool:
         _release_conn(conn)
 
 
-def report_payment(line_user_id: str, event_id: int, bank_digits: str = "") -> dict:
+def report_payment(line_user_id: str, event_id: int, bank_digits: str = "",
+                   handicap: float | None = None) -> dict:
     """Ensure the member is registered and record their transfer digits.
     With digits -> payment_status 'uploaded'; without -> keep/register as unpaid.
+    handicap (高球差點) is only overwritten when a new value is supplied.
     Returns {'was_registered': bool}."""
     existing = get_registration(line_user_id, event_id)
     if bank_digits:
@@ -864,13 +872,14 @@ def report_payment(line_user_id: str, event_id: int, bank_digits: str = "") -> d
         status = existing["payment_status"] if existing else "unpaid"
     execute(
         """
-        INSERT INTO registrations (line_user_id, event_id, payment_status, bank_digits)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO registrations (line_user_id, event_id, payment_status, bank_digits, handicap)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (line_user_id, event_id) DO UPDATE SET
             payment_status = EXCLUDED.payment_status,
-            bank_digits = COALESCE(NULLIF(EXCLUDED.bank_digits, ''), registrations.bank_digits)
+            bank_digits = COALESCE(NULLIF(EXCLUDED.bank_digits, ''), registrations.bank_digits),
+            handicap = COALESCE(EXCLUDED.handicap, registrations.handicap)
         """,
-        (line_user_id, event_id, status, bank_digits or None),
+        (line_user_id, event_id, status, bank_digits or None, handicap),
     )
     return {"was_registered": existing is not None}
 
@@ -914,7 +923,8 @@ def get_event_registrants(event_id: int, club_name: str = "") -> list[dict]:
                COALESCE(pi.club_name, '') AS club_name,
                r.checked_in,
                r.payment_status,
-               r.registered_by
+               r.registered_by,
+               r.handicap
         FROM registrations r
         LEFT JOIN personal_information pi ON pi.line_user_id = r.line_user_id
         WHERE r.event_id = %s
@@ -1101,7 +1111,7 @@ def get_all_user_ids() -> list[str]:
 def get_member_attendance(line_user_id: str) -> list[dict]:
     """All of one member's registrations with check-in flag, newest first."""
     return query(
-        "SELECT event_id, checked_in, checked_in_at, payment_status "
+        "SELECT event_id, checked_in, checked_in_at, payment_status, handicap "
         "FROM registrations WHERE line_user_id = %s ORDER BY event_id DESC",
         (line_user_id,),
     )
@@ -1143,8 +1153,11 @@ def get_club_members(club_name: str) -> list[dict]:
 
 
 def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
-                  registered_by: str = "") -> dict:
-    """Register many members for an event at once. Returns {'new': n, 'dup': n}."""
+                  registered_by: str = "", handicaps: dict | None = None) -> dict:
+    """Register many members for an event at once. Returns {'new': n, 'dup': n}.
+    handicaps maps line_user_id -> 高球差點; a member already registered still gets
+    their handicap updated, so 執秘 can fix a wrong number without re-registering."""
+    handicaps = handicaps or {}
     new_count = 0
     conn = _get_conn()
     try:
@@ -1152,16 +1165,23 @@ def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
             for uid in uids:
                 cur.execute(
                     """
-                    INSERT INTO registrations (line_user_id, event_id, payment_status, bank_digits, registered_by)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO registrations (line_user_id, event_id, payment_status,
+                                               bank_digits, registered_by, handicap)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (line_user_id, event_id) DO NOTHING
                     RETURNING id
                     """,
                     (uid, event_id, "uploaded" if bank_digits else "unpaid",
-                     bank_digits or None, registered_by or None),
+                     bank_digits or None, registered_by or None, handicaps.get(uid)),
                 )
                 if cur.fetchone() is not None:
                     new_count += 1
+                elif handicaps.get(uid) is not None:
+                    cur.execute(
+                        "UPDATE registrations SET handicap = %s "
+                        "WHERE line_user_id = %s AND event_id = %s",
+                        (handicaps[uid], uid, event_id),
+                    )
         conn.commit()
         return {"new": new_count, "dup": len(uids) - new_count}
     except Exception:

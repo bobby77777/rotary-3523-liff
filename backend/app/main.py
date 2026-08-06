@@ -101,6 +101,25 @@ _GOLF_VISIBLE = {2, 5, 8, 11, 14, 17}  # 0-indexed (holes 3,6,9,12,15,18)
 _DEFAULT_HIDDEN = set(range(18)) - _GOLF_VISIBLE
 
 
+def _parse_handicap(raw) -> tuple[float | None, str]:
+    """Registration handicap -> (value, error). Blank is allowed here; the caller
+    decides whether a golf event may go without one."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None, ""
+    try:
+        value = round(float(raw), 1)
+    except (TypeError, ValueError):
+        return None, "差點請填數字"
+    if not 0 <= value <= 54:
+        return None, "差點請填 0 ~ 54 之間的數字"
+    return value, ""
+
+
+def _fmt_handicap(value: float) -> str:
+    """18.0 -> '18'，18.5 維持 '18.5'，讓推播看起來像球場寫法。"""
+    return str(int(value)) if float(value).is_integer() else str(value)
+
+
 def _event_hidden_holes(ev: dict | None) -> set[int]:
     """The hidden holes to score by: the event's drawn set if any, else the default."""
     holes = (ev or {}).get("golf_holes")
@@ -142,8 +161,12 @@ _ROLE_NAMES = {
 _ADMIN_ROLES = set(_ROLE_NAMES) - {"member"}
 
 
-def _is_golf_event(ev: dict) -> bool:
-    return "高球" in ev["type"] or "高爾夫" in ev["title"] or ev["type"] == "地區運動"
+def _is_golf_event(ev: dict | None) -> bool:
+    # 報名紀錄查得到的活動不一定還在（_lookup_event 會回 None），所以這裡容忍缺欄位。
+    if not ev:
+        return False
+    return ("高球" in ev.get("type", "") or "高爾夫" in ev.get("title", "")
+            or ev.get("type") == "地區運動")
 
 
 def _is_rye_event(ev: dict) -> bool:
@@ -883,7 +906,14 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
     elif action == "register":
         ev_id = int(p.get("id", 0))
         ev = _lookup_event(user_id, ev_id)
-        if ev:
+        if ev and _is_golf_event(ev):
+            # 高球報名一定要登錄差點，聊天泡泡收不到數字，一律請他們用 App 報名。
+            line_api.reply_text(
+                reply_token,
+                f"⛳️ {ev['title']} 報名需登錄您的差點（HDCP），\n"
+                f"請由 App 完成報名：\n{LIFF_URL}?tab=home&event={ev_id}",
+            )
+        elif ev:
             items = [
                 {"type": "action", "action": {"type": "postback", "label": "✅ 確認報名", "data": f"action=confirm_register&id={ev_id}"}},
                 {"type": "action", "action": {"type": "postback", "label": "❌ 取消",     "data": "action=cancel"}},
@@ -916,6 +946,11 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
             # 回覆「參加」即視同報名，秘書處看到的名單才會一致。
             db.register_event(user_id, ev_id)
             line_api.reply_flex(reply_token, "✅ 報名成功", _build_registration_success(ev))
+            # 這條路徑填不了差點，所以高球賽事要另外提醒他回 App 補登，
+            # 否則報名差點榜上不會有他。
+            if _is_golf_event(ev) and (db.get_registration(user_id, ev_id) or {}).get("handicap") is None:
+                _push_receipt(user_id, f"⛳️ 別忘了登錄您的差點（HDCP），才會列入 {ev['title']} 的淨桿排名：\n"
+                                       f"{LIFF_URL}?tab=home&event={ev_id}")
         else:
             line_api.reply_text(
                 reply_token,
@@ -1297,7 +1332,9 @@ async def golf_my_score(request: Request, event: int | None = None):
 
 @app.get("/golf/leaderboard")
 async def golf_leaderboard(request: Request, event: int | None = None):
-    """New-Peoria net leaderboard for a golf event (open to participants)."""
+    """Two net leaderboards for a golf event (open to participants): 新貝利亞 (rank)
+    and 報名時登錄的差點 (reg_rank). A player with no registered handicap has no
+    reg_rank and simply doesn't appear on the second board."""
     uid = request.headers.get("X-Line-UserId", "")
     ev = _lookup_event(uid, event) if event else _current_event(uid)
     if ev is None:
@@ -1310,17 +1347,30 @@ async def golf_leaderboard(request: Request, event: int | None = None):
         if not isinstance(scores, list) or len(scores) != 18:
             continue
         calc = _new_peoria(scores, hidden)
+        reg_hcp = r.get("reg_handicap")
+        reg_hcp = round(float(reg_hcp), 1) if reg_hcp is not None else None
         players.append({
             "name": r.get("full_name") or r.get("player_name") or "選手",
             "club": r.get("club_name") or "",
             "out": calc["out"], "in": calc["in"],
             "gross": calc["gross"], "handicap": calc["handicap"],
             "net": calc["net"], "diff": calc["gross"] - calc["par"],
+            "reg_handicap": reg_hcp,
+            "reg_net": round(calc["gross"] - reg_hcp, 1) if reg_hcp is not None else None,
+            "reg_rank": None,
         })
+    for i, p in enumerate(sorted([p for p in players if p["reg_net"] is not None],
+                                key=lambda p: (p["reg_net"], p["gross"])), start=1):
+        p["reg_rank"] = i
     players.sort(key=lambda p: (p["net"], p["gross"]))
     for i, p in enumerate(players, start=1):
         p["rank"] = i
-    return {"status": "ok", "event_title": ev["title"], "players": players}
+    return {
+        "status": "ok",
+        "event_title": ev["title"],
+        "players": players,
+        "reg_count": sum(1 for p in players if p["reg_rank"]),
+    }
 
 
 @app.post("/golf/draw_holes")
@@ -1732,13 +1782,24 @@ async def payment_report(request: Request):
     if ev is None:
         return {"status": "no_event", "message": "找不到對應活動"}
 
-    res = db.report_payment(uid, ev["id"], digits)
+    handicap, hcp_err = _parse_handicap(body.get("handicap"))
+    if hcp_err:
+        return {"status": "invalid", "message": hcp_err}
+    # 高球賽事報名一定要帶差點。已經報名的人不再擋——他們可能只是來回報匯款，
+    # 差點沒填的話首頁會有「補填高球差點」的入口。
+    if (_is_golf_event(ev) and handicap is None
+            and db.get_registration(uid, ev["id"]) is None):
+        return {"status": "invalid", "message": "高爾夫球賽報名請填寫您的差點"}
+
+    res = db.report_payment(uid, ev["id"], digits, handicap)
     if res["was_registered"]:
         note = f"💰 已回報【{ev['title']}】匯款末 5 碼：{digits}\n秘書處對帳後會通知您。"
     else:
         note = f"✅ 報名成功：{ev['title']}\n{ev['date']}（{ev['weekday']}）{ev['time']}　{ev['location']}"
         note += (f"\n匯款末 5 碼：{digits}（待對帳）" if digits
                  else "\n完成匯款後請至「個人中心 → 回報匯款」補填末 5 碼。")
+    if handicap is not None:
+        note += f"\n⛳️ 登錄差點：{_fmt_handicap(handicap)}"
     _push_receipt(uid, note)
     return {
         "status": "ok",
@@ -1746,6 +1807,7 @@ async def payment_report(request: Request):
         "event_title": ev["title"],
         "was_registered": res["was_registered"],
         "bank_digits": digits,
+        "handicap": handicap,
     }
 
 
@@ -1768,6 +1830,9 @@ async def attendance_me(request: Request):
             "scope": ev["scope"] if ev else "",
             "checked_in": bool(r["checked_in"]),
             "payment_status": r["payment_status"],
+            # 高球賽事用：差點是 None 代表報名時沒填（例如從 LINE 泡泡報的），首頁要請他補填
+            "is_golf": _is_golf_event(ev),
+            "handicap": r.get("handicap"),
         })
     attended = sum(1 for e in events if e["checked_in"])
     return {
@@ -1798,6 +1863,7 @@ async def admin_registrants(request: Request, event: int | None = None, club: st
             "paid": r["payment_status"] == "confirmed",
             "uploaded": r["payment_status"] == "uploaded",
             "by_secretary": bool(r.get("registered_by")),
+            "handicap": r.get("handicap"),
         }
         for r in rows
     ]
@@ -2607,7 +2673,17 @@ async def admin_bulk_register(request: Request):
     if not uids and not guests:
         return {"status": "empty", "message": "未選擇任何社友或來賓"}
 
-    result = db.bulk_register(uids, ev["id"], bank_digits, admin_uid)
+    # 執秘不見得知道每個人的差點，所以這裡是選填：留白的人不會進報名差點榜，
+    # 之後他自己在首頁補填即可。
+    handicaps: dict[str, float] = {}
+    for uid_key, raw in (body.get("handicaps") or {}).items():
+        value, err = _parse_handicap(raw)
+        if err:
+            return {"status": "invalid", "message": f"差點格式錯誤：{err}"}
+        if value is not None:
+            handicaps[str(uid_key)] = value
+
+    result = db.bulk_register(uids, ev["id"], bank_digits, admin_uid, handicaps)
     guest_count = db.add_event_guests(ev["id"], guests, admin_uid, bank_digits)
 
     # Notify each newly-registered member in their own chat.

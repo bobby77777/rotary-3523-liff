@@ -178,6 +178,13 @@
                 <i class="fa-solid fa-circle-info mr-1"></i>您即將報名：<b id="self-reg-event-title">--</b><br>
                 系統已自動帶入您的 LINE 社籍資訊。
             </div>
+            <div id="self-handicap-block" class="hidden">
+                <label class="block text-xs font-bold text-gray-700 mb-1">高球差點 HDCP <span class="text-red-500">*</span></label>
+                <input type="number" id="self-handicap" min="0" max="54" step="0.1" inputmode="decimal"
+                    class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-center text-lg font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="如 18">
+                <p class="text-[10px] text-gray-400 mt-1 text-center">※ 供「報名差點」淨桿榜計算；新貝利亞淨桿仍以抽洞結算。</p>
+            </div>
             <div>
                 <label class="block text-xs font-bold text-gray-700 mb-1">匯款帳號後 5 碼 (供對帳)</label>
                 <input type="tel" id="self-bank-digits" maxlength="5" pattern="\d{5}" inputmode="numeric"
@@ -207,6 +214,8 @@
             </div>
             <div>
                 <label class="block text-xs font-bold text-gray-700 mb-1">選擇報名社友 (可複選)</label>
+                <p id="exec-sec-golf-hint" class="hidden text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 mb-1">
+                    <i class="fa-solid fa-golf-ball-tee mr-1"></i>高球賽事：右側可順便登錄差點，留白者請他自行於首頁補填。</p>
                 <div id="exec-sec-member-list" class="w-full bg-white border border-gray-200 rounded-xl max-h-32 overflow-y-auto p-2 space-y-1"></div>
                 <div class="flex justify-between mt-1 px-1">
                     <span class="text-[11px] font-bold text-gray-600 bg-gray-200 px-2 py-0.5 rounded-full" id="exec-sec-selected-count">已選擇: 0 人</span>
@@ -690,6 +699,13 @@
             <button onclick="closeModal('modal-golf-leaderboard')" class="text-white hover:text-emerald-200"><i class="fa-solid fa-xmark text-xl"></i></button>
         </div>
         <div class="overflow-y-auto p-4 flex-1 bg-gray-50 no-scrollbar">
+            <!-- 兩種賽制各排各的：新貝利亞用抽洞算差點，報名差點用社友報名時登錄的數字。 -->
+            <div class="flex gap-1 p-1 bg-gray-200 rounded-xl mb-3">
+                <button id="golf-board-tab-peoria" onclick="switchGolfBoard('peoria')"
+                    class="flex-1 py-2 rounded-lg text-[12px] font-black transition-colors bg-white text-emerald-800 shadow-sm">新貝利亞淨桿</button>
+                <button id="golf-board-tab-reg" onclick="switchGolfBoard('reg')"
+                    class="flex-1 py-2 rounded-lg text-[12px] font-black transition-colors text-gray-500">報名差點淨桿</button>
+            </div>
             <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div class="overflow-x-auto no-scrollbar">
                     <table class="w-full text-left border-collapse">
@@ -698,7 +714,7 @@
                                 <th class="py-3 px-3 text-center w-12">排名</th>
                                 <th class="py-3 px-3">姓名</th>
                                 <th class="py-3 px-2 text-center">總桿</th>
-                                <th class="py-3 px-2 text-center">差點</th>
+                                <th class="py-3 px-2 text-center" id="golf-board-hcp-header">差點</th>
                                 <th class="py-3 px-2 text-center font-black text-emerald-700">淨桿</th>
                                 <th class="py-3 px-2 text-center">桿差</th>
                             </tr>
@@ -1031,6 +1047,21 @@ const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
 
 const golfPars = [4,3,5,4,4,3,4,5,4,4,4,3,5,4,4,3,5,4];
 
+// 後端 _is_golf_event 有一模一樣的一份，兩邊要一致，
+// 不然前端沒問差點、後端卻擋下報名。
+function isGolfEvent(ev) {
+    if (!ev) return false;
+    return (ev.type || '').includes('高球') || (ev.title || '').includes('高爾夫')
+        || ev.type === '地區運動';
+}
+
+// 已報名的高球賽事但差點還是空的 —— 首頁要請他補填，否則進不了報名差點榜。
+function needsHandicap(ev) {
+    if (!isGolfEvent(ev)) return false;
+    const reg = myRegistrations.find(r => r.event_id === ev?.id);
+    return !!reg && reg.handicap == null;
+}
+
 // ---- STATE ----
 let lineProfile = null;       // from liff.getProfile()
 let userRole = 'member';      // 'member' | 'chairperson'
@@ -1286,9 +1317,13 @@ function renderHomePage() {
                     <span class="mx-1 text-blue-300">·</span><i class="fa-solid fa-tag text-blue-200"></i>${_escHtml(ev.fee || '—')}</p>
             </div>
             <div class="p-3 flex gap-2">
-                ${myRegisteredEvents.includes(ev.id)
-                    ? `<div class="flex-1 min-h-[44px] rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[14px] flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i>已完成報名</div>`
-                    : `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-pen-to-square"></i>我要報名</button>`}
+                ${!myRegisteredEvents.includes(ev.id)
+                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-pen-to-square"></i>我要報名</button>`
+                    : needsHandicap(ev)
+                    // 從 LINE 泡泡或執秘代報名進來的球友還沒差點，給他一個補填入口，
+                    // 不然「已完成報名」之後就再也點不進報名表了。
+                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-golf-ball-tee"></i>補填高球差點</button>`
+                    : `<div class="flex-1 min-h-[44px] rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[14px] flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i>已完成報名</div>`}
                 ${eventPdfButtonHTML(ev)}
             </div>
         </div>`
@@ -1475,7 +1510,7 @@ function renderProfilePage() {
     const c = document.getElementById('page-profile');
     if (!c) return;
     const ev = currentActiveEvent;
-    const isGolf = ev?.id === 106 || ev?.type === '地區運動';
+    const isGolf = isGolfEvent(ev);
     const roleLabel = { chairperson: systemScope === 'club' ? '社長／幹部' : '主委' }[userRole] || '社友';
 
     const row = (onclick, icon, iconCls, label, hint) => `
@@ -2771,7 +2806,7 @@ function renderAdminPage() {
     const c = document.getElementById('admin-gate-authorized');
     if (!c) return;
     const ev = currentActiveEvent;
-    const isGolf   = ev?.id === 106 || ev?.type === '地區運動';
+    const isGolf   = isGolfEvent(ev);
     const isRye    = ev?.id === 107 || (ev?.title || '').includes('RYE');
     const isAnnual = ev?.type === '地區年會';
     const isClub   = systemScope === 'club';
@@ -2794,7 +2829,7 @@ function renderAdminPage() {
     let onSite;
     if (isGolf) {
         onSite = [row('openSwapGroupModal()', 'fa-people-arrows', 'bg-blue-100 text-blue-600', '即時調組', '對調兩位球友的組別'),
-                  row('openGolfLeaderboard()', 'fa-ranking-star', 'bg-amber-100 text-amber-600', '賽事成績', '總桿與新貝利亞淨桿'),
+                  row('openGolfLeaderboard()', 'fa-ranking-star', 'bg-amber-100 text-amber-600', '賽事成績', '新貝利亞／報名差點兩種淨桿'),
                   row('openDrawHolesModal()', 'fa-dice', 'bg-indigo-100 text-indigo-600', '新貝利亞抽洞', ''),
                   row('openAdminScanner()', 'fa-camera', 'bg-emerald-100 text-emerald-600', '報到相機', '掃描社友的報到條碼')];
     } else if (isRye) {
@@ -2954,24 +2989,39 @@ async function handleQrScanResult(qrValue) {
 function triggerMainBannerClick() {
     document.getElementById('self-reg-event-title').textContent = currentActiveEvent?.title || '--';
     document.getElementById('self-bank-digits').value = '';
+    // 高球賽事才問差點；已經登錄過的（例如執秘代填）帶回來讓他確認或改。
+    const isGolf = isGolfEvent(currentActiveEvent);
+    const known = myRegistrations.find(r => r.event_id === currentActiveEvent?.id)?.handicap;
+    document.getElementById('self-handicap-block').classList.toggle('hidden', !isGolf);
+    document.getElementById('self-handicap').value = (isGolf && known != null) ? known : '';
     openModal('modal-self-register');
 }
 
 async function confirmRegistration() {
     const digits = document.getElementById('self-bank-digits').value.trim();
     if (digits && digits.length !== 5) { showAlert('格式錯誤', '如有填寫，請填完整的末 5 碼！'); return; }
+
+    let handicap = '';
+    if (isGolfEvent(currentActiveEvent)) {
+        handicap = document.getElementById('self-handicap').value.trim();
+        if (!handicap) { showAlert('資料不完整', '高爾夫球賽報名請務必填寫您的「差點」！'); return; }
+        const n = Number(handicap);
+        if (!Number.isFinite(n) || n < 0 || n > 54) { showAlert('格式錯誤', '差點請填 0 ~ 54 之間的數字。'); return; }
+    }
+
     try {
         const data = await apiFetch('/payment/report', {
             method: 'POST',
-            body: JSON.stringify({ event_id: currentActiveEvent?.id, bank_digits: digits })
+            body: JSON.stringify({ event_id: currentActiveEvent?.id, bank_digits: digits, handicap })
         });
         if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-self-register');
         await loadMyRegistrations();     // 以後端為準，重新整理後也還在
         let msg = `已登記「${data.event_title}」。`;
+        if (data.handicap != null) msg += `\n您的差點 HDCP：${data.handicap}`;
         msg += digits ? `\n轉出末 5 碼：${digits}（待秘書處對帳）`
                       : '\n\n尚未提供帳號末 5 碼，完成匯款後請至「個人 → 回報匯款」補填。';
-        showAlert('🎉 報名成功', msg);
+        showAlert(data.was_registered ? '✅ 報名資料已更新' : '🎉 報名成功', msg);
         renderPage(activeTab);
         // 不用 liff.sendMessages 回報名結果：那會用「社友本人」的身分在聊天室發話，
         // 機器人又聽不懂那句話，只會回一句「請使用下方選單按鈕操作」。
@@ -3006,6 +3056,10 @@ async function renderClubMembers() {
     const clubName = document.getElementById('exec-sec-club').value;
     const listEl = document.getElementById('exec-sec-member-list');
     listEl.innerHTML = `<p class="text-xs text-gray-400 p-2">載入中…</p>`;
+    // 高球賽事每個人都要有差點，但執秘不一定問得到，所以名單上的差點欄是選填；
+    // 留白的社友報名照樣成立，之後他自己在首頁補填。
+    const isGolf = isGolfEvent(execRegEvent());
+    document.getElementById('exec-sec-golf-hint').classList.toggle('hidden', !isGolf);
     let members = [];
     try {
         const data = await apiFetch('/admin/club_members?club=' + encodeURIComponent(clubName));
@@ -3027,10 +3081,19 @@ async function renderClubMembers() {
     listEl.innerHTML = members.map(m =>
         `<label class="flex items-center gap-3 p-2 hover:bg-blue-50 rounded-lg cursor-pointer border border-transparent hover:border-blue-100">
             <input type="checkbox" value="${m.id}" class="member-checkbox w-4 h-4 text-blue-600 rounded" onchange="updateSelectedCount()">
-            <span class="text-sm text-gray-800 font-medium">${m.name}</span>
+            <span class="text-sm text-gray-800 font-medium flex-1 min-w-0 truncate">${m.name}</span>
+            ${isGolf ? `<input type="number" min="0" max="54" step="0.1" placeholder="差點" data-uid="${m.id}"
+                class="member-handicap w-16 shrink-0 bg-white border border-gray-200 rounded-lg py-1 px-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                onclick="event.stopPropagation()">` : ''}
         </label>`
     ).join('');
     updateSelectedCount();
+}
+
+// 執秘批次報名的對象活動：深連結帶進來的優先，否則就是目前選取的活動。
+function execRegEvent() {
+    const id = execRegEventId || currentActiveEvent?.id;
+    return getAllCombinedEvents().find(e => e.id === id) || currentActiveEvent;
 }
 
 function addGuestInput() {
@@ -3060,11 +3123,24 @@ async function submitExecSecRegistration() {
     if (uids.length + guests.length === 0) return showAlert('未選擇', '請至少勾選一位社友或填寫一位來賓！');
     if (digits && digits.length !== 5) return showAlert('格式錯誤', '匯款帳號請填寫完整的末 5 碼！');
 
+    // 只送有勾選的人的差點，沒填的就不送（後端當作未登錄，不會蓋掉舊值）。
+    const handicaps = {};
+    for (const input of document.querySelectorAll('.member-handicap')) {
+        const uid = input.dataset.uid;
+        const raw = input.value.trim();
+        if (!uids.includes(uid) || !raw) continue;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || n > 54) {
+            return showAlert('格式錯誤', '差點請填 0 ~ 54 之間的數字。');
+        }
+        handicaps[uid] = n;
+    }
+
     const evId = execRegEventId || currentActiveEvent?.id;
     try {
         const data = await apiFetch('/admin/bulk_register', {
             method: 'POST',
-            body: JSON.stringify({ event_id: evId, uids, guests, bank_digits: digits })
+            body: JSON.stringify({ event_id: evId, uids, guests, bank_digits: digits, handicaps })
         });
         if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-exec-sec-register');
@@ -3115,9 +3191,14 @@ async function clickCheckRegistration(e) {
             : m.uploaded ? ['fa-clock text-amber-500', '<span class="text-[12px] text-amber-600 font-bold">待確認</span>']
             : ['fa-circle text-slate-300', ''];
         const by = m.by_secretary ? '<span class="text-[11px] text-slate-400">執秘代報</span>' : '';
+        // 高球賽事順便讓執秘看到誰還沒登錄差點，開賽前才有機會補。
+        const hcp = !isGolfEvent(currentActiveEvent) ? ''
+            : m.handicap != null
+            ? `<span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">HDCP ${m.handicap}</span>`
+            : '<span class="text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded shrink-0">未填差點</span>';
         return `<div class="flex items-center gap-2 py-1.5 border-b border-slate-50 last:border-0">
             <i class="fa-solid ${icon}"></i>
-            <span class="flex-1 text-[13px] text-slate-700 min-w-0 truncate">${_escHtml(m.name)}</span>${by}${tag}
+            <span class="flex-1 text-[13px] text-slate-700 min-w-0 truncate">${_escHtml(m.name)}</span>${hcp}${by}${tag}
         </div>`;
     }).join('');
     paint(head + rows);
@@ -3678,6 +3759,10 @@ async function submitGolfScores() {
     }
 }
 
+// 排行榜同時提供兩種賽制，切換不重打 API，所以把選手留在手邊。
+let golfBoardPlayers = [];
+let golfBoardMode = 'peoria';   // 'peoria' = 新貝利亞抽洞 | 'reg' = 報名登錄的差點
+
 async function openGolfLeaderboard(e) {
     e && e.stopPropagation();
     const tbody = document.getElementById('golf-leaderboard-body');
@@ -3689,30 +3774,54 @@ async function openGolfLeaderboard(e) {
         const data = await apiFetch('/golf/leaderboard' + (evId ? ('?event=' + evId) : ''));
         setGolfModalEvent('golf-leaderboard-event', data.event_title);
         if (data.status !== 'ok') {
+            golfBoardPlayers = [];
             tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-400 text-xs">${_escHtml(data.message || '找不到對應賽事。')}</td></tr>`;
             return;
         }
-        renderGolfLeaderboard(data.players || []);
+        golfBoardPlayers = data.players || [];
+        switchGolfBoard(golfBoardMode);
     } catch (err) {
+        golfBoardPlayers = [];
         tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-rose-500 text-xs">載入失敗：${err.message}</td></tr>`;
     }
 }
 
+function switchGolfBoard(mode) {
+    golfBoardMode = mode === 'reg' ? 'reg' : 'peoria';
+    const on = 'bg-white text-emerald-800 shadow-sm', off = 'text-gray-500';
+    document.getElementById('golf-board-tab-peoria').className =
+        `flex-1 py-2 rounded-lg text-[12px] font-black transition-colors ${golfBoardMode === 'peoria' ? on : off}`;
+    document.getElementById('golf-board-tab-reg').className =
+        `flex-1 py-2 rounded-lg text-[12px] font-black transition-colors ${golfBoardMode === 'reg' ? on : off}`;
+    document.getElementById('golf-board-hcp-header').textContent =
+        golfBoardMode === 'reg' ? '報名差點' : '新貝利亞差點';
+    renderGolfLeaderboard(golfBoardPlayers);
+}
+
 function renderGolfLeaderboard(players) {
     const tbody = document.getElementById('golf-leaderboard-body');
-    if (!players.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-400 text-xs">尚無選手送出成績。</td></tr>`;
+    const isReg = golfBoardMode === 'reg';
+    // 報名差點榜只收有登錄差點的人；沒登錄的不是成績為 0，而是根本不參與這個榜。
+    const rows = isReg ? players.filter(p => p.reg_rank).sort((a, b) => a.reg_rank - b.reg_rank)
+                       : players.slice().sort((a, b) => a.rank - b.rank);
+    if (!rows.length) {
+        const empty = !players.length ? '尚無選手送出成績。'
+            : '沒有人在報名時登錄差點，此榜暫無資料。';
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-gray-400 text-xs">${empty}</td></tr>`;
         return;
     }
     const medals = ['', '<i class="fa-solid fa-medal text-yellow-400 text-lg"></i>', '<i class="fa-solid fa-medal text-gray-400 text-lg"></i>', '<i class="fa-solid fa-medal text-amber-600 text-lg"></i>'];
-    tbody.innerHTML = players.map(p => {
-        const rank = p.rank <= 3 ? medals[p.rank] : p.rank;
-        return `<tr class="hover:bg-emerald-50 ${p.rank === 1 ? 'bg-yellow-50/30' : ''}">
+    tbody.innerHTML = rows.map(p => {
+        const place = isReg ? p.reg_rank : p.rank;
+        const rank = place <= 3 ? medals[place] : place;
+        const hcp = isReg ? p.reg_handicap : p.handicap;
+        const net = isReg ? p.reg_net : p.net;
+        return `<tr class="hover:bg-emerald-50 ${place === 1 ? 'bg-yellow-50/30' : ''}">
             <td class="py-3 px-3 text-center font-black">${rank}</td>
             <td class="py-3 px-3 font-bold text-gray-900">${p.name}<span class="block text-[11px] text-gray-400 font-normal">${p.club || ''}</span></td>
             <td class="py-3 px-2 text-center text-gray-500">${p.gross}</td>
-            <td class="py-3 px-2 text-center text-gray-500">${p.handicap}</td>
-            <td class="py-3 px-2 text-center font-black text-emerald-700 bg-emerald-50/50">${p.net}</td>
+            <td class="py-3 px-2 text-center text-gray-500">${hcp}</td>
+            <td class="py-3 px-2 text-center font-black text-emerald-700 bg-emerald-50/50">${net}</td>
             <td class="py-3 px-2 text-center font-bold ${p.diff === 0 ? 'text-emerald-600' : (p.diff > 0 ? 'text-red-500' : 'text-amber-600')}">${p.diff === 0 ? 'E' : (p.diff > 0 ? '+' + p.diff : p.diff)}</td>
         </tr>`;
     }).join('');
