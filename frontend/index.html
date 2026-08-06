@@ -208,7 +208,8 @@
             <button onclick="closeModal('modal-exec-sec-register')" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
         </div>
         <div class="p-5 flex flex-col space-y-3 bg-slate-50 overflow-y-auto flex-1 no-scrollbar">
-            <div>
+            <!-- 本社視角只有一個社可報，選單沒有意義，clickHelpRegister 會整塊藏起來。 -->
+            <div id="exec-sec-club-field">
                 <label class="block text-xs font-bold text-gray-700 mb-1">所屬社名</label>
                 <select id="exec-sec-club" onchange="renderClubMembers()" class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500"></select>
             </div>
@@ -3038,15 +3039,23 @@ async function clickHelpRegister(e) {
     document.getElementById('guest-inputs-container').innerHTML = '';
     document.getElementById('exec-sec-bank-digits').value = '';
     const select = document.getElementById('exec-sec-club');
-    try {
-        const data = await apiFetch('/admin/clubs');
-        if (data.status === 'forbidden') { showAlert('權限不足', '您沒有批次報名權限。'); return; }
-        const clubs = data.clubs || [];
-        select.innerHTML = clubs.length
-            ? clubs.map(c => `<option value="${c}">${c}</option>`).join('')
-            : `<option value="">（尚無已綁定社友）</option>`;
-    } catch (err) {
-        select.innerHTML = `<option value="">（社別載入失敗）</option>`;
+    // 本社視角只會報自己這一社，選單就沒得選了：釘死在本社並把整塊藏起來。
+    // 社籍還沒載到時仍走地區那條路，否則會釘在空字串、名單一片空白。
+    const ownClubOnly = systemScope === 'club' && !!myClubName;
+    document.getElementById('exec-sec-club-field').classList.toggle('hidden', ownClubOnly);
+    if (ownClubOnly) {
+        select.innerHTML = `<option value="${_escHtml(myClubName)}">${_escHtml(myClubName)}</option>`;
+    } else {
+        try {
+            const data = await apiFetch('/admin/clubs');
+            if (data.status === 'forbidden') { showAlert('權限不足', '您沒有批次報名權限。'); return; }
+            const clubs = data.clubs || [];
+            select.innerHTML = clubs.length
+                ? clubs.map(c => `<option value="${c}">${c}</option>`).join('')
+                : `<option value="">（尚無已綁定社友）</option>`;
+        } catch (err) {
+            select.innerHTML = `<option value="">（社別載入失敗）</option>`;
+        }
     }
     await renderClubMembers();
     openModal('modal-exec-sec-register');
