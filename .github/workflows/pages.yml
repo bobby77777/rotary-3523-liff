@@ -35,9 +35,3 @@ jobs:
           path: ./frontend
       - id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          # GitHub's Pages queue sometimes accepts a deployment and then leaves it
-          # in deployment_queued without ever allocating a runner. The action's
-          # 10-minute default gives up mid-congestion and cancels its own
-          # deployment; 30 minutes lets a slow queue finish instead.
-          timeout: 1800000
