@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>扶輪 3523 行事曆與議程系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- LINE 登入：用 LIFF 取得「開啟者本人」身分，網址不必帶 uid（分享連結不會外洩身分）。 -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .readonly-input { background-color: transparent !important; border-color: transparent !important; cursor: default; }
+    .readonly-input:focus { outline: none !important; box-shadow: none !important; }
+    .line-bg { background-color: #8da4bc; }
+
+    /* 議程 PDF：用瀏覽器原生列印引擎輸出「向量 PDF」(文字清晰、可選取、可搜尋)。 */
+    #agenda-print-zone { display: none; }
+    @media print {
+      body { background: #fff !important; }
+      body > *:not(#agenda-print-zone) { display: none !important; }
+      #agenda-print-zone { display: block !important; }
+      @page { size: A4 portrait; margin: 12mm; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+  <!-- ==================== 檢視 1：年度活動總表 ==================== -->
+  <div id="view-list" class="flex flex-col h-screen w-full overflow-hidden bg-slate-50">
+    <div class="p-6 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center bg-blue-900 text-white flex-shrink-0 shadow-md z-10 gap-4">
+      <div class="flex items-center gap-3">
+        <i data-lucide="table-2" class="w-8 h-8 text-yellow-400"></i>
+        <h1 class="text-2xl font-bold tracking-wider" id="main-title">載入中...</h1>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-blue-200 whitespace-nowrap flex items-center gap-1"><i data-lucide="eye" class="w-4 h-4"></i> 檢視範圍：</label>
+          <select id="view-selector" onchange="switchView(this.value)" class="bg-blue-800 border border-blue-700 text-white text-sm rounded focus:ring-yellow-400 focus:border-yellow-400 block w-56 p-2.5 outline-none cursor-pointer shadow-sm"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-6 md:p-10">
+      <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full max-h-[800px]">
+        <div class="flex-1 overflow-y-auto">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-slate-100 border-b border-slate-200 text-slate-700 shadow-sm z-10">
+              <tr>
+                <th class="py-4 px-6 font-bold w-20 text-center">順次</th>
+                <th class="py-4 px-6 font-bold">活動內容</th>
+                <th class="py-4 px-6 font-bold w-48">活動日期</th>
+                <th class="py-4 px-6 font-bold w-48 text-center">操作管理</th>
+              </tr>
+            </thead>
+            <tbody id="event-list-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+
+        <div id="add-event-section" class="p-5 bg-blue-50 border-t border-blue-100 flex-shrink-0 hidden">
+          <h3 class="font-bold text-blue-900 mb-3 flex items-center gap-2"><i data-lucide="plus-circle" class="w-5 h-5"></i> 快速新增活動</h3>
+          <div class="flex flex-col md:flex-row gap-4 items-end">
+            <div class="flex-1 w-full">
+              <label class="block text-xs text-slate-500 mb-1">活動內容名稱</label>
+              <input type="text" id="new-event-title" placeholder="例如：新世代扶輪交接典禮" class="w-full p-2.5 border border-slate-300 rounded focus:border-blue-500 outline-none text-sm shadow-sm" />
+            </div>
+            <div class="w-full md:w-64">
+              <label class="block text-xs text-slate-500 mb-1">活動日期</label>
+              <input type="date" id="new-event-date" class="w-full p-2.5 border border-slate-300 rounded focus:border-blue-500 outline-none text-sm shadow-sm" />
+            </div>
+            <button onclick="createNewEvent()" class="w-full md:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors shadow-md flex items-center justify-center gap-2">新增 <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
+          </div>
+        </div>
+        <div id="readonly-notice" class="hidden p-4 bg-slate-100 text-slate-500 text-center text-sm border-t border-slate-200">
+          <i data-lucide="lock" class="w-4 h-4 inline-block mr-1 -mt-1"></i> 您僅有此行事曆的檢視權限，無法新增或編輯。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 檢視 2：議程編輯 ==================== -->
+  <div id="view-agenda" class="hidden flex-col md:flex-row h-screen w-full">
+    <div class="w-full md:w-80 bg-white border-r border-slate-200 flex flex-col shadow-lg z-10 flex-shrink-0">
+      <div class="p-5 bg-blue-900 text-white">
+        <button onclick="backToList()" class="text-blue-200 hover:text-white flex items-center gap-1 text-sm mb-4 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> 返回年度總表</button>
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2"><i data-lucide="settings" class="w-6 h-6 text-yellow-400"></i><h1 class="text-xl font-bold tracking-wider">活動議程</h1></div>
+          <span id="agenda-role-badge" class="px-2 py-0.5 rounded text-xs bg-red-500 text-white hidden">唯讀</span>
+        </div>
+      </div>
+      <div class="p-5 border-b border-slate-100 flex-1 overflow-y-auto">
+        <h2 class="font-semibold text-slate-700 mb-4 flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> 基礎資訊</h2>
+        <div class="space-y-4">
+          <div><label class="block text-xs text-slate-500 mb-1">活動內容</label><input type="text" id="input-title" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none font-bold text-blue-900 event-field" /></div>
+          <div><label class="block text-xs text-slate-500 mb-1">活動日期</label><input type="date" id="input-date" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
+          <div><label class="block text-xs text-slate-500 mb-1">議程開始時間</label><input type="time" id="input-startTime" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
+          <div><label class="block text-xs text-slate-500 mb-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> 地點</label><input type="text" id="input-location" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
+          <div><label class="block text-xs text-slate-500 mb-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> 司儀</label><input type="text" id="input-mc" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
+        </div>
+      </div>
+      <div id="ai-agent-section" class="p-5 bg-blue-50 border-t border-blue-100">
+        <h2 class="font-semibold text-blue-900 mb-3 flex items-center gap-2"><i data-lucide="bot" class="w-5 h-5 text-blue-600"></i> 議程快速工具</h2>
+        <div class="space-y-2">
+          <button onclick="runAiCommand('template')" class="w-full bg-white hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 py-2 px-3 rounded text-sm transition-colors text-left flex items-center gap-2"><i data-lucide="play" class="w-3 h-3"></i> 匯入標準例會範本</button>
+          <button onclick="runAiCommand('addBreak')" class="w-full bg-white hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 py-2 px-3 rounded text-sm transition-colors text-left flex items-center gap-2"><i data-lucide="play" class="w-3 h-3"></i> 加入 10 分鐘中場休息</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1 flex flex-col h-full overflow-hidden">
+      <div class="bg-white p-6 border-b border-slate-200 shadow-sm z-0">
+        <div class="flex justify-between items-end gap-4">
+          <div>
+            <h2 class="text-2xl font-bold text-slate-800 mb-2" id="display-title">活動名稱</h2>
+            <div class="flex flex-wrap gap-4 text-sm text-slate-600">
+              <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-4 h-4"></i> <span id="display-date"></span></span>
+              <span class="flex items-center gap-1"><i data-lucide="map-pin" class="w-4 h-4"></i> <span id="display-location"></span></span>
+              <span class="flex items-center gap-1"><i data-lucide="user" class="w-4 h-4"></i> 司儀：<span id="display-mc"></span></span>
+            </div>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="text-right">
+              <p class="text-sm text-slate-500 mb-1">預計結束時間</p>
+              <p class="text-3xl font-bold text-blue-600" id="end-time-display">--:--</p>
+            </div>
+            <button onclick="downloadAgendaPdf()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-colors"><i data-lucide="file-down" class="w-5 h-5"></i> 下載 PDF</button>
+            <button id="btn-save-agenda" onclick="saveAgenda()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-colors"><i data-lucide="save" class="w-5 h-5"></i> 儲存</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6 bg-slate-50">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div class="grid grid-cols-12 gap-4 p-4 bg-slate-100/50 border-b border-slate-200 text-sm font-semibold text-slate-600 min-w-[800px]">
+            <div class="col-span-2 text-center">時間</div>
+            <div class="col-span-1 text-center">分鐘</div>
+            <div class="col-span-4">內容 / 主題</div>
+            <div class="col-span-3">講者 / 負責人</div>
+            <div class="col-span-2 text-center">簡報 / 動作</div>
+          </div>
+          <div id="agenda-container" class="divide-y divide-slate-100 min-w-[800px]"></div>
+          <div id="add-agenda-item-section" class="p-4 bg-slate-50 border-t border-slate-200 min-w-[800px]">
+            <button onclick="handleAddItem(-1)" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center gap-2 transition-all"><i data-lucide="plus" class="w-5 h-5"></i> 新增議程項目</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== LINE 官方帳號手機預覽 Modal ==================== -->
+  <div id="line-modal" class="fixed inset-0 bg-black/70 z-50 hidden flex-col items-center justify-center backdrop-blur-sm">
+    <div class="w-full max-w-[375px] flex justify-between items-center mb-2 px-2 text-white">
+      <span class="text-sm opacity-80">LINE 伺服端預覽</span>
+      <button onclick="closeLineModal()" class="hover:bg-white/20 p-1.5 rounded-full transition-colors"><i data-lucide="x" class="w-6 h-6"></i></button>
+    </div>
+    <div class="w-full max-w-[375px] h-[750px] bg-white rounded-[2rem] shadow-2xl relative overflow-hidden border-8 border-slate-800 flex flex-col">
+      <div class="bg-[#202b3d] text-white px-4 py-3 flex justify-between items-center z-10 shadow-sm">
+        <div class="flex items-center gap-3">
+          <i data-lucide="chevron-left" class="w-6 h-6"></i>
+          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-300 via-blue-300 to-purple-300 border-2 border-[#202b3d]"></div>
+          <div>
+            <h2 id="line-header-title" class="font-bold text-[15px]">扶輪社</h2>
+            <p class="text-xs text-slate-300">社內獨立專區</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3"><i data-lucide="search" class="w-5 h-5"></i><i data-lucide="menu" class="w-5 h-5"></i></div>
+      </div>
+      <div class="flex-1 line-bg overflow-y-auto p-4 flex flex-col items-center">
+        <div class="w-[90%] bg-white pb-6 pt-2 rounded-t-lg shadow-sm flex flex-col gap-4 px-4 min-h-full" id="line-events-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 議程向量 PDF 的列印專用區（平時隱藏，列印時只顯示這塊） -->
+  <div id="agenda-print-zone"></div>
+
+  <script>
+    // ==================== 後端連線 ====================
+    const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+    const LIFF_ID = '2010535285-kh8rJmpS';
+    // 身分優先用 LINE 登入（見 ensureLineLogin）；網址的 ?uid= 僅作為登入不可用時的退路。
+    let UID = new URLSearchParams(location.search).get('uid') || '';
+
+    // 用 LIFF 取得開啟者本人的 userId。LINE 內建瀏覽器自動登入；電腦瀏覽器導去 LINE 登入再回來。
+    async function ensureLineLogin() {
+      try {
+        await Promise.race([
+          liff.init({ liffId: LIFF_ID }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('liff init timeout')), 5000)),
+        ]);
+        if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+        const p = await liff.getProfile();
+        if (p && p.userId) UID = p.userId;
+      } catch (e) {
+        console.warn('LINE 登入略過（逾時或失敗），改用網址 uid（若有）', e);
+      }
+    }
+
+    async function apiFetch(path, opts = {}) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 12000);   // 12s 逾時，避免後端慢時無限等
+      try {
+        const res = await fetch(API_BASE + path, {
+          headers: { 'Content-Type': 'application/json', 'X-Line-UserId': UID, 'ngrok-skip-browser-warning': '1' },
+          signal: ctrl.signal,
+          ...opts,
+        });
+        if (!res.ok) throw new Error('API ' + path + ' → ' + res.status);
+        return res.json();
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    // ==================== 狀態 ====================
+    let me = { is_admin: false, club: '', scope: 'district' };
+    let currentScope = 'district';        // 'district' | 'club'
+    let events = [];                      // 目前檢視範圍的活動（含 agenda）
+    let activeEvent = null;               // 議程編輯中的活動（本地副本，儲存才寫回後端）
+
+    function canEdit() { return !!me.is_admin; }  // 編輯權限＝後端管理員（/admin/events 也是這樣擋）
+
+    // ==================== 初始化 ====================
+    document.addEventListener('DOMContentLoaded', init);
+
+    async function init() {
+      lucide.createIcons();
+      setupGlobalAgendaListeners();
+      await ensureLineLogin();   // 取得開啟者本人身分（決定是否為管理員）
+      try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '', scope: 'district' }; }
+      currentScope = me.club ? 'club' : 'district';
+      buildViewSelector();
+      await loadEvents();
+    }
+
+    function buildViewSelector() {
+      const sel = document.getElementById('view-selector');
+      let html = '<option value="district">🌐 3523 地區總表</option>';
+      if (me.club) html += `<option value="club">🏠 ${me.club}（本社）</option>`;
+      sel.innerHTML = html;
+      sel.value = currentScope;
+    }
+
+    async function switchView(scope) {
+      currentScope = scope;
+      if (activeEvent) backToList();
+      await loadEvents();
+    }
+
+    async function loadEvents() {
+      try {
+        const data = await apiFetch('/events?scope=' + currentScope);
+        events = data.events || [];
+      } catch (e) {
+        events = [];
+        alert('載入活動失敗：' + e.message);
+      }
+      document.getElementById('main-title').innerText =
+        (currentScope === 'club' ? (me.club || '本社') : '3523 地區') + ' 年度活動總表';
+      const editable = canEdit();
+      document.getElementById('add-event-section').classList.toggle('hidden', !editable);
+      document.getElementById('readonly-notice').classList.toggle('hidden', editable);
+      renderEventList();
+    }
+
+    function renderEventList() {
+      const tbody = document.getElementById('event-list-body');
+      const editable = canEdit();
+      if (events.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="py-10 text-center text-slate-400">尚無任何活動。</td></tr>';
+        lucide.createIcons(); return;
+      }
+      let html = '';
+      events.forEach((evt, index) => {
+        const deleteBtn = editable ? `<button onclick="deleteEvent(${evt.id})" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>` : '';
+        // 例會（活動內容或類型含「例會」）：改成「編輯社刊」並連到 bulletin.html；其他：編輯/檢視議程。
+        let actionBtn;
+        if ((evt.title || '').includes('例會') || (evt.type || '').includes('例會')) {
+          const t = editable ? '編輯社刊' : '檢視社刊';
+          actionBtn = `<button onclick="openBulletinEditor(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-600 hover:text-white rounded transition-colors text-sm font-medium"><i data-lucide="newspaper" class="w-4 h-4 pointer-events-none"></i> ${t}</button>`;
+        } else {
+          const t = editable ? '<i data-lucide="file-edit" class="w-4 h-4 pointer-events-none"></i> 編輯議程' : '<i data-lucide="eye" class="w-4 h-4 pointer-events-none"></i> 檢視議程';
+          actionBtn = `<button onclick="openAgenda(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded transition-colors text-sm font-medium">${t}</button>`;
+        }
+        html += `
+          <tr class="hover:bg-blue-50/50 transition-colors group">
+            <td class="py-4 px-6 text-center font-mono text-slate-500">${index + 1}</td>
+            <td class="py-4 px-6 font-medium text-slate-800 text-lg">${escapeHtml(evt.title)}</td>
+            <td class="py-4 px-6 text-slate-600 font-mono">${evt.date || '未定'}</td>
+            <td class="py-4 px-6 text-center">
+              <div class="flex items-center justify-center gap-3">
+                ${actionBtn}
+                ${deleteBtn}
+              </div>
+            </td>
+          </tr>`;
+      });
+      tbody.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    async function createNewEvent() {
+      if (!canEdit()) return;
+      const titleInput = document.getElementById('new-event-title');
+      const dateInput = document.getElementById('new-event-date');
+      const title = titleInput.value.trim();
+      if (!title) { alert('請輸入活動內容名稱！'); return; }
+      const payload = {
+        scope: currentScope,
+        club_name: currentScope === 'club' ? (me.club || '') : '',
+        title, date: dateInput.value || null, start_time: '12:00', agenda: [],
+      };
+      try {
+        await apiFetch('/admin/events', { method: 'POST', body: JSON.stringify(payload) });
+        titleInput.value = ''; dateInput.value = '';
+        await loadEvents();
+      } catch (e) { alert('新增失敗：' + e.message); }
+    }
+
+    async function deleteEvent(id) {
+      if (!canEdit()) return;
+      const evt = events.find(e => e.id === id);
+      if (!confirm(`確定要刪除「${evt ? evt.title : '此活動'}」及其所有議程嗎？`)) return;
+      try {
+        await apiFetch('/admin/events/' + id, { method: 'DELETE' });
+        await loadEvents();
+      } catch (e) { alert('刪除失敗：' + e.message); }
+    }
+
+    // 例會 → 開「這場例會」的社刊編輯器（每場例會各自一份，用 event id 區分）。
+    function openBulletinEditor(eventId) {
+      const ev = 'event=' + encodeURIComponent(eventId);
+      // 編輯模式自行 LINE 登入，不帶 uid；唯讀模式看該場例會的社刊。
+      const url = canEdit() ? ('bulletin.html?' + ev) : ('bulletin.html?view=1&' + ev);
+      window.open(url, '_blank');
+    }
+
+    // ==================== 議程編輯 ====================
+    function openAgenda(eventId) {
+      const src = events.find(e => e.id === eventId);
+      if (!src) return;
+      activeEvent = JSON.parse(JSON.stringify(src));           // 本地副本，儲存才寫回
+      if (!Array.isArray(activeEvent.agenda)) activeEvent.agenda = [];
+
+      document.getElementById('view-list').classList.add('hidden');
+      document.getElementById('view-list').classList.remove('flex');
+      document.getElementById('view-agenda').classList.remove('hidden');
+      document.getElementById('view-agenda').classList.add('flex');
+
+      const editable = canEdit();
+      document.getElementById('agenda-role-badge').classList.toggle('hidden', editable);
+      document.getElementById('ai-agent-section').classList.toggle('hidden', !editable);
+      document.getElementById('add-agenda-item-section').classList.toggle('hidden', !editable);
+      document.getElementById('btn-save-agenda').classList.toggle('hidden', !editable);
+      document.querySelectorAll('.event-field').forEach(el => {
+        el.readOnly = !editable;
+        el.classList.toggle('readonly-input', !editable);
+      });
+
+      populateAgendaSidebar(); updateTimesAndData(); renderAgenda();
+    }
+
+    function backToList() {
+      activeEvent = null;
+      document.getElementById('view-agenda').classList.add('hidden');
+      document.getElementById('view-agenda').classList.remove('flex');
+      document.getElementById('view-list').classList.remove('hidden');
+      document.getElementById('view-list').classList.add('flex');
+      renderEventList();
+    }
+
+    async function saveAgenda() {
+      if (!activeEvent || !canEdit()) return;
+      const btn = document.getElementById('btn-save-agenda');
+      const original = btn.innerHTML;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> 儲存中'; lucide.createIcons();
+      const payload = {
+        title: activeEvent.title,
+        date: activeEvent.date || null,
+        start_time: activeEvent.start_time || '',
+        location: activeEvent.location || '',
+        mc: activeEvent.mc || '',
+        agenda: activeEvent.agenda,
+        // 讓 app 其他畫面的時間欄位也一致：開始 - 預計結束
+        time: (activeEvent.start_time || '') + (activeEvent.endTime ? '-' + activeEvent.endTime : ''),
+      };
+      try {
+        await apiFetch('/admin/events/' + activeEvent.id, { method: 'PUT', body: JSON.stringify(payload) });
+        // 同步回本地清單
+        const idx = events.findIndex(e => e.id === activeEvent.id);
+        if (idx >= 0) events[idx] = JSON.parse(JSON.stringify(activeEvent));
+        btn.innerHTML = '<i data-lucide="check" class="w-5 h-5"></i> 已儲存'; lucide.createIcons();
+        setTimeout(() => { btn.innerHTML = original; lucide.createIcons(); }, 1500);
+        // 社員看到的議程 PDF 由後端從這份議程即時產生（向量、文字可選取），
+        // 不必再從瀏覽器產圖上傳。
+      } catch (e) {
+        btn.innerHTML = original; lucide.createIcons();
+        alert('儲存失敗：' + e.message);
+      }
+    }
+
+    function setupGlobalAgendaListeners() {
+      const bindings = ['input-title', 'input-date', 'input-startTime', 'input-location', 'input-mc'];
+      bindings.forEach(id => {
+        document.getElementById(id).addEventListener('input', (e) => {
+          if (!activeEvent || !canEdit()) return;
+          const key = id.replace('input-', '');
+          if (key === 'title') activeEvent.title = e.target.value;
+          else if (key === 'startTime') { activeEvent.start_time = e.target.value; updateTimesAndData(); }
+          else activeEvent[key] = e.target.value;   // date / location / mc
+          renderAgendaHeaderInfo();
+        });
+      });
+
+      const container = document.getElementById('agenda-container');
+      container.addEventListener('input', (e) => {
+        if (!canEdit() || !activeEvent) return;
+        if (e.target.classList.contains('agenda-input')) {
+          const id = parseInt(e.target.dataset.id);
+          const field = e.target.dataset.field;
+          const item = activeEvent.agenda.find(a => a.id === id);
+          if (item) {
+            if (field === 'duration') { item.duration = parseInt(e.target.value) || 0; updateTimesAndData(); syncTimeCells(); }
+            else item[field] = e.target.value;
+          }
+          if (e.target.tagName === 'TEXTAREA') autoGrow(e.target);
+        }
+      });
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn || !canEdit() || !activeEvent) return;
+        const action = btn.dataset.action;
+        const id = btn.dataset.id ? parseInt(btn.dataset.id) : null;
+        const index = btn.dataset.index ? parseInt(btn.dataset.index) : null;
+        if (action === 'delete') {
+          activeEvent.agenda = activeEvent.agenda.filter(a => a.id !== id);
+        } else if (action === 'move-up' && index > 0) {
+          [activeEvent.agenda[index - 1], activeEvent.agenda[index]] = [activeEvent.agenda[index], activeEvent.agenda[index - 1]];
+        } else if (action === 'move-down' && index < activeEvent.agenda.length - 1) {
+          [activeEvent.agenda[index + 1], activeEvent.agenda[index]] = [activeEvent.agenda[index], activeEvent.agenda[index + 1]];
+        } else if (action === 'upload') {
+          const url = prompt('貼上簡報 PDF 的連結（Google Drive／雲端硬碟等，需設為任何人可讀）：');
+          if (url) {
+            const item = activeEvent.agenda.find(a => a.id === id);
+            if (item) item.pdf = { name: decodeURIComponent(url.split('/').pop().split('?')[0]) || '簡報.pdf', url };
+          }
+        } else if (action === 'remove-pdf') {
+          const item = activeEvent.agenda.find(a => a.id === id);
+          if (item) item.pdf = null;
+        } else { return; }
+        updateTimesAndData(); renderAgenda();
+      });
+    }
+
+    function populateAgendaSidebar() {
+      if (!activeEvent) return;
+      document.getElementById('input-title').value = activeEvent.title || '';
+      document.getElementById('input-startTime').value = activeEvent.start_time || '';
+      document.getElementById('input-date').value = activeEvent.date || '';
+      document.getElementById('input-location').value = activeEvent.location || '';
+      document.getElementById('input-mc').value = activeEvent.mc || '';
+      renderAgendaHeaderInfo();
+    }
+
+    function renderAgendaHeaderInfo() {
+      if (!activeEvent) return;
+      document.getElementById('display-title').innerText = activeEvent.title || '活動名稱';
+      document.getElementById('display-date').innerText = activeEvent.date || '尚未設定';
+      document.getElementById('display-location').innerText = activeEvent.location || '尚未設定';
+      document.getElementById('display-mc').innerText = activeEvent.mc || '尚未設定';
+    }
+
+    function updateTimesAndData() {
+      if (!activeEvent) return;
+      let currentMins = activeEvent.start_time
+        ? activeEvent.start_time.split(':').reduce((h, m) => h * 60 + Number(m)) : 0;
+      activeEvent.agenda.forEach(item => {
+        const hrs = Math.floor(currentMins / 60) % 24, mins = currentMins % 60;
+        item.startTimeStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        currentMins += (item.duration || 0);
+        const he = Math.floor(currentMins / 60) % 24, me = currentMins % 60;
+        item.endTimeStr = `${String(he).padStart(2, '0')}:${String(me).padStart(2, '0')}`;
+      });
+      const eh = Math.floor(currentMins / 60) % 24, em = currentMins % 60;
+      activeEvent.endTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+      const disp = document.getElementById('end-time-display');
+      if (disp) disp.innerText = activeEvent.endTime;
+    }
+
+    // 只更新時間欄位文字（改分鐘時避免整表重繪、游標跳走）
+    function syncTimeCells() {
+      if (!activeEvent) return;
+      activeEvent.agenda.forEach(item => {
+        const cell = document.querySelector(`[data-time-for="${item.id}"]`);
+        if (cell) cell.innerText = `${item.startTimeStr || '--:--'} - ${item.endTimeStr || '--:--'}`;
+      });
+    }
+
+    function renderAgenda() {
+      if (!activeEvent) return;
+      const container = document.getElementById('agenda-container');
+      const editable = canEdit();
+      if (activeEvent.agenda.length === 0) {
+        container.innerHTML = '<div class="p-8 text-center text-slate-400">尚無議程資料，按下方「新增議程項目」開始。</div>';
+        lucide.createIcons(); return;
+      }
+      let html = '';
+      activeEvent.agenda.forEach((item, index) => {
+        let pdfHTML = '';
+        if (item.pdf && item.pdf.name) {
+          const rmBtn = editable ? `<button data-action="remove-pdf" data-id="${item.id}" class="hidden group-hover/pdf:flex absolute right-0 bg-blue-100 h-full px-1.5 items-center justify-center text-blue-800 hover:text-red-500"><i data-lucide="trash-2" class="w-3 h-3 pointer-events-none"></i></button>` : '';
+          pdfHTML = `<div class="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 py-1 px-2 rounded-full border border-blue-200 w-max max-w-[120px] overflow-hidden group/pdf relative"><i data-lucide="link" class="w-3 h-3 flex-shrink-0"></i><a href="${item.pdf.url}" target="_blank" class="truncate block w-[70px] hover:underline" title="${escapeHtml(item.pdf.name)}">${escapeHtml(item.pdf.name)}</a>${rmBtn}</div>`;
+        } else if (editable) {
+          pdfHTML = `<button data-action="upload" data-id="${item.id}" class="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 py-1 px-2 rounded transition-colors"><i data-lucide="upload-cloud" class="w-3 h-3 pointer-events-none"></i> 綁定簡報</button>`;
+        }
+        const controlsHTML = editable ? `
+          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div class="flex flex-col">
+              <button data-action="move-up" data-index="${index}" ${index === 0 ? 'disabled' : ''} class="text-slate-400 hover:text-blue-600 disabled:opacity-30 p-0.5"><i data-lucide="arrow-up" class="w-3 h-3 pointer-events-none"></i></button>
+              <button data-action="move-down" data-index="${index}" ${index === activeEvent.agenda.length - 1 ? 'disabled' : ''} class="text-slate-400 hover:text-blue-600 disabled:opacity-30 p-0.5"><i data-lucide="arrow-down" class="w-3 h-3 pointer-events-none"></i></button>
+            </div>
+            <button data-action="delete" data-id="${item.id}" class="p-1.5 text-red-500 hover:bg-red-50 rounded"><i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i></button>
+          </div>` : '';
+        const inputClass = editable ? "agenda-input hover:border-slate-200 focus:bg-white" : "readonly-input";
+        const ro = editable ? "" : "readonly";
+        html += `
+          <div class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-blue-50/50 transition-colors group">
+            <div class="col-span-2 text-center font-mono text-slate-700 bg-slate-100 py-1.5 rounded text-sm" data-time-for="${item.id}">${item.startTimeStr || '--:--'} - ${item.endTimeStr || '--:--'}</div>
+            <div class="col-span-1 flex justify-center"><input type="number" min="0" data-id="${item.id}" data-field="duration" value="${item.duration}" class="w-16 p-1.5 text-center border border-transparent rounded outline-none font-bold text-blue-700 bg-transparent ${inputClass}" ${ro}/></div>
+            <div class="col-span-4 flex items-center"><textarea data-id="${item.id}" data-field="content" rows="1" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.content || '')}</textarea></div>
+            <div class="col-span-3 flex items-center"><textarea data-id="${item.id}" data-field="speaker" rows="1" placeholder="無" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.speaker || '')}</textarea></div>
+            <div class="col-span-2 flex items-center justify-between"><div class="flex-1">${pdfHTML}</div>${controlsHTML}</div>
+          </div>`;
+      });
+      container.innerHTML = html;
+      container.querySelectorAll('textarea').forEach(autoGrow);
+      lucide.createIcons();
+    }
+
+    // 內容/主題 與 講者/負責人 都是可換行的多行欄位；長字或 Enter 換行後把高度撐開，
+    // 不然 rows="1" + overflow-hidden 會把第二行以後藏起來。
+    function autoGrow(el) {
+      el.style.height = 'auto';
+      const borders = el.offsetHeight - el.clientHeight;   // scrollHeight 不含上下框線
+      el.style.height = (el.scrollHeight + borders) + 'px';
+    }
+
+    function handleAddItem(afterIndex) {
+      if (!activeEvent || !canEdit()) return;
+      const item = { id: Date.now(), duration: 10, content: '', speaker: '', pdf: null };
+      if (afterIndex < 0) activeEvent.agenda.push(item);
+      else activeEvent.agenda.splice(afterIndex + 1, 0, item);
+      updateTimesAndData(); renderAgenda();
+    }
+
+    function runAiCommand(cmd) {
+      if (!activeEvent || !canEdit()) return;
+      if (cmd === 'template') {
+        activeEvent.agenda = [
+          { id: Date.now() + 1, duration: 30, content: '報到、聯誼', speaker: '糾察/聯誼', pdf: null },
+          { id: Date.now() + 2, duration: 10, content: '扶輪禮儀（唱國歌、四大考驗）', speaker: '司儀', pdf: null },
+          { id: Date.now() + 3, duration: 5, content: '社長致詞', speaker: '社長', pdf: null },
+          { id: Date.now() + 4, duration: 50, content: '專題演講', speaker: '講者', pdf: null },
+          { id: Date.now() + 5, duration: 10, content: '中場休息', speaker: '', pdf: null },
+          { id: Date.now() + 6, duration: 5, content: '大摸彩、散會', speaker: '司儀', pdf: null },
+        ];
+      } else if (cmd === 'addBreak') {
+        activeEvent.agenda.push({ id: Date.now(), duration: 10, content: '中場休息', speaker: '', pdf: null });
+      }
+      updateTimesAndData(); renderAgenda();
+    }
+
+    // ==================== LINE 預覽 + 議程 PDF ====================
+    function openLineModal() {
+      const modal = document.getElementById('line-modal');
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+      const name = currentScope === 'club' ? (me.club || '本社') : '3523 地區';
+      document.getElementById('line-header-title').innerText = name;
+      renderLineCards();
+      lucide.createIcons();
+    }
+    function closeLineModal() {
+      const modal = document.getElementById('line-modal');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+    }
+    function renderLineCards() {
+      const container = document.getElementById('line-events-container');
+      if (events.length === 0) { container.innerHTML = '<div class="text-center py-10 text-slate-400">目前尚無任何活動</div>'; return; }
+      let html = '';
+      events.forEach(evt => {
+        html += `
+          <div class="bg-white rounded-xl shadow-[0_2px_10px_rgba(0,0,0,0.06)] border border-slate-100 p-5 mt-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3 mb-3">
+              <span class="bg-[#52b17a] text-white text-xs px-2.5 py-1 rounded font-bold tracking-wider">活動預告</span>
+              <span class="text-slate-400 font-bold tracking-widest text-[15px]">${evt.date || '未定'}</span>
+            </div>
+            <h3 class="text-[17px] font-bold text-slate-800 leading-snug mb-3">${escapeHtml(evt.title)}</h3>
+            <div class="space-y-2 mb-5">
+              <p class="text-sm text-slate-600 flex items-center gap-2"><i data-lucide="map-pin" class="w-4 h-4 text-red-500"></i>地點：${escapeHtml(evt.location || '未定')}</p>
+              <p class="text-sm text-slate-600 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4 text-blue-500"></i>司儀：${escapeHtml(evt.mc || '未定')}</p>
+            </div>
+            <div class="flex gap-2.5">
+              <button class="flex-1 bg-[#3a59b9] text-white text-sm font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-sm"><i data-lucide="monitor-up" class="w-4 h-4"></i> 帶入大螢幕</button>
+              <button onclick="generateSpecificEventPDF(${evt.id})" class="bg-[#c82a36] hover:bg-red-700 text-white text-sm font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors"><i data-lucide="file-text" class="w-4 h-4"></i> PDF</button>
+            </div>
+          </div>`;
+      });
+      container.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    // 議程列印用的 DOM（下載向量 PDF 時塞進 #agenda-print-zone）。
+    function _buildAgendaPrintDom(evt) {
+      const agenda = Array.isArray(evt.agenda) ? evt.agenda : [];
+      let cur = evt.start_time ? evt.start_time.split(':').reduce((h, m) => h * 60 + Number(m)) : 0;
+      const rows = agenda.map(item => {
+        const sh = Math.floor(cur / 60) % 24, sm = cur % 60;
+        const s = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+        cur += (item.duration || 0);
+        const eh = Math.floor(cur / 60) % 24, em = cur % 60;
+        const e = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+        const att = item.pdf && item.pdf.name ? `<a href="${item.pdf.url}" style="color:#2563eb;text-decoration:underline;font-weight:bold;">🔗 ${escapeHtml(item.pdf.name)}</a>` : '';
+        return `<tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:14px 8px;text-align:center;font-family:monospace;font-size:13px;">${s} - ${e}</td>
+          <td style="padding:14px 8px;text-align:center;font-size:13px;">${item.duration}</td>
+          <td style="padding:14px 8px;font-size:14px;white-space:pre-wrap;">${escapeHtml(item.content || '')}</td>
+          <td style="padding:14px 8px;font-size:14px;white-space:pre-wrap;">${escapeHtml(item.speaker || '')}</td>
+          <td style="padding:14px 8px;font-size:13px;">${att}</td></tr>`;
+      }).join('');
+      const endMins = cur, endH = Math.floor(endMins / 60) % 24, endM = endMins % 60;
+      const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+      const el = document.createElement('div');
+      el.style.padding = '40px';
+      el.style.fontFamily = '"Helvetica Neue", Helvetica, Arial, "PingFang TC", "Microsoft JhengHei", sans-serif';
+      el.style.color = '#1e293b';
+      el.innerHTML = `
+        <h1 style="text-align:center;color:#1e3a8a;margin-bottom:10px;font-size:24px;font-weight:bold;">${escapeHtml(evt.title)} 議程表</h1>
+        <div style="margin-bottom:20px;font-size:14px;line-height:1.6;border-bottom:2px solid #1e3a8a;padding-bottom:15px;">
+          <p style="margin:0;"><strong>日期：</strong> ${evt.date || '尚未設定'}</p>
+          <p style="margin:0;"><strong>時間：</strong> ${evt.start_time || '--:--'} ~ ${endTime}</p>
+          <p style="margin:0;"><strong>地點：</strong> ${escapeHtml(evt.location || '尚未設定')}</p>
+          <p style="margin:0;"><strong>司儀：</strong> ${escapeHtml(evt.mc || '尚未設定')}</p>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background-color:#f8fafc;border-bottom:2px solid #cbd5e1;font-size:14px;font-weight:bold;">
+            <th style="padding:12px 8px;text-align:center;width:15%;">時間</th>
+            <th style="padding:12px 8px;text-align:center;width:8%;">分鐘</th>
+            <th style="padding:12px 8px;text-align:left;width:32%;">內容 / 主題</th>
+            <th style="padding:12px 8px;text-align:left;width:20%;">講者 / 負責人</th>
+            <th style="padding:12px 8px;text-align:left;width:25%;">附件資源</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      return el;
+    }
+
+    // 社員看到的那份：後端從已存檔的議程即時產生的向量 PDF。
+    function generateSpecificEventPDF(eventId) {
+      const evt = events.find(e => e.id === eventId);
+      if (!evt) return;
+      if (!(evt.agenda || []).length) { alert('此活動尚無建立任何議程資料，無法匯出。'); return; }
+      window.open(API_BASE + '/events/' + eventId + '/pdf', '_blank');
+    }
+
+    // 下載「向量」議程 PDF：用瀏覽器原生列印引擎（文字清晰、可選取），請於目的地選「另存為 PDF」。
+    // 這條路徑用編輯中的內容，尚未存檔也能先印。
+    async function downloadAgendaPdf() {
+      if (!activeEvent) return;
+      if (!(activeEvent.agenda || []).length) { alert('此活動尚無議程資料，無法匯出。'); return; }
+      const el = _buildAgendaPrintDom(activeEvent);
+      const zone = document.getElementById('agenda-print-zone');
+      zone.innerHTML = '';
+      zone.appendChild(el);
+      if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+      const cleanup = () => { zone.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
+      window.addEventListener('afterprint', cleanup);
+      window.print();
+      setTimeout(cleanup, 60000);
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
