@@ -1,15 +1,8 @@
 name: Deploy frontend to GitHub Pages
 
-# Publishes the frontend/ folder as the root of the gh-pages branch, so URLs stay
+# Publishes the frontend/ folder as the site root, so URLs stay
 # https://<user>.github.io/rotary-3523-liff/index.html (not /frontend/index.html).
-# Pages setup: Settings → Pages → Source = "Deploy from a branch" → gh-pages → /
-#
-# This deliberately does NOT use actions/deploy-pages. GitHub's Actions-based
-# Pages queue was accepting deployments and then leaving them in
-# deployment_queued forever; the action hard-caps its wait at 10 minutes
-# (MAX_TIMEOUT = 600000, the timeout input is clamped to it) and cancels its own
-# deployment, so every run failed. Pushing to a branch goes through the legacy
-# Pages build path, which still works. Switch back once that queue recovers.
+# One-time setup: repo Settings → Pages → Source = "GitHub Actions".
 
 on:
   push:
@@ -20,46 +13,25 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  publish:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Full history, so gh-pages comes down complete and the commit we build on
-      # top of it isn't a shallow boundary that the push would reject.
       - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
-          fetch-depth: 0
-
-      - name: Publish frontend/ to the gh-pages branch
-        env:
-          GIT_INDEX_FILE: ${{ runner.temp }}/gh-pages.index
-        run: |
-          set -euo pipefail
-
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Build the branch tree with plumbing: frontend/'s tree, plus an empty
-          # .nojekyll so Pages serves the files as-is instead of running Jekyll.
-          git read-tree "$(git rev-parse HEAD:frontend)"
-          blob=$(git hash-object -w --stdin </dev/null)
-          git update-index --add --cacheinfo 100644,"$blob",.nojekyll
-          tree=$(git write-tree)
-
-          # Keep gh-pages history when it already exists, so the branch reads as
-          # a deployment log rather than a series of unrelated roots.
-          parent=()
-          if git rev-parse --verify -q origin/gh-pages >/dev/null; then
-            parent=(-p "$(git rev-parse origin/gh-pages)")
-          fi
-
-          commit=$(git commit-tree "$tree" "${parent[@]}" \
-            -m "Publish frontend/ from ${GITHUB_SHA:0:7}")
-          git push origin "$commit:refs/heads/gh-pages"
-          echo "published $commit to gh-pages"
+          path: ./frontend
+      - id: deployment
+        uses: actions/deploy-pages@v4
