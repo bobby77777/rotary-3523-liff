@@ -1062,12 +1062,14 @@ const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
 
 const golfPars = [4,3,5,4,4,3,4,5,4,4,4,3,5,4,4,3,5,4];
 
-// 後端 _is_golf_event 有一模一樣的一份，兩邊要一致，
-// 不然前端沒問差點、後端卻擋下報名。
+// /events 每筆都帶後端算好的 is_golf，優先採用——規則只有後端一份，前端沒問差點
+// 而後端擋下報名這種落差就不會發生。只有行事曆管理的「編輯中草稿」還沒存進後端，
+// 拿不到旗標，才退回本地同一套規則。
 function isGolfEvent(ev) {
     if (!ev) return false;
-    return (ev.type || '').includes('高球') || (ev.title || '').includes('高爾夫')
-        || ev.type === '地區運動';
+    if (typeof ev.is_golf === 'boolean') return ev.is_golf;
+    const text = `${ev.type || ''} ${ev.title || ''}`;
+    return text.includes('高球') || text.includes('高爾夫') || ev.type === '地區運動';
 }
 
 // 已報名的高球賽事但方案或差點還沒填 —— 首頁要請他補填。「還缺什麼」是後端算的

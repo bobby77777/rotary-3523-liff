@@ -99,6 +99,16 @@
           <div><label class="block text-xs text-slate-500 mb-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> 地點</label><input type="text" id="input-location" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
           <div><label class="block text-xs text-slate-500 mb-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> 司儀</label><input type="text" id="input-mc" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
         </div>
+
+        <!-- 高球賽事才出現：報名表的方案選單與收費就是這裡填的。 -->
+        <div id="golf-plans-section" class="hidden mt-6 pt-4 border-t border-slate-200">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold text-slate-700 flex items-center gap-2"><i data-lucide="flag" class="w-4 h-4"></i> 球場方案與收費</h2>
+            <button id="btn-add-plan" onclick="addPlanRow()" class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold hover:bg-emerald-200 transition-colors">+ 新增</button>
+          </div>
+          <p class="text-[11px] text-slate-400 mb-2 leading-relaxed">代碼 A、B、C… 依順序自動給。取消「下場」的方案（例如只參加晚宴）報名時不必填差點。</p>
+          <div id="golf-plans-list" class="space-y-2"></div>
+        </div>
       </div>
       <div id="ai-agent-section" class="p-5 bg-blue-50 border-t border-blue-100">
         <h2 class="font-semibold text-blue-900 mb-3 flex items-center gap-2"><i data-lucide="bot" class="w-5 h-5 text-blue-600"></i> 議程快速工具</h2>
@@ -207,7 +217,12 @@
           signal: ctrl.signal,
           ...opts,
         });
-        if (!res.ok) throw new Error('API ' + path + ' → ' + res.status);
+        if (!res.ok) {
+          // 後端把「方案沒填名稱」這類原因放在 detail，丟掉的話使用者只會看到
+          // 一個 400，不知道要改哪裡。
+          const detail = await res.json().then(d => d && d.detail).catch(() => null);
+          throw new Error(detail || ('API ' + path + ' → ' + res.status));
+        }
         return res.json();
       } finally {
         clearTimeout(t);
@@ -359,7 +374,65 @@
         el.classList.toggle('readonly-input', !editable);
       });
 
-      populateAgendaSidebar(); updateTimesAndData(); renderAgenda();
+      populateAgendaSidebar(); updateTimesAndData(); renderAgenda(); renderGolfPlans();
+    }
+
+    // ==================== 球場方案（高球賽事）====================
+    // is_golf 是後端隨 /events 一起送來的，這裡不重寫一份判斷規則。
+    function isGolfEvent(ev) {
+      if (!ev) return false;
+      if (typeof ev.is_golf === 'boolean') return ev.is_golf;
+      const text = (ev.type || '') + ' ' + (ev.title || '');
+      return text.includes('高球') || text.includes('高爾夫') || ev.type === '地區運動';
+    }
+
+    function renderGolfPlans() {
+      const section = document.getElementById('golf-plans-section');
+      if (!activeEvent) return;
+      if (!Array.isArray(activeEvent.golf_plans)) activeEvent.golf_plans = [];
+      // 已經設過方案的活動一律顯示，就算類型後來被改掉也看得到、改得動。
+      const show = isGolfEvent(activeEvent) || activeEvent.golf_plans.length > 0;
+      section.classList.toggle('hidden', !show);
+      if (!show) return;
+
+      const editable = canEdit();
+      document.getElementById('btn-add-plan').classList.toggle('hidden', !editable);
+      const list = document.getElementById('golf-plans-list');
+      if (!activeEvent.golf_plans.length) {
+        list.innerHTML = `<p class="text-[11px] text-slate-400 py-2">尚未設定方案。未設定時，報名只會要求填差點。</p>`;
+        return;
+      }
+      list.innerHTML = activeEvent.golf_plans.map((p, i) => `
+        <div class="border border-slate-200 rounded-lg p-2 bg-slate-50/60">
+          <div class="flex items-center gap-1.5 mb-1.5">
+            <span class="w-5 h-5 shrink-0 rounded bg-blue-900 text-white text-[11px] font-bold flex items-center justify-center">${'ABCDEFGHIJ'[i] || '?'}</span>
+            <input data-plan="${i}" data-field="label" placeholder="方案名稱" value="${escAttr(p.label)}"
+              class="plan-input flex-1 min-w-0 p-1.5 border border-slate-300 rounded text-xs outline-none focus:border-blue-500">
+            <button data-plan-remove="${i}" class="text-rose-400 hover:text-rose-600 p-0.5 shrink-0 ${editable ? '' : 'hidden'}"><i data-lucide="minus-circle" class="w-4 h-4 pointer-events-none"></i></button>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input data-plan="${i}" data-field="fee" type="number" min="0" step="50" placeholder="金額" value="${p.fee != null ? p.fee : ''}"
+              class="plan-input w-20 shrink-0 p-1.5 border border-slate-300 rounded text-xs text-right outline-none focus:border-blue-500">
+            <input data-plan="${i}" data-field="note" placeholder="備註" value="${escAttr(p.note)}"
+              class="plan-input flex-1 min-w-0 p-1.5 border border-slate-300 rounded text-xs outline-none focus:border-blue-500">
+            <label class="flex items-center gap-1 text-[11px] text-slate-500 shrink-0" title="不下場的方案不會要求填差點">
+              <input data-plan="${i}" data-field="plays" type="checkbox" ${p.plays === false ? '' : 'checked'} class="plan-input w-3.5 h-3.5">下場</label>
+          </div>
+        </div>`).join('');
+      list.querySelectorAll('.plan-input').forEach(el => { el.disabled = !editable; });
+      lucide.createIcons();
+    }
+
+    function escAttr(v) {
+      return String(v == null ? '' : v).replace(/[&<>"]/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+
+    function addPlanRow() {
+      if (!activeEvent || !canEdit()) return;
+      activeEvent.golf_plans = activeEvent.golf_plans || [];
+      activeEvent.golf_plans.push({ label: '', fee: '', note: '', plays: true });
+      renderGolfPlans();
     }
 
     function backToList() {
@@ -383,6 +456,8 @@
         location: activeEvent.location || '',
         mc: activeEvent.mc || '',
         agenda: activeEvent.agenda,
+        // 整列空白的方案不送（後端會擋沒填名稱的），避免按了「新增」卻沒填就存不了
+        golf_plans: (activeEvent.golf_plans || []).filter(p => String(p.label || '').trim() || String(p.fee || '').trim()),
         // 讓 app 其他畫面的時間欄位也一致：開始 - 預計結束
         time: (activeEvent.start_time || '') + (activeEvent.endTime ? '-' + activeEvent.endTime : ''),
       };
@@ -411,7 +486,27 @@
           else if (key === 'startTime') { activeEvent.start_time = e.target.value; updateTimesAndData(); }
           else activeEvent[key] = e.target.value;   // date / location / mc
           renderAgendaHeaderInfo();
+          if (key === 'title') renderGolfPlans();   // 改標題可能讓這場變成／不再是高球賽事
         });
+      });
+
+      // 球場方案：同一區處理輸入與刪除，跟議程列用一樣的委派寫法。
+      const planList = document.getElementById('golf-plans-list');
+      planList.addEventListener('input', (e) => {
+        if (!canEdit() || !activeEvent) return;
+        const el = e.target.closest('.plan-input');
+        if (!el) return;
+        const plan = activeEvent.golf_plans[parseInt(el.dataset.plan)];
+        if (!plan) return;
+        if (el.dataset.field === 'plays') plan.plays = el.checked;
+        else plan[el.dataset.field] = el.value;
+        // 這裡不重繪：重繪會把游標踢回欄位開頭，打字就沒法連續輸入。
+      });
+      planList.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-plan-remove]');
+        if (!btn || !canEdit() || !activeEvent) return;
+        activeEvent.golf_plans.splice(parseInt(btn.dataset.planRemove), 1);
+        renderGolfPlans();   // 代碼是依順序給的，刪一列之後 A/B/C 要重新編
       });
 
       const container = document.getElementById('agenda-container');

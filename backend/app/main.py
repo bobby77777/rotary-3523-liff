@@ -244,8 +244,8 @@ def _is_golf_event(ev: dict | None) -> bool:
     # 報名紀錄查得到的活動不一定還在（_lookup_event 會回 None），所以這裡容忍缺欄位。
     if not ev:
         return False
-    return ("高球" in ev.get("type", "") or "高爾夫" in ev.get("title", "")
-            or ev.get("type") == "地區運動")
+    text = f"{ev.get('type', '')} {ev.get('title', '')}"
+    return "高球" in text or "高爾夫" in text or ev.get("type") == "地區運動"
 
 
 def _is_rye_event(ev: dict) -> bool:
@@ -1583,6 +1583,8 @@ async def events(request: Request, scope: str = ""):
            if ((can_render and e.get("agenda")) or e.get("id") in stored or e.get("id") in pmap)
            else e
            for e in evs]
+    # is_golf 由後端算：報名表、行事曆管理、議程編輯三處都要判斷，規則各寫一份遲早會歪。
+    evs = [{**e, "is_golf": _is_golf_event(e)} for e in evs]
     return {"status": "ok", "scope": scope, "events": evs}
 
 
