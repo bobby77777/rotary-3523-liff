@@ -63,6 +63,12 @@
     <button onclick="clearSwap()" class="text-[12px] font-bold text-amber-800 hover:text-amber-950 flex-shrink-0">取消</button>
   </div>
 
+  <!-- 分組是按鈕觸發的快照，之後才報名的人不會自動出現，這裡把他們點出來 -->
+  <div id="ungrouped-bar" class="hidden bg-blue-50 border-b border-blue-200 px-5 py-2.5 flex items-center gap-3 flex-shrink-0">
+    <i data-lucide="user-plus" class="w-4 h-4 text-blue-600 flex-shrink-0"></i>
+    <p class="text-[13px] text-blue-900 flex-1 min-w-0"><b id="ungrouped-count">0</b> 位已報名但尚未編組：<span id="ungrouped-names" class="text-blue-700"></span></p>
+  </div>
+
   <!-- ==================== 分組看板 ==================== -->
   <div class="flex-1 overflow-y-auto p-5 md:p-8">
     <div class="max-w-6xl mx-auto">
@@ -189,13 +195,28 @@
     if (data.status !== 'ok') { showEmpty(data.message || '找不到對應賽事。'); return; }
     board = {
       groups: data.groups || [],
+      ungrouped: data.ungrouped || [],
       title: data.event_title || '',
       date: data.event_date || '',
       location: data.event_location || '',
     };
     document.getElementById('event-subtitle').textContent =
       [board.title, board.date, board.location].filter(Boolean).join(' · ') || '—';
+    renderUngrouped();
     renderBoard();
+  }
+
+  // 只是提示，不自動補進分組——重新分組會覆蓋主委手動調過的組別，那要他自己決定。
+  function renderUngrouped() {
+    const bar = document.getElementById('ungrouped-bar');
+    const list = board.ungrouped || [];
+    bar.classList.toggle('hidden', !list.length);
+    if (!list.length) return;
+    document.getElementById('ungrouped-count').textContent = list.length;
+    document.getElementById('ungrouped-names').textContent =
+      list.map(p => p.name + (p.handicap != null ? ` (${p.handicap})` : '')).join('、')
+      + (canEdit() ? ' —— 按上方「分組」按鈕即可納入' : '');
+    lucide.createIcons();
   }
 
   function showEmpty(msg) {

@@ -2207,11 +2207,25 @@ async def golf_groups(request: Request, event: int | None = None):
             "course_plan": r.get("course_plan"),
             "course_plan_label": _plan_summary(ev, r.get("course_plan")),
         })
+    # 分組是「按下按鈕才重建」的快照，不會因為有人報名就自動長出來——那會把主委
+    # 手動調好的組別洗掉。但漏掉的人要講出來，否則看起來就像資料掉了。
+    grouped_uids = {r["line_user_id"] for r in rows if r["line_user_id"]}
+    grouped_names = {r["player_name"] for r in rows}
+    ungrouped = [
+        {"name": (r["full_name"] + (f"（{r['nickname']}）" if r.get("nickname") else "")) or "社友",
+         "handicap": r.get("handicap")}
+        for r in db.get_event_registrants(ev["id"]) if r["line_user_id"] not in grouped_uids
+    ]
+    ungrouped += [
+        {"name": f"{g['name']}（來賓）", "handicap": g.get("handicap")}
+        for g in db.get_event_guests(ev["id"]) if f"{g['name']}（來賓）" not in grouped_names
+    ]
     return {
         "status": "ok", "event_id": ev["id"], "event_title": ev["title"],
         "event_date": ev.get("date", ""), "event_location": ev.get("location", ""),
         "groups": [{"group_no": g, "players": p} for g, p in sorted(groups.items())],
         "players": [{"id": r["id"], "name": r["player_name"], "group_no": r["group_no"]} for r in rows],
+        "ungrouped": ungrouped,
     }
 
 
