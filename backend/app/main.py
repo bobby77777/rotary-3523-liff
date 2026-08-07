@@ -101,6 +101,85 @@ _GOLF_VISIBLE = {2, 5, 8, 11, 14, 17}  # 0-indexed (holes 3,6,9,12,15,18)
 _DEFAULT_HIDDEN = set(range(18)) - _GOLF_VISIBLE
 
 
+# 球場方案：收費依球場、依場次而異（總監盃跟社內球敘不會同價），所以存在活動的
+# golf_plans 欄位，由執秘在行事曆管理裡編輯——程式裡沒有任何價格。
+# 'plays' = False 代表不下場（只出席晚宴），那種人不必登錄差點。
+_PLAN_CODES = "ABCDEFGHIJ"
+
+
+def _normalize_golf_plans(raw) -> tuple[list[dict], str]:
+    """執秘存檔時把方案列表整理成正規形式 -> (plans, error).
+    代碼由順序決定（A、B、C…），執秘只要填名稱與金額。"""
+    if raw in (None, ""):
+        return [], ""
+    if not isinstance(raw, list):
+        return [], "球場方案格式錯誤"
+    if len(raw) > len(_PLAN_CODES):
+        return [], f"球場方案最多 {len(_PLAN_CODES)} 種"
+    plans = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            return [], "球場方案格式錯誤"
+        label = str(item.get("label", "")).strip()
+        if not label:
+            return [], f"第 {i + 1} 個方案沒有填名稱"
+        try:
+            fee = int(float(item.get("fee", 0)))
+        except (TypeError, ValueError):
+            return [], f"「{label}」的金額不是數字"
+        if fee < 0:
+            return [], f"「{label}」的金額不能是負數"
+        plans.append({
+            "code":  _PLAN_CODES[i],
+            "label": label,
+            "fee":   fee,
+            "note":  str(item.get("note", "")).strip(),
+            # 沒指定就當作要下場；只有明確關掉的才是純晚宴之類的方案。
+            "plays": bool(item.get("plays", True)),
+        })
+    return plans, ""
+
+
+def _event_golf_plans(ev: dict | None) -> list[dict]:
+    plans = (ev or {}).get("golf_plans")
+    return plans if isinstance(plans, list) else []
+
+
+def _find_plan(ev: dict | None, code: str | None) -> dict | None:
+    if not code:
+        return None
+    return next((p for p in _event_golf_plans(ev) if p.get("code") == code), None)
+
+
+def _plan_plays_golf(ev: dict | None, code: str | None) -> bool:
+    """Whether this plan actually goes out on the course (so a handicap matters).
+    An event with no plans configured doesn't distinguish, so everyone plays."""
+    if not _event_golf_plans(ev):
+        return True
+    plan = _find_plan(ev, code)
+    return bool(plan and plan.get("plays", True))
+
+
+def _parse_course_plan(ev: dict | None, raw) -> tuple[str | None, str]:
+    """球場方案代碼 -> (code, error), validated against this event's own plans.
+    Blank is allowed here; the caller decides whether it may go without one."""
+    if raw is None or not str(raw).strip():
+        return None, ""
+    code = str(raw).strip().upper()
+    if _find_plan(ev, code) is None:
+        return None, "球場方案選擇不正確，請重新選擇"
+    return code, ""
+
+
+def _plan_summary(ev: dict | None, code: str | None) -> str:
+    """'A. 非球場會員 4,900 元' — for pushes and receipts."""
+    plan = _find_plan(ev, code)
+    if not plan:
+        return ""
+    note = f"（{plan['note']}）" if plan.get("note") else ""
+    return f"{plan['code']}. {plan['label']} {plan['fee']:,} 元{note}"
+
+
 def _parse_handicap(raw) -> tuple[float | None, str]:
     """Registration handicap -> (value, error). Blank is allowed here; the caller
     decides whether a golf event may go without one."""
@@ -1552,9 +1631,16 @@ async def event_pdf(event_id: int):
 def _clean_event_payload(data: dict) -> dict:
     """Keep only editable event fields; drop an invalid scope so a default/existing
     value stands. Field-level validation stays light — this is an admin-only panel."""
-    out = {k: data[k] for k in db._EVENT_FIELDS + ("agenda",) if k in data}
+    out = {k: data[k] for k in db._EVENT_FIELDS + ("agenda", "golf_plans") if k in data}
     if out.get("scope") not in ("club", "district"):
         out.pop("scope", None)
+    # 方案關係到社友要匯多少錢，是這張表單裡唯一不能「輕度驗證」的欄位：
+    # 金額寫錯會直接變成收錯錢，所以壞資料寧可擋下也不存。
+    if "golf_plans" in out:
+        plans, err = _normalize_golf_plans(out["golf_plans"])
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+        out["golf_plans"] = plans
     return out
 
 
@@ -1784,19 +1870,29 @@ async def payment_report(request: Request):
     handicap, hcp_err = _parse_handicap(body.get("handicap"))
     if hcp_err:
         return {"status": "invalid", "message": hcp_err}
-    # 高球賽事報名一定要帶差點。已經報名的人不再擋——他們可能只是來回報匯款，
-    # 差點沒填的話首頁會有「補填高球差點」的入口。
-    if (_is_golf_event(ev) and handicap is None
-            and db.get_registration(uid, ev["id"]) is None):
-        return {"status": "invalid", "message": "高爾夫球賽報名請填寫您的差點"}
+    plan, plan_err = _parse_course_plan(ev, body.get("course_plan"))
+    if plan_err:
+        return {"status": "invalid", "message": plan_err}
 
-    res = db.report_payment(uid, ev["id"], digits, handicap)
+    # 高球賽事報名一定要帶球場方案和差點。已經報名的人不再擋——他們可能只是來
+    # 回報匯款，缺的欄位首頁會有補填入口。
+    if _is_golf_event(ev) and db.get_registration(uid, ev["id"]) is None:
+        # 沒設定方案的場次就不問方案——例如社內球敘只收一種費用。
+        if plan is None and _event_golf_plans(ev):
+            return {"status": "invalid", "message": "高爾夫球賽報名請選擇球場方案"}
+        # 只參加晚宴的人不下場，要他填差點沒有意義。
+        if handicap is None and _plan_plays_golf(ev, plan):
+            return {"status": "invalid", "message": "高爾夫球賽報名請填寫您的差點"}
+
+    res = db.report_payment(uid, ev["id"], digits, handicap, plan)
     if res["was_registered"]:
         note = f"💰 已回報【{ev['title']}】匯款末 5 碼：{digits}\n秘書處對帳後會通知您。"
     else:
         note = f"✅ 報名成功：{ev['title']}\n{ev['date']}（{ev['weekday']}）{ev['time']}　{ev['location']}"
         note += (f"\n匯款末 5 碼：{digits}（待對帳）" if digits
                  else "\n完成匯款後請至「個人中心 → 回報匯款」補填末 5 碼。")
+    if plan is not None:
+        note += f"\n⛳️ 球場方案：{_plan_summary(ev, plan)}"
     if handicap is not None:
         note += f"\n⛳️ 登錄差點：{_fmt_handicap(handicap)}"
     _push_receipt(uid, note)
@@ -1807,6 +1903,8 @@ async def payment_report(request: Request):
         "was_registered": res["was_registered"],
         "bank_digits": digits,
         "handicap": handicap,
+        "course_plan": plan,
+        "course_plan_label": _plan_summary(ev, plan),
     }
 
 
@@ -1829,9 +1927,16 @@ async def attendance_me(request: Request):
             "scope": ev["scope"] if ev else "",
             "checked_in": bool(r["checked_in"]),
             "payment_status": r["payment_status"],
-            # 高球賽事用：差點是 None 代表報名時沒填（例如從 LINE 泡泡報的），首頁要請他補填
+            # 高球賽事用：從 LINE 泡泡報名的人沒填方案／差點，首頁要請他補填。
+            # 「還缺什麼」由後端判斷，前端才不必自己複製一份「哪種方案要下場」的規則。
             "is_golf": _is_golf_event(ev),
             "handicap": r.get("handicap"),
+            "course_plan": r.get("course_plan"),
+            "golf_incomplete": bool(
+                _is_golf_event(ev)
+                and ((r.get("course_plan") is None and _event_golf_plans(ev))
+                     or (r.get("handicap") is None and _plan_plays_golf(ev, r.get("course_plan"))))
+            ),
         })
     attended = sum(1 for e in events if e["checked_in"])
     return {
@@ -1863,6 +1968,11 @@ async def admin_registrants(request: Request, event: int | None = None, club: st
             "uploaded": r["payment_status"] == "uploaded",
             "by_secretary": bool(r.get("registered_by")),
             "handicap": r.get("handicap"),
+            "course_plan": r.get("course_plan"),
+            "course_plan_label": _plan_summary(ev, r.get("course_plan")),
+            "course_plan_fee": (_find_plan(ev, r.get("course_plan")) or {}).get("fee"),
+            # 只參加晚宴的人不下場，名單就不該把他標成「未填差點」。
+            "handicap_required": _plan_plays_golf(ev, r.get("course_plan")),
         }
         for r in rows
     ]
@@ -2682,7 +2792,15 @@ async def admin_bulk_register(request: Request):
         if value is not None:
             handicaps[str(uid_key)] = value
 
-    result = db.bulk_register(uids, ev["id"], bank_digits, admin_uid, handicaps)
+    course_plans: dict[str, str] = {}
+    for uid_key, raw in (body.get("course_plans") or {}).items():
+        code, err = _parse_course_plan(ev, raw)
+        if err:
+            return {"status": "invalid", "message": err}
+        if code is not None:
+            course_plans[str(uid_key)] = code
+
+    result = db.bulk_register(uids, ev["id"], bank_digits, admin_uid, handicaps, course_plans)
     guest_count = db.add_event_guests(ev["id"], guests, admin_uid, bank_digits)
 
     # Notify each newly-registered member in their own chat.

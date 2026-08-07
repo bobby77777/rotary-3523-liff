@@ -178,11 +178,16 @@
                 <i class="fa-solid fa-circle-info mr-1"></i>您即將報名：<b id="self-reg-event-title">--</b><br>
                 系統已自動帶入您的 LINE 社籍資訊。
             </div>
+            <div id="self-plan-block" class="hidden">
+                <label class="block text-xs font-bold text-gray-700 mb-1">球場方案選擇 <span class="text-red-500">*</span></label>
+                <select id="self-course-plan" onchange="syncHandicapRequirement()"
+                    class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"></select>
+            </div>
             <div id="self-handicap-block" class="hidden">
-                <label class="block text-xs font-bold text-gray-700 mb-1">高球差點 HDCP <span class="text-red-500">*</span></label>
+                <label class="block text-xs font-bold text-gray-700 mb-1">差點 (Handicap) <span class="text-red-500">*</span></label>
                 <input type="number" id="self-handicap" min="0" max="54" step="0.1" inputmode="decimal"
                     class="w-full bg-white border border-gray-200 text-gray-900 rounded-xl py-2 px-3 text-center text-lg font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="如 18">
+                    placeholder="如: 18">
                 <p class="text-[10px] text-gray-400 mt-1 text-center">※ 供「報名差點」淨桿榜計算；新貝利亞淨桿仍以抽洞結算。</p>
             </div>
             <div>
@@ -549,7 +554,7 @@
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 mb-1">活動標題 <span class="text-rose-500">*</span></label>
-                    <input id="event-form-title" placeholder="例：第 1234 次例會 · 專題演講" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                    <input id="event-form-title" oninput="syncEventPlansVisibility()" placeholder="例：第 1234 次例會 · 專題演講" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 mb-1">地點</label>
@@ -568,7 +573,7 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-gray-500 mb-1">類型</label>
-                        <input id="event-form-type" placeholder="社內例會 / 社內旅遊…" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                        <input id="event-form-type" oninput="syncEventPlansVisibility()" placeholder="社內例會 / 社內旅遊…" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-gray-500 mb-1">主持／主委</label>
@@ -578,6 +583,15 @@
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 mb-1">會場座標（選填，報到定位驗證用）</label>
                     <input id="event-form-geo" placeholder="25.0785,121.5262（Google 地圖右鍵可複製）" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                </div>
+                <!-- 只有高球賽事看得到；報名表的方案選單與收費就是這裡填的。 -->
+                <div id="event-form-plans-block" class="hidden border-t border-gray-200 pt-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-[10px] font-bold text-gray-500">球場方案與收費（高球賽事）</label>
+                        <button onclick="addEventPlanRow()" class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold"><i class="fa-solid fa-plus"></i> 新增方案</button>
+                    </div>
+                    <div id="event-form-plans" class="space-y-1.5"></div>
+                    <p class="text-[10px] text-gray-400 mt-1 leading-relaxed">代碼 A、B、C… 依順序自動給。取消勾選「下場」的方案（例如只參加晚宴）不會要求填差點。整組留空＝這場不分方案。</p>
                 </div>
                 <p class="text-[10px] text-gray-400 leading-relaxed">提示：類型含「例會」的本社活動，PDF 鈕會連到社刊；其他活動的 PDF 由執秘上傳到 Google Drive 資料夾（檔名以活動編號開頭）。填了會場座標，報到時會檢查社友是否在現場 100 公尺內；留空則不做定位驗證。</p>
                 <div class="flex gap-2 pt-1">
@@ -1056,11 +1070,34 @@ function isGolfEvent(ev) {
         || ev.type === '地區運動';
 }
 
-// 已報名的高球賽事但差點還是空的 —— 首頁要請他補填，否則進不了報名差點榜。
-function needsHandicap(ev) {
+// 已報名的高球賽事但方案或差點還沒填 —— 首頁要請他補填。「還缺什麼」是後端算的
+// （golf_incomplete），因為只參加晚宴的人不必有差點，那條規則只該存在一個地方。
+function needsGolfInfo(ev) {
     if (!isGolfEvent(ev)) return false;
-    const reg = myRegistrations.find(r => r.event_id === ev?.id);
-    return !!reg && reg.handicap == null;
+    return !!myRegistrations.find(r => r.event_id === ev?.id)?.golf_incomplete;
+}
+
+// 球場方案與收費跟著活動走（執秘在行事曆管理裡編輯），前端不留價目表。
+// /events 回來的活動物件本來就含 golf_plans，所以這裡不必再打一支 API。
+function eventGolfPlans(ev) {
+    return Array.isArray(ev?.golf_plans) ? ev.golf_plans : [];
+}
+
+function golfPlanText(p) {
+    return `${p.code}. ${p.label} ${p.fee.toLocaleString()} 元${p.note ? `（${p.note}）` : ''}`;
+}
+
+function selectedGolfPlan() {
+    const code = document.getElementById('self-course-plan').value;
+    return eventGolfPlans(currentActiveEvent).find(p => p.code === code) || null;
+}
+
+// 只參加晚宴的人不下場，差點欄就不該擋著他送出。沒設定方案的場次一律要差點。
+function syncHandicapRequirement() {
+    const plans = eventGolfPlans(currentActiveEvent);
+    const plan = selectedGolfPlan();
+    const needed = !plans.length || !plan || plan.plays;
+    document.getElementById('self-handicap-block').classList.toggle('hidden', !needed);
 }
 
 // ---- STATE ----
@@ -1320,10 +1357,10 @@ function renderHomePage() {
             <div class="p-3 flex gap-2">
                 ${!myRegisteredEvents.includes(ev.id)
                     ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-pen-to-square"></i>我要報名</button>`
-                    : needsHandicap(ev)
+                    : needsGolfInfo(ev)
                     // 從 LINE 泡泡或執秘代報名進來的球友還沒差點，給他一個補填入口，
                     // 不然「已完成報名」之後就再也點不進報名表了。
-                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-golf-ball-tee"></i>補填高球差點</button>`
+                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-golf-ball-tee"></i>補填高球資料</button>`
                     : `<div class="flex-1 min-h-[44px] rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[14px] flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i>已完成報名</div>`}
                 ${eventPdfButtonHTML(ev)}
             </div>
@@ -2990,11 +3027,20 @@ async function handleQrScanResult(qrValue) {
 function triggerMainBannerClick() {
     document.getElementById('self-reg-event-title').textContent = currentActiveEvent?.title || '--';
     document.getElementById('self-bank-digits').value = '';
-    // 高球賽事才問差點；已經登錄過的（例如執秘代填）帶回來讓他確認或改。
+    // 高球賽事才問方案與差點；已經登錄過的（例如執秘代填）帶回來讓他確認或改。
     const isGolf = isGolfEvent(currentActiveEvent);
-    const known = myRegistrations.find(r => r.event_id === currentActiveEvent?.id)?.handicap;
+    const plans = eventGolfPlans(currentActiveEvent);
+    const reg = myRegistrations.find(r => r.event_id === currentActiveEvent?.id);
+    const planSelect = document.getElementById('self-course-plan');
+
+    // 這場沒設定方案（例如社內球敘只收一種費用）就不要問，多一個空選單只會擋路。
+    document.getElementById('self-plan-block').classList.toggle('hidden', !isGolf || !plans.length);
     document.getElementById('self-handicap-block').classList.toggle('hidden', !isGolf);
-    document.getElementById('self-handicap').value = (isGolf && known != null) ? known : '';
+    document.getElementById('self-handicap').value = (isGolf && reg?.handicap != null) ? reg.handicap : '';
+    planSelect.innerHTML = `<option value="">請選擇球場方案</option>`
+        + plans.map(p => `<option value="${p.code}">${_escHtml(golfPlanText(p))}</option>`).join('');
+    if (reg?.course_plan) planSelect.value = reg.course_plan;
+    if (isGolf) syncHandicapRequirement();
     openModal('modal-self-register');
 }
 
@@ -3002,23 +3048,31 @@ async function confirmRegistration() {
     const digits = document.getElementById('self-bank-digits').value.trim();
     if (digits && digits.length !== 5) { showAlert('格式錯誤', '如有填寫，請填完整的末 5 碼！'); return; }
 
-    let handicap = '';
+    let handicap = '', coursePlan = '';
     if (isGolfEvent(currentActiveEvent)) {
-        handicap = document.getElementById('self-handicap').value.trim();
-        if (!handicap) { showAlert('資料不完整', '高爾夫球賽報名請務必填寫您的「差點」！'); return; }
-        const n = Number(handicap);
-        if (!Number.isFinite(n) || n < 0 || n > 54) { showAlert('格式錯誤', '差點請填 0 ~ 54 之間的數字。'); return; }
+        const plans = eventGolfPlans(currentActiveEvent);
+        coursePlan = plans.length ? document.getElementById('self-course-plan').value : '';
+        if (plans.length && !coursePlan) { showAlert('資料不完整', '請選擇您的「球場方案」！'); return; }
+        // 只參加晚宴的人不下場，不必也不該問他差點。
+        if (!plans.length || selectedGolfPlan()?.plays) {
+            handicap = document.getElementById('self-handicap').value.trim();
+            if (!handicap) { showAlert('資料不完整', '高爾夫球賽報名請務必填寫您的「差點」！'); return; }
+            const n = Number(handicap);
+            if (!Number.isFinite(n) || n < 0 || n > 54) { showAlert('格式錯誤', '差點請填 0 ~ 54 之間的數字。'); return; }
+        }
     }
 
     try {
         const data = await apiFetch('/payment/report', {
             method: 'POST',
-            body: JSON.stringify({ event_id: currentActiveEvent?.id, bank_digits: digits, handicap })
+            body: JSON.stringify({ event_id: currentActiveEvent?.id, bank_digits: digits,
+                                   handicap, course_plan: coursePlan })
         });
         if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-self-register');
         await loadMyRegistrations();     // 以後端為準，重新整理後也還在
         let msg = `已登記「${data.event_title}」。`;
+        if (data.course_plan_label) msg += `\n球場方案：${data.course_plan_label}`;
         if (data.handicap != null) msg += `\n您的差點 HDCP：${data.handicap}`;
         msg += digits ? `\n轉出末 5 碼：${digits}（待秘書處對帳）`
                       : '\n\n尚未提供帳號末 5 碼，完成匯款後請至「個人 → 回報匯款」補填。';
@@ -3087,13 +3141,24 @@ async function renderClubMembers() {
         updateSelectedCount();
         return;
     }
+    // 高球賽事每人的方案不一定相同（球場會員身分因人而異），所以方案和差點都是
+    // 逐人一格，擠不進同一行就換行放。
+    const plans = isGolf ? eventGolfPlans(execRegEvent()) : [];
+    const planOptions = `<option value="">方案</option>` + plans.map(p =>
+        `<option value="${p.code}">${p.code}. ${_escHtml(p.label)} ${p.fee.toLocaleString()}</option>`).join('');
     listEl.innerHTML = members.map(m =>
-        `<label class="flex items-center gap-3 p-2 hover:bg-blue-50 rounded-lg cursor-pointer border border-transparent hover:border-blue-100">
-            <input type="checkbox" value="${m.id}" class="member-checkbox w-4 h-4 text-blue-600 rounded" onchange="updateSelectedCount()">
-            <span class="text-sm text-gray-800 font-medium flex-1 min-w-0 truncate">${m.name}</span>
-            ${isGolf ? `<input type="number" min="0" max="54" step="0.1" placeholder="差點" data-uid="${m.id}"
-                class="member-handicap w-16 shrink-0 bg-white border border-gray-200 rounded-lg py-1 px-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                onclick="event.stopPropagation()">` : ''}
+        `<label class="flex flex-col gap-1 p-2 hover:bg-blue-50 rounded-lg cursor-pointer border border-transparent hover:border-blue-100">
+            <span class="flex items-center gap-3">
+                <input type="checkbox" value="${m.id}" class="member-checkbox w-4 h-4 text-blue-600 rounded" onchange="updateSelectedCount()">
+                <span class="text-sm text-gray-800 font-medium flex-1 min-w-0 truncate">${m.name}</span>
+            </span>
+            ${isGolf ? `<span class="flex items-center gap-1.5 pl-7">
+                ${plans.length ? `<select data-uid="${m.id}" onclick="event.stopPropagation()"
+                    class="member-plan flex-1 min-w-0 bg-white border border-gray-200 rounded-lg py-1 px-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-500">${planOptions}</select>` : ''}
+                <input type="number" min="0" max="54" step="0.1" placeholder="差點" data-uid="${m.id}"
+                    class="member-handicap w-14 shrink-0 bg-white border border-gray-200 rounded-lg py-1 px-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    onclick="event.stopPropagation()">
+            </span>` : ''}
         </label>`
     ).join('');
     updateSelectedCount();
@@ -3132,8 +3197,8 @@ async function submitExecSecRegistration() {
     if (uids.length + guests.length === 0) return showAlert('未選擇', '請至少勾選一位社友或填寫一位來賓！');
     if (digits && digits.length !== 5) return showAlert('格式錯誤', '匯款帳號請填寫完整的末 5 碼！');
 
-    // 只送有勾選的人的差點，沒填的就不送（後端當作未登錄，不會蓋掉舊值）。
-    const handicaps = {};
+    // 只送有勾選的人的差點與方案，沒填的就不送（後端當作未登錄，不會蓋掉舊值）。
+    const handicaps = {}, coursePlans = {};
     for (const input of document.querySelectorAll('.member-handicap')) {
         const uid = input.dataset.uid;
         const raw = input.value.trim();
@@ -3144,12 +3209,16 @@ async function submitExecSecRegistration() {
         }
         handicaps[uid] = n;
     }
+    for (const sel of document.querySelectorAll('.member-plan')) {
+        if (uids.includes(sel.dataset.uid) && sel.value) coursePlans[sel.dataset.uid] = sel.value;
+    }
 
     const evId = execRegEventId || currentActiveEvent?.id;
     try {
         const data = await apiFetch('/admin/bulk_register', {
             method: 'POST',
-            body: JSON.stringify({ event_id: evId, uids, guests, bank_digits: digits, handicaps })
+            body: JSON.stringify({ event_id: evId, uids, guests, bank_digits: digits,
+                                   handicaps, course_plans: coursePlans })
         });
         if (data.status !== 'ok') { showAlert('報名失敗', data.message || '請稍後再試。'); return; }
         closeModal('modal-exec-sec-register');
@@ -3200,14 +3269,22 @@ async function clickCheckRegistration(e) {
             : m.uploaded ? ['fa-clock text-amber-500', '<span class="text-[12px] text-amber-600 font-bold">待確認</span>']
             : ['fa-circle text-slate-300', ''];
         const by = m.by_secretary ? '<span class="text-[11px] text-slate-400">執秘代報</span>' : '';
-        // 高球賽事順便讓執秘看到誰還沒登錄差點，開賽前才有機會補。
-        const hcp = !isGolfEvent(currentActiveEvent) ? ''
-            : m.handicap != null
-            ? `<span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">HDCP ${m.handicap}</span>`
-            : '<span class="text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded shrink-0">未填差點</span>';
+        // 高球賽事順便讓執秘看到誰還沒登錄方案／差點，開賽前才有機會補。
+        // 該不該有差點是後端判斷的（只參加晚宴的人不用），這裡不重寫那條規則。
+        const isGolf = isGolfEvent(currentActiveEvent);
+        const badge = (cls, text) =>
+            `<span class="text-[11px] font-bold ${cls} px-1.5 py-0.5 rounded shrink-0">${text}</span>`;
+        const hcp = !isGolf || !m.handicap_required ? ''
+            : m.handicap != null ? badge('text-emerald-700 bg-emerald-50', `HDCP ${m.handicap}`)
+            : badge('text-amber-600 bg-amber-50', '未填差點');
+        const plan = !isGolf ? ''
+            : m.course_plan
+            ? badge('text-indigo-700 bg-indigo-50',
+                    `${_escHtml(m.course_plan)}${m.course_plan_fee ? ' ' + m.course_plan_fee.toLocaleString() : ''}`)
+            : badge('text-amber-600 bg-amber-50', '未選方案');
         return `<div class="flex items-center gap-2 py-1.5 border-b border-slate-50 last:border-0">
             <i class="fa-solid ${icon}"></i>
-            <span class="flex-1 text-[13px] text-slate-700 min-w-0 truncate">${_escHtml(m.name)}</span>${hcp}${by}${tag}
+            <span class="flex-1 text-[13px] text-slate-700 min-w-0 truncate">${_escHtml(m.name)}</span>${plan}${hcp}${by}${tag}
         </div>`;
     }).join('');
     paint(head + rows);
@@ -3442,8 +3519,44 @@ function openEventForm(ev) {
     document.getElementById('event-form-type').value = ev.type || '';
     document.getElementById('event-form-chair').value = ev.chair || '';
     document.getElementById('event-form-geo').value = ev.geo || '';
+    document.getElementById('event-form-plans').innerHTML = '';
+    eventGolfPlans(ev).forEach(addEventPlanRow);
+    syncEventPlansVisibility();
     document.getElementById('event-admin-list-view').classList.add('hidden');
     document.getElementById('event-admin-form-view').classList.remove('hidden');
+}
+
+// 方案區只對高球賽事顯示，依表單當下的類型／標題判斷（用的是跟報名端同一個
+// isGolfEvent，才不會出現「表單看不到但報名要填」的落差）。
+function syncEventPlansVisibility() {
+    const draft = {
+        type:  document.getElementById('event-form-type').value.trim(),
+        title: document.getElementById('event-form-title').value.trim(),
+    };
+    document.getElementById('event-form-plans-block').classList.toggle('hidden', !isGolfEvent(draft));
+}
+
+function addEventPlanRow(plan) {
+    const p = (plan && typeof plan === 'object') ? plan : {};
+    const row = document.createElement('div');
+    row.className = 'event-plan-row flex items-center gap-1.5';
+    row.innerHTML = `
+        <input class="plan-label flex-1 min-w-0 bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-xs" placeholder="方案名稱，如 非球場會員" value="${_escHtml(p.label || '')}">
+        <input class="plan-fee w-20 shrink-0 bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-xs text-right" type="number" min="0" step="50" placeholder="金額" value="${p.fee != null ? p.fee : ''}">
+        <input class="plan-note w-20 shrink-0 bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-[11px]" placeholder="備註" value="${_escHtml(p.note || '')}">
+        <label class="flex items-center gap-1 text-[10px] text-gray-500 shrink-0" title="不下場的方案不會要求填差點">
+            <input class="plan-plays w-3.5 h-3.5" type="checkbox" ${p.plays === false ? '' : 'checked'}>下場</label>
+        <button onclick="this.parentElement.remove()" class="text-rose-400 hover:text-rose-600 p-1 shrink-0"><i class="fa-solid fa-circle-minus"></i></button>`;
+    document.getElementById('event-form-plans').appendChild(row);
+}
+
+function collectEventPlans() {
+    return [...document.querySelectorAll('.event-plan-row')].map(r => ({
+        label: r.querySelector('.plan-label').value.trim(),
+        fee:   r.querySelector('.plan-fee').value.trim(),
+        note:  r.querySelector('.plan-note').value.trim(),
+        plays: r.querySelector('.plan-plays').checked,
+    })).filter(p => p.label || p.fee);   // 整列空白的當作沒填，不送去後端被擋
 }
 
 function editEventFromList(id) { openEventForm(eventAdminCache[id]); }
@@ -3465,6 +3578,7 @@ async function saveEventForm() {
         type: document.getElementById('event-form-type').value.trim(),
         chair: document.getElementById('event-form-chair').value.trim(),
         geo: document.getElementById('event-form-geo').value.trim(),
+        golf_plans: collectEventPlans(),
     };
     if (!payload.title) { showAlert('缺少標題', '請輸入活動標題。'); return; }
     if (payload.geo && !/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(payload.geo)) {

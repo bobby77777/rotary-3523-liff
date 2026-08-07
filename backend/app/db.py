@@ -299,6 +299,9 @@ def ensure_registrations_table() -> None:
     # 高球賽事報名時登錄的個人差點，供「報名差點」淨桿榜使用（與新貝利亞抽洞各算各的）。
     # NULL = 未登錄，該球員就不會出現在報名差點榜上。
     execute("ALTER TABLE registrations ADD COLUMN IF NOT EXISTS handicap REAL")
+    # 高球賽事的球場方案代碼（A/B/C/D，見 main.GOLF_PLANS）。收費依方案不同，
+    # 執秘對帳看的是這一欄。NULL = 非高球賽事或尚未選擇。
+    execute("ALTER TABLE registrations ADD COLUMN IF NOT EXISTS course_plan TEXT")
 
 
 def ensure_club_dues_table() -> None:
@@ -666,6 +669,9 @@ def ensure_events_table() -> None:
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS agenda TEXT NOT NULL DEFAULT '[]'")
     # 高球抽洞：主委抽出的隱藏洞（0-based index 的 JSON 陣列），空 = 尚未抽、用預設。
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS golf_holes TEXT NOT NULL DEFAULT '[]'")
+    # 高球賽事的球場方案與收費（JSON 陣列，見 main._normalize_golf_plans）。價格因球場、
+    # 因場次而異，所以跟著活動走，不寫在程式裡。空陣列 = 這場不分方案。
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS golf_plans TEXT NOT NULL DEFAULT '[]'")
     # 會場座標 "緯度,經度"，供報到的 LBS 距離驗證用；留空 = 該活動不做定位驗證。
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS geo TEXT NOT NULL DEFAULT ''")
 
@@ -706,6 +712,10 @@ def _row_to_event(r: dict) -> dict:
         golf_holes = json.loads(r.get("golf_holes") or "[]")
     except (ValueError, TypeError):
         golf_holes = []
+    try:
+        golf_plans = json.loads(r.get("golf_plans") or "[]")
+    except (ValueError, TypeError):
+        golf_plans = []
     return {
         "id": r["id"], "scope": r["scope"], "club_name": r["club_name"],
         "date": iso, "displayDate": iso,
@@ -718,6 +728,7 @@ def _row_to_event(r: dict) -> dict:
         "geo": r.get("geo") or "",
         "agenda": agenda,
         "golf_holes": golf_holes,
+        "golf_plans": golf_plans,
     }
 
 
@@ -751,8 +762,8 @@ def create_event(data: dict) -> dict:
                 """
                 INSERT INTO events (scope, club_name, date, title, location,
                                     chair, time, type, fee, pdf_url,
-                                    start_time, mc, geo, agenda)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                    start_time, mc, geo, agenda, golf_plans)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
                 """,
                 (data.get("scope", "district"), data.get("club_name", ""),
@@ -760,7 +771,8 @@ def create_event(data: dict) -> dict:
                  data.get("chair", ""), data.get("time", ""), data.get("type", ""),
                  data.get("fee", ""), data.get("pdf_url", ""),
                  data.get("start_time", ""), data.get("mc", ""), data.get("geo", ""),
-                 json.dumps(data.get("agenda") or [])),
+                 json.dumps(data.get("agenda") or []),
+                 json.dumps(data.get("golf_plans") or [])),
             )
             row = cur.fetchone()
         conn.commit()
@@ -776,9 +788,10 @@ def update_event(event_id: int, data: dict) -> dict | None:
     fields = [f for f in _EVENT_FIELDS if f in data]  # whitelist → safe to interpolate
     sets = [f"{f} = %s" for f in fields]
     vals = [(data[f] or None) if f == "date" else data[f] for f in fields]
-    if "agenda" in data:  # stored as a JSON string
-        sets.append("agenda = %s")
-        vals.append(json.dumps(data["agenda"] or []))
+    for jf in ("agenda", "golf_plans"):   # stored as JSON strings
+        if jf in data:
+            sets.append(f"{jf} = %s")
+            vals.append(json.dumps(data[jf] or []))
     if not sets:
         return get_event(event_id)
     vals.append(event_id)
@@ -860,11 +873,11 @@ def register_event(line_user_id: str, event_id: int) -> bool:
 
 
 def report_payment(line_user_id: str, event_id: int, bank_digits: str = "",
-                   handicap: float | None = None) -> dict:
+                   handicap: float | None = None, course_plan: str | None = None) -> dict:
     """Ensure the member is registered and record their transfer digits.
     With digits -> payment_status 'uploaded'; without -> keep/register as unpaid.
-    handicap (高球差點) is only overwritten when a new value is supplied.
-    Returns {'was_registered': bool}."""
+    handicap (高球差點) and course_plan (球場方案) are only overwritten when a
+    new value is supplied. Returns {'was_registered': bool}."""
     existing = get_registration(line_user_id, event_id)
     if bank_digits:
         status = "uploaded"
@@ -872,14 +885,16 @@ def report_payment(line_user_id: str, event_id: int, bank_digits: str = "",
         status = existing["payment_status"] if existing else "unpaid"
     execute(
         """
-        INSERT INTO registrations (line_user_id, event_id, payment_status, bank_digits, handicap)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO registrations (line_user_id, event_id, payment_status, bank_digits,
+                                   handicap, course_plan)
+        VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (line_user_id, event_id) DO UPDATE SET
             payment_status = EXCLUDED.payment_status,
             bank_digits = COALESCE(NULLIF(EXCLUDED.bank_digits, ''), registrations.bank_digits),
-            handicap = COALESCE(EXCLUDED.handicap, registrations.handicap)
+            handicap = COALESCE(EXCLUDED.handicap, registrations.handicap),
+            course_plan = COALESCE(EXCLUDED.course_plan, registrations.course_plan)
         """,
-        (line_user_id, event_id, status, bank_digits or None, handicap),
+        (line_user_id, event_id, status, bank_digits or None, handicap, course_plan),
     )
     return {"was_registered": existing is not None}
 
@@ -924,7 +939,8 @@ def get_event_registrants(event_id: int, club_name: str = "") -> list[dict]:
                r.checked_in,
                r.payment_status,
                r.registered_by,
-               r.handicap
+               r.handicap,
+               r.course_plan
         FROM registrations r
         LEFT JOIN personal_information pi ON pi.line_user_id = r.line_user_id
         WHERE r.event_id = %s
@@ -1111,7 +1127,7 @@ def get_all_user_ids() -> list[str]:
 def get_member_attendance(line_user_id: str) -> list[dict]:
     """All of one member's registrations with check-in flag, newest first."""
     return query(
-        "SELECT event_id, checked_in, checked_in_at, payment_status, handicap "
+        "SELECT event_id, checked_in, checked_in_at, payment_status, handicap, course_plan "
         "FROM registrations WHERE line_user_id = %s ORDER BY event_id DESC",
         (line_user_id,),
     )
@@ -1153,11 +1169,14 @@ def get_club_members(club_name: str) -> list[dict]:
 
 
 def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
-                  registered_by: str = "", handicaps: dict | None = None) -> dict:
+                  registered_by: str = "", handicaps: dict | None = None,
+                  course_plans: dict | None = None) -> dict:
     """Register many members for an event at once. Returns {'new': n, 'dup': n}.
-    handicaps maps line_user_id -> 高球差點; a member already registered still gets
-    their handicap updated, so 執秘 can fix a wrong number without re-registering."""
+    handicaps / course_plans map line_user_id -> 高球差點 / 球場方案代碼; a member
+    already registered still gets those updated, so 執秘 can fix a wrong value
+    without re-registering."""
     handicaps = handicaps or {}
+    course_plans = course_plans or {}
     new_count = 0
     conn = _get_conn()
     try:
@@ -1166,21 +1185,24 @@ def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
                 cur.execute(
                     """
                     INSERT INTO registrations (line_user_id, event_id, payment_status,
-                                               bank_digits, registered_by, handicap)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                                               bank_digits, registered_by, handicap, course_plan)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (line_user_id, event_id) DO NOTHING
                     RETURNING id
                     """,
                     (uid, event_id, "uploaded" if bank_digits else "unpaid",
-                     bank_digits or None, registered_by or None, handicaps.get(uid)),
+                     bank_digits or None, registered_by or None,
+                     handicaps.get(uid), course_plans.get(uid)),
                 )
                 if cur.fetchone() is not None:
                     new_count += 1
-                elif handicaps.get(uid) is not None:
+                elif handicaps.get(uid) is not None or course_plans.get(uid) is not None:
                     cur.execute(
-                        "UPDATE registrations SET handicap = %s "
+                        "UPDATE registrations SET "
+                        "handicap    = COALESCE(%s, handicap), "
+                        "course_plan = COALESCE(%s, course_plan) "
                         "WHERE line_user_id = %s AND event_id = %s",
-                        (handicaps[uid], uid, event_id),
+                        (handicaps.get(uid), course_plans.get(uid), uid, event_id),
                     )
         conn.commit()
         return {"new": new_count, "dup": len(uids) - new_count}
