@@ -1507,6 +1507,23 @@ async function setActiveEventById(eventId) {
     return true;
 }
 
+// 社長／主委頁的「目前活動」下拉。後台每一項作業（報名名單、報到、抽洞、分組…）
+// 都是看 currentActiveEvent，所以在這裡就能換，不必先回首頁點選活動。
+function adminEventOptions(current) {
+    let list = eventsCache[systemScope] || [];
+    if (!list.length) list = getAllCombinedEvents();
+    list = list.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    if (!list.length) return `<option value="">尚無活動</option>`;
+    return list.map(e =>
+        `<option value="${e.id}"${e.id === current?.id ? ' selected' : ''}>` +
+        `${_escHtml(e.title)}${e.date ? `（${_escHtml(e.date)}）` : ''}</option>`).join('');
+}
+
+async function switchAdminEvent(id) {
+    if (!id) return;
+    if (await setActiveEventById(parseInt(id))) renderPage('admin');
+}
+
 function scrollToSection(id) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -2888,9 +2905,13 @@ function renderAdminPage() {
     }
 
     c.innerHTML = `
-        <div class="card p-3 flex items-center gap-2">
-            <i class="fa-solid fa-circle-info text-blue-500"></i>
-            <p class="text-[13px] text-slate-600 min-w-0">目前活動：<b class="text-slate-800">${_escHtml(ev?.title || '尚無活動')}</b></p>
+        <div class="card p-3">
+            <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1">
+                <i class="fa-solid fa-circle-info text-blue-500"></i>目前活動（下方所有作業都以這場為準）</label>
+            <select onchange="switchAdminEvent(this.value)"
+                class="w-full bg-white border border-slate-200 text-slate-800 rounded-lg py-2 px-3 text-[13px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                ${adminEventOptions(ev)}
+            </select>
         </div>
 
         ${group('活動管理', [
