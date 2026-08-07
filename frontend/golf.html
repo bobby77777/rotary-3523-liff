@@ -44,8 +44,11 @@
         <button onclick="printGroups()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-sm flex items-center gap-2 transition-colors">
           <i data-lucide="printer" class="w-4 h-4"></i> 下載分組表
         </button>
-        <button id="btn-auto" onclick="autoGroup()" class="hidden bg-yellow-400 hover:bg-yellow-300 text-emerald-950 px-4 py-2.5 rounded font-bold text-sm flex items-center gap-2 transition-colors shadow-md">
-          <i data-lucide="shuffle" class="w-4 h-4"></i> 依報名名單重新分組
+        <button id="btn-auto" onclick="autoGroup('order')" class="hidden bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-sm flex items-center gap-2 transition-colors">
+          <i data-lucide="list-ordered" class="w-4 h-4"></i> 依報名順序分組
+        </button>
+        <button id="btn-balance" onclick="autoGroup('balanced')" class="hidden bg-yellow-400 hover:bg-yellow-300 text-emerald-950 px-4 py-2.5 rounded font-bold text-sm flex items-center gap-2 transition-colors shadow-md">
+          <i data-lucide="scale" class="w-4 h-4"></i> 依差點平衡分組
         </button>
       </div>
     </div>
@@ -134,6 +137,7 @@
     try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '', scope: 'district' }; }
     document.getElementById('role-badge').classList.toggle('hidden', canEdit());
     document.getElementById('btn-auto').classList.toggle('hidden', !canEdit());
+    document.getElementById('btn-balance').classList.toggle('hidden', !canEdit());
     await loadGolfEvents();
   }
 
@@ -306,13 +310,16 @@
     }
   }
 
-  async function autoGroup() {
+  async function autoGroup(mode) {
     if (!canEdit() || !activeEventId) return;
-    if (!confirm('將依報名名單重新分組（4 人一組），現有分組會被覆蓋。確定執行？')) return;
+    const how = mode === 'balanced'
+      ? '將依差點蛇形分配，讓各組平均差點盡量接近'
+      : '將依報名順序 4 人一組';
+    if (!confirm(how + '。現有分組會被覆蓋，確定執行？')) return;
     try {
       const data = await apiFetch('/golf/groups/auto', {
         method: 'POST',
-        body: JSON.stringify({ event_id: activeEventId }),
+        body: JSON.stringify({ event_id: activeEventId, mode: mode || 'order' }),
       });
       if (data.status !== 'ok') { alert(data.message || '分組失敗'); return; }
       await loadGroups();

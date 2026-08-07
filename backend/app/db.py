@@ -374,19 +374,24 @@ def ensure_golf_scores_table() -> None:
             UNIQUE(event_id, line_user_id)
         )
     """)
+    # 送出成績當下的報名差點快照。結算過的淨桿不該因為之後有人改報名差點而變動，
+    # 所以存下來，而不是每次查詢再去 join registrations。
+    execute("ALTER TABLE golf_scores ADD COLUMN IF NOT EXISTS handicap REAL")
 
 
-def upsert_golf_score(event_id: int, line_user_id: str, player_name: str, scores: list) -> None:
+def upsert_golf_score(event_id: int, line_user_id: str, player_name: str, scores: list,
+                      handicap: float | None = None) -> None:
     execute(
         """
-        INSERT INTO golf_scores (event_id, line_user_id, player_name, scores, updated_at)
-        VALUES (%s, %s, %s, %s, NOW())
+        INSERT INTO golf_scores (event_id, line_user_id, player_name, scores, handicap, updated_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
         ON CONFLICT (event_id, line_user_id) DO UPDATE SET
             player_name = EXCLUDED.player_name,
             scores = EXCLUDED.scores,
+            handicap = COALESCE(EXCLUDED.handicap, golf_scores.handicap),
             updated_at = NOW()
         """,
-        (event_id, line_user_id, player_name, json.dumps(scores)),
+        (event_id, line_user_id, player_name, json.dumps(scores), handicap),
     )
 
 
@@ -402,7 +407,7 @@ def get_golf_scores(event_id: int) -> list[dict]:
     return query(
         """
         SELECT g.line_user_id, g.player_name, g.scores, pi.club_name, pi.full_name,
-               r.handicap AS reg_handicap
+               COALESCE(g.handicap, r.handicap) AS reg_handicap
         FROM golf_scores g
         LEFT JOIN personal_information pi ON pi.line_user_id = g.line_user_id
         LEFT JOIN registrations r
@@ -1346,6 +1351,9 @@ def ensure_golf_groups_table() -> None:
             UNIQUE(event_id, group_no, slot)
         )
     """)
+    # 分組表上那個人的差點，分組當下從報名資料帶入。存在這裡，來賓（沒有報名紀錄）
+    # 也能有差點，分組表不必再依賴 join 才湊得出來。
+    execute("ALTER TABLE golf_groups ADD COLUMN IF NOT EXISTS handicap REAL")
 
 
 def list_golf_groups(event_id: int) -> list[dict]:
@@ -1354,7 +1362,7 @@ def list_golf_groups(event_id: int) -> list[dict]:
     return query(
         """
         SELECT g.id, g.group_no, g.slot, g.player_name, g.line_user_id,
-               r.handicap, r.course_plan, pi.club_name
+               COALESCE(g.handicap, r.handicap) AS handicap, r.course_plan, pi.club_name
         FROM golf_groups g
         LEFT JOIN registrations r
                ON r.line_user_id = NULLIF(g.line_user_id, '') AND r.event_id = g.event_id
@@ -1374,10 +1382,10 @@ def replace_golf_groups(event_id: int, players: list[dict], per_group: int = 4) 
             cur.execute("DELETE FROM golf_groups WHERE event_id = %s", (event_id,))
             for i, p in enumerate(players):
                 cur.execute(
-                    "INSERT INTO golf_groups (event_id, group_no, slot, player_name, line_user_id) "
-                    "VALUES (%s, %s, %s, %s, %s)",
+                    "INSERT INTO golf_groups (event_id, group_no, slot, player_name, line_user_id, handicap) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
                     (event_id, i // per_group + 1, i % per_group + 1,
-                     p.get("name", ""), p.get("uid", "")),
+                     p.get("name", ""), p.get("uid", ""), p.get("handicap")),
                 )
         conn.commit()
         return len(players)

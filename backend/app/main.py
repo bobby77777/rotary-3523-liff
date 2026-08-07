@@ -199,6 +199,39 @@ def _fmt_handicap(value: float) -> str:
     return str(int(value)) if float(value).is_integer() else str(value)
 
 
+def _balance_by_handicap(players: list[dict], per_group: int = 4) -> list[dict]:
+    """蛇形分配：依差點排序後 1-2-3-4 / 4-3-2-1 輪流發牌，各組平均差點會很接近。
+
+    回傳的是攤平後的順序，且組界對齊 replace_golf_groups 的 i // per_group，
+    所以各組人數與「依報名順序」那種分法完全一樣，只有組成不同。
+    沒登錄差點的人排在最後發，不會攪亂前面各組的平衡。"""
+    total = len(players)
+    if total <= per_group:
+        return players
+    ranked = sorted((p for p in players if p.get("handicap") is not None),
+                    key=lambda p: p["handicap"])
+    ranked += [p for p in players if p.get("handicap") is None]
+
+    caps = [per_group] * (total // per_group)
+    if total % per_group:
+        caps.append(total % per_group)
+    buckets: list[list[dict]] = [[] for _ in caps]
+
+    i, rnd = 0, 0
+    while i < len(ranked):
+        seq = range(len(caps)) if rnd % 2 == 0 else range(len(caps) - 1, -1, -1)
+        moved = False
+        for gi in seq:
+            if i < len(ranked) and len(buckets[gi]) < caps[gi]:
+                buckets[gi].append(ranked[i])
+                i += 1
+                moved = True
+        if not moved:      # 容量已滿，不會發生，但別讓它變成無窮迴圈
+            break
+        rnd += 1
+    return [p for b in buckets for p in b]
+
+
 def _event_hidden_holes(ev: dict | None) -> set[int]:
     """The hidden holes to score by: the event's drawn set if any, else the default."""
     holes = (ev or {}).get("golf_holes")
@@ -1408,7 +1441,9 @@ async def golf_scores_submit(request: Request):
         return {"status": "no_event", "message": "找不到對應賽事"}
 
     name = _member_name(uid)
-    db.upsert_golf_score(ev["id"], uid, name, scores)
+    # 存下此刻的報名差點：之後他改報名差點，這場已結算的淨桿不該跟著變。
+    reg = db.get_registration(uid, ev["id"]) or {}
+    db.upsert_golf_score(ev["id"], uid, name, scores, reg.get("handicap"))
     result = _new_peoria(scores, _event_hidden_holes(ev))
     _push_receipt(uid, f"⛳️ 成績已送出【{ev['title']}】\n"
                        f"總桿 {result['gross']}、差點 {result['handicap']}、淨桿 {result['net']}（新貝利亞）")
@@ -2193,15 +2228,20 @@ async def golf_groups_auto(request: Request):
         return {"status": "no_event", "message": "找不到對應賽事"}
     players = [
         {"uid": r["line_user_id"],
-         "name": (r["full_name"] + (f"（{r['nickname']}）" if r.get("nickname") else "")) or "社友"}
+         "name": (r["full_name"] + (f"（{r['nickname']}）" if r.get("nickname") else "")) or "社友",
+         "handicap": r.get("handicap")}
         for r in db.get_event_registrants(ev["id"])
     ]
     players += [{"uid": "", "name": f"{g['name']}（來賓）"} for g in db.get_event_guests(ev["id"])]
     if not players:
         return {"status": "empty", "message": "此賽事還沒有人報名，無法分組"}
+    # mode='balanced' 依差點蛇形分配，各組實力相當；預設仍是依報名順序。
+    mode = str(body.get("mode", "order")).lower()
+    if mode == "balanced":
+        players = _balance_by_handicap(players)
     count = db.replace_golf_groups(ev["id"], players)
     return {"status": "ok", "event_title": ev["title"], "players": count,
-            "groups": (count + 3) // 4}
+            "groups": (count + 3) // 4, "mode": mode}
 
 
 @app.post("/golf/groups/swap")
