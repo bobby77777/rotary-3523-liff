@@ -1349,9 +1349,19 @@ def ensure_golf_groups_table() -> None:
 
 
 def list_golf_groups(event_id: int) -> list[dict]:
+    # 分組表要看得到差點與方案（分組本來就參考差點），所以帶上報名資料。
+    # 來賓沒有 line_user_id，join 不到就是 NULL，分組表照樣列得出來。
     return query(
-        "SELECT id, group_no, slot, player_name, line_user_id "
-        "FROM golf_groups WHERE event_id = %s ORDER BY group_no, slot",
+        """
+        SELECT g.id, g.group_no, g.slot, g.player_name, g.line_user_id,
+               r.handicap, r.course_plan, pi.club_name
+        FROM golf_groups g
+        LEFT JOIN registrations r
+               ON r.line_user_id = NULLIF(g.line_user_id, '') AND r.event_id = g.event_id
+        LEFT JOIN personal_information pi ON pi.line_user_id = NULLIF(g.line_user_id, '')
+        WHERE g.event_id = %s
+        ORDER BY g.group_no, g.slot
+        """,
         (event_id,),
     )
 

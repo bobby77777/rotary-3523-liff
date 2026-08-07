@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import agenda_pdf, db, event_pdfs, line_api
 from urllib.parse import quote
-from .config import APP_BASE_URL, CALENDAR_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
+from .config import APP_BASE_URL, CALENDAR_BASE_URL, GOLF_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1205,6 +1205,23 @@ def _reply_calendar_link(reply_token: str, user_id: str) -> None:
     line_api.reply_text_with_quick_reply(reply_token, text, items)
 
 
+def _reply_golf_link(reply_token: str, user_id: str) -> None:
+    """Reply with a link to the grouping board (golf.html). 主委 can regroup and swap
+    there; everyone else opens the same page read-only to find their own 組別."""
+    ev = _current_event(user_id)
+    # 帶上目前那場高球賽事，社友點開就直接看到該場，不必自己在下拉選單裡找。
+    url = f"{GOLF_BASE_URL}?event={ev['id']}" if ev and _is_golf_event(ev) else GOLF_BASE_URL
+    if db.is_admin(user_id):
+        text = ("⛳ 高球分組表\n點開可依報名名單重新分組、點兩位球友即時對調"
+                "（系統會通知本人），並匯出分組表 PDF。\n\n" + url)
+        label = "✏️ 編排分組"
+    else:
+        text = "⛳ 高球分組表\n點開即可查看分組與同組球友。\n\n" + url
+        label = "⛳ 查看分組"
+    items = [{"type": "action", "action": {"type": "uri", "label": label, "uri": url}}]
+    line_api.reply_text_with_quick_reply(reply_token, text, items)
+
+
 def _handle_text(reply_token: str, user_id: str, text: str) -> None:
     stripped = text.strip()
     if stripped in ("得獎查詢", "得獎", "查獎", "獎項", "查詢得獎"):
@@ -1212,6 +1229,9 @@ def _handle_text(reply_token: str, user_id: str, text: str) -> None:
         return
     if stripped in ("行事曆", "行事曆管理", "編輯行事曆", "議程", "活動議程"):
         _reply_calendar_link(reply_token, user_id)
+        return
+    if stripped in ("高爾夫", "高球", "分組", "分組表", "高球分組", "高爾夫分組"):
+        _reply_golf_link(reply_token, user_id)
         return
 
     state = db.get_user_state(user_id)
@@ -2145,10 +2165,16 @@ async def golf_groups(request: Request, event: int | None = None):
     rows = db.list_golf_groups(ev["id"])
     groups: dict[int, list] = {}
     for r in rows:
-        groups.setdefault(r["group_no"], []).append(
-            {"id": r["id"], "slot": r["slot"], "name": r["player_name"], "uid": r["line_user_id"]})
+        groups.setdefault(r["group_no"], []).append({
+            "id": r["id"], "slot": r["slot"], "name": r["player_name"], "uid": r["line_user_id"],
+            "club": r.get("club_name") or "",
+            "handicap": r.get("handicap"),
+            "course_plan": r.get("course_plan"),
+            "course_plan_label": _plan_summary(ev, r.get("course_plan")),
+        })
     return {
         "status": "ok", "event_id": ev["id"], "event_title": ev["title"],
+        "event_date": ev.get("date", ""), "event_location": ev.get("location", ""),
         "groups": [{"group_no": g, "players": p} for g, p in sorted(groups.items())],
         "players": [{"id": r["id"], "name": r["player_name"], "group_no": r["group_no"]} for r in rows],
     }

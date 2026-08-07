@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>扶輪 3523 高球分組表</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- LINE 登入：用 LIFF 取得「開啟者本人」身分，網址不必帶 uid（分享連結不會外洩身分）。 -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    /* 分組表 PDF：用瀏覽器原生列印引擎輸出向量 PDF（文字可選取、可搜尋），
+       跟議程 PDF 同一套做法，不用截圖。 */
+    #print-zone { display: none; }
+    @media print {
+      body { background: #fff !important; }
+      body > *:not(#print-zone) { display: none !important; }
+      #print-zone { display: block !important; }
+      @page { size: A4 portrait; margin: 12mm; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+<div class="flex flex-col h-screen w-full overflow-hidden">
+  <!-- ==================== 頁首 ==================== -->
+  <div class="p-5 md:p-6 bg-emerald-900 text-white flex-shrink-0 shadow-md z-10">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <i data-lucide="flag" class="w-8 h-8 text-yellow-400 flex-shrink-0"></i>
+        <div class="min-w-0">
+          <h1 class="text-xl md:text-2xl font-bold tracking-wider truncate">高球分組表</h1>
+          <p class="text-[11px] text-emerald-200 truncate" id="event-subtitle">載入中…</p>
+        </div>
+        <span id="role-badge" class="px-2 py-0.5 rounded text-xs bg-red-500 text-white hidden flex-shrink-0">唯讀</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="event-selector" onchange="selectEvent(this.value)"
+          class="bg-emerald-800 border border-emerald-700 text-white text-sm rounded p-2.5 outline-none cursor-pointer shadow-sm min-w-[14rem]"></select>
+        <button onclick="printGroups()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-sm flex items-center gap-2 transition-colors">
+          <i data-lucide="printer" class="w-4 h-4"></i> 下載分組表
+        </button>
+        <button id="btn-auto" onclick="autoGroup()" class="hidden bg-yellow-400 hover:bg-yellow-300 text-emerald-950 px-4 py-2.5 rounded font-bold text-sm flex items-center gap-2 transition-colors shadow-md">
+          <i data-lucide="shuffle" class="w-4 h-4"></i> 依報名名單重新分組
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 調組提示列 ==================== -->
+  <div id="swap-bar" class="hidden bg-amber-100 border-b border-amber-200 px-5 py-2.5 flex items-center justify-between gap-3 flex-shrink-0">
+    <p class="text-[13px] text-amber-900 min-w-0 truncate">
+      <i data-lucide="arrow-left-right" class="w-4 h-4 inline-block -mt-0.5"></i>
+      已選 <b id="swap-a-name">—</b>，再點另一位球友即可對調。
+    </p>
+    <button onclick="clearSwap()" class="text-[12px] font-bold text-amber-800 hover:text-amber-950 flex-shrink-0">取消</button>
+  </div>
+
+  <!-- ==================== 分組看板 ==================== -->
+  <div class="flex-1 overflow-y-auto p-5 md:p-8">
+    <div class="max-w-6xl mx-auto">
+      <div id="summary" class="hidden grid grid-cols-3 gap-3 mb-5"></div>
+      <div id="board" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+      <p id="empty-hint" class="hidden text-center text-slate-400 text-sm py-16"></p>
+    </div>
+  </div>
+</div>
+
+<!-- 列印用（螢幕上永遠隱藏，只有列印時出現） -->
+<div id="print-zone"></div>
+
+<script>
+  // ==================== 後端連線 ====================
+  const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+  const LIFF_ID = '2010535285-kh8rJmpS';
+  // 身分優先用 LINE 登入（見 ensureLineLogin）；網址的 ?uid= 僅作為登入不可用時的退路。
+  let UID = new URLSearchParams(location.search).get('uid') || '';
+
+  async function ensureLineLogin() {
+    try {
+      await Promise.race([
+        liff.init({ liffId: LIFF_ID }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('liff init timeout')), 5000)),
+      ]);
+      if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+      const p = await liff.getProfile();
+      if (p && p.userId) UID = p.userId;
+    } catch (e) {
+      console.warn('LINE 登入略過（逾時或失敗），改用網址 uid（若有）', e);
+    }
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const res = await fetch(API_BASE + path, {
+        headers: { 'Content-Type': 'application/json', 'X-Line-UserId': UID, 'ngrok-skip-browser-warning': '1' },
+        signal: ctrl.signal,
+        ...opts,
+      });
+      if (!res.ok) {
+        const detail = await res.json().then(d => d && d.detail).catch(() => null);
+        throw new Error(detail || ('API ' + path + ' → ' + res.status));
+      }
+      return res.json();
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // ==================== 狀態 ====================
+  let me = { is_admin: false, club: '', scope: 'district' };
+  let golfEvents = [];        // 可分組的賽事（後端標記 is_golf 的那些）
+  let activeEventId = null;
+  let board = { groups: [], title: '', date: '', location: '' };
+  let swapFrom = null;        // 調組時先選的那一位 {id, name}
+
+  function canEdit() { return !!me.is_admin; }   // 分組／調組是 admin 才有（後端也這樣擋）
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"]/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  async function init() {
+    lucide.createIcons();
+    await ensureLineLogin();
+    try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '', scope: 'district' }; }
+    document.getElementById('role-badge').classList.toggle('hidden', canEdit());
+    document.getElementById('btn-auto').classList.toggle('hidden', !canEdit());
+    await loadGolfEvents();
+  }
+
+  // 兩個範圍的活動都撈，因為高球賽事可能掛在地區、也可能是社內球敘。
+  async function loadGolfEvents() {
+    const sel = document.getElementById('event-selector');
+    const seen = new Set();
+    golfEvents = [];
+    for (const scope of ['district', 'club']) {
+      try {
+        const data = await apiFetch('/events?scope=' + scope);
+        for (const ev of (data.events || [])) {
+          // is_golf 是後端算的，這裡不自己判斷標題／類型。
+          if (ev.is_golf && !seen.has(ev.id)) { seen.add(ev.id); golfEvents.push(ev); }
+        }
+      } catch (e) { /* 一個範圍失敗不該讓整頁空白，另一個還是要列 */ }
+    }
+    golfEvents.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+    if (!golfEvents.length) {
+      sel.innerHTML = '<option value="">（沒有高球賽事）</option>';
+      showEmpty('目前查不到高球賽事。請先在行事曆建立賽事，或確認活動類型／標題含「高球」或「高爾夫」。');
+      return;
+    }
+    sel.innerHTML = golfEvents.map(ev =>
+      `<option value="${ev.id}">${esc(ev.title)}${ev.date ? '（' + esc(ev.date) + '）' : ''}</option>`).join('');
+    const fromUrl = parseInt(new URLSearchParams(location.search).get('event')) || null;
+    const pick = golfEvents.some(e => e.id === fromUrl) ? fromUrl : golfEvents[0].id;
+    sel.value = pick;
+    await selectEvent(pick);
+  }
+
+  async function selectEvent(id) {
+    activeEventId = parseInt(id) || null;
+    clearSwap();
+    await loadGroups();
+  }
+
+  async function loadGroups() {
+    if (!activeEventId) return;
+    showEmpty('載入中…');
+    let data;
+    try {
+      data = await apiFetch('/golf/groups?event=' + activeEventId);
+    } catch (e) {
+      showEmpty('分組載入失敗：' + e.message);
+      return;
+    }
+    if (data.status !== 'ok') { showEmpty(data.message || '找不到對應賽事。'); return; }
+    board = {
+      groups: data.groups || [],
+      title: data.event_title || '',
+      date: data.event_date || '',
+      location: data.event_location || '',
+    };
+    document.getElementById('event-subtitle').textContent =
+      [board.title, board.date, board.location].filter(Boolean).join(' · ') || '—';
+    renderBoard();
+  }
+
+  function showEmpty(msg) {
+    document.getElementById('board').innerHTML = '';
+    document.getElementById('summary').classList.add('hidden');
+    const el = document.getElementById('empty-hint');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+
+  function renderBoard() {
+    const boardEl = document.getElementById('board');
+    const hint = document.getElementById('empty-hint');
+    if (!board.groups.length) {
+      showEmpty(canEdit()
+        ? '尚未分組。按右上角「依報名名單重新分組」即可依報名順序 4 人一組排定。'
+        : '尚未分組，請稍候主委安排。');
+      return;
+    }
+    hint.classList.add('hidden');
+
+    const all = board.groups.flatMap(g => g.players);
+    const withHcp = all.filter(p => p.handicap != null);
+    document.getElementById('summary').classList.remove('hidden');
+    document.getElementById('summary').innerHTML = [
+      ['球員', all.length + ' 人'],
+      ['組數', board.groups.length + ' 組'],
+      ['已登錄差點', withHcp.length + ' / ' + all.length],
+    ].map(([k, v]) => `
+      <div class="bg-white rounded-xl border border-slate-200 p-3 text-center shadow-sm">
+        <p class="text-[11px] text-slate-400 font-bold">${k}</p>
+        <p class="text-lg font-black text-slate-800">${v}</p>
+      </div>`).join('');
+
+    boardEl.innerHTML = board.groups.map(g => {
+      const hcps = g.players.filter(p => p.handicap != null).map(p => p.handicap);
+      const avg = hcps.length ? (hcps.reduce((a, b) => a + b, 0) / hcps.length).toFixed(1) : '—';
+      return `
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-2.5 bg-emerald-900 text-white">
+          <span class="font-black tracking-wide">第 ${g.group_no} 組</span>
+          <span class="text-[11px] text-emerald-200">平均差點 ${avg}</span>
+        </div>
+        <div class="divide-y divide-slate-100">
+          ${g.players.map(p => renderPlayer(p)).join('')}
+          ${Array.from({ length: Math.max(0, 4 - g.players.length) }, () =>
+            `<div class="px-4 py-3 text-[13px] text-slate-300">—— 空位 ——</div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  function renderPlayer(p) {
+    const picked = swapFrom && swapFrom.id === p.id;
+    const clickable = canEdit();
+    return `
+      <div ${clickable ? `onclick="tapPlayer(${p.id})"` : ''}
+        class="px-4 py-2.5 flex items-center gap-2 ${clickable ? 'cursor-pointer hover:bg-emerald-50' : ''} ${picked ? 'bg-amber-100' : ''}">
+        <span class="w-5 h-5 shrink-0 rounded bg-slate-100 text-slate-500 text-[11px] font-bold flex items-center justify-center">${p.slot}</span>
+        <span class="flex-1 min-w-0">
+          <span class="block text-[14px] font-bold text-slate-800 truncate">${esc(p.name)}</span>
+          ${p.club ? `<span class="block text-[11px] text-slate-400 truncate">${esc(p.club)}</span>` : ''}
+        </span>
+        ${p.course_plan ? `<span class="shrink-0 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded" title="${esc(p.course_plan_label)}">${esc(p.course_plan)}</span>` : ''}
+        <span class="shrink-0 text-[12px] font-black ${p.handicap != null ? 'text-emerald-700' : 'text-amber-600'}">
+          ${p.handicap != null ? 'HDCP ' + p.handicap : '未填差點'}</span>
+      </div>`;
+  }
+
+  // ==================== 調組 ====================
+  // 點第一位選起，點第二位送出對調。後端會通知兩位球友本人。
+  function findPlayer(id) {
+    return board.groups.flatMap(g => g.players).find(p => p.id === id) || null;
+  }
+
+  function tapPlayer(id) {
+    if (!canEdit()) return;
+    const p = findPlayer(id);
+    if (!p) return;
+    if (!swapFrom) {
+      swapFrom = { id, name: p.name };
+      // textContent 不會解析標記，姓名不必轉義，也就沒有塞進 onclick 字串的轉義問題。
+      document.getElementById('swap-a-name').textContent = p.name;
+      document.getElementById('swap-bar').classList.remove('hidden');
+      renderBoard();
+      return;
+    }
+    if (swapFrom.id === id) { clearSwap(); return; }
+    doSwap(swapFrom.id, id);
+  }
+
+  function clearSwap() {
+    swapFrom = null;
+    document.getElementById('swap-bar').classList.add('hidden');
+    if (board.groups.length) renderBoard();
+  }
+
+  async function doSwap(a, b) {
+    try {
+      const data = await apiFetch('/golf/groups/swap', {
+        method: 'POST',
+        body: JSON.stringify({ event_id: activeEventId, a, b }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '調組失敗'); clearSwap(); return; }
+      swapFrom = null;
+      document.getElementById('swap-bar').classList.add('hidden');
+      await loadGroups();          // 以後端為準重載，不在前端自己搬位置
+    } catch (e) {
+      alert('調組失敗：' + e.message);
+      clearSwap();
+    }
+  }
+
+  async function autoGroup() {
+    if (!canEdit() || !activeEventId) return;
+    if (!confirm('將依報名名單重新分組（4 人一組），現有分組會被覆蓋。確定執行？')) return;
+    try {
+      const data = await apiFetch('/golf/groups/auto', {
+        method: 'POST',
+        body: JSON.stringify({ event_id: activeEventId }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '分組失敗'); return; }
+      await loadGroups();
+    } catch (e) {
+      alert('分組失敗：' + e.message);
+    }
+  }
+
+  // ==================== 分組表 PDF ====================
+  function printGroups() {
+    if (!board.groups.length) { alert('目前沒有分組資料可以列印。'); return; }
+    const head = [board.date, board.location].filter(Boolean).join('　·　');
+    document.getElementById('print-zone').innerHTML = `
+      <div style="font-family: 'Noto Sans TC', sans-serif; color:#0f172a;">
+        <h1 style="font-size:20pt; font-weight:800; margin:0 0 4pt;">${esc(board.title)}　分組表</h1>
+        <p style="font-size:10pt; color:#475569; margin:0 0 12pt;">${esc(head)}</p>
+        ${board.groups.map(g => `
+          <table style="width:100%; border-collapse:collapse; margin-bottom:10pt; page-break-inside:avoid;">
+            <thead>
+              <tr style="background:#064e3b; color:#fff;">
+                <th colspan="4" style="text-align:left; padding:5pt 8pt; font-size:11pt;">第 ${g.group_no} 組</th>
+              </tr>
+              <tr style="background:#f1f5f9; font-size:9pt; color:#475569;">
+                <th style="width:8%; padding:4pt 8pt; text-align:center; border:0.5pt solid #cbd5e1;">序</th>
+                <th style="width:42%; padding:4pt 8pt; text-align:left;  border:0.5pt solid #cbd5e1;">姓名</th>
+                <th style="width:30%; padding:4pt 8pt; text-align:left;  border:0.5pt solid #cbd5e1;">社別</th>
+                <th style="width:20%; padding:4pt 8pt; text-align:center;border:0.5pt solid #cbd5e1;">差點</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${g.players.map(p => `
+                <tr style="font-size:10pt;">
+                  <td style="padding:4pt 8pt; text-align:center; border:0.5pt solid #cbd5e1;">${p.slot}</td>
+                  <td style="padding:4pt 8pt; border:0.5pt solid #cbd5e1;">${esc(p.name)}</td>
+                  <td style="padding:4pt 8pt; border:0.5pt solid #cbd5e1;">${esc(p.club)}</td>
+                  <td style="padding:4pt 8pt; text-align:center; border:0.5pt solid #cbd5e1;">${p.handicap != null ? p.handicap : ''}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`).join('')}
+      </div>`;
+    window.print();
+  }
+</script>
+</body>
+</html>

@@ -26,3 +26,7 @@ BULLETIN_BASE_URL = os.environ.get(
 # "行事曆" keyword reply so 執秘/管理員 can open it in a computer browser to edit.
 CALENDAR_BASE_URL = os.environ.get(
     "CALENDAR_BASE_URL", "https://bobby77777.github.io/rotary-3523-liff/calendar.html")
+
+# 高球分組表（golf.html）。聊天室打「高爾夫」會回這個連結。
+GOLF_BASE_URL = os.environ.get(
+    "GOLF_BASE_URL", "https://bobby77777.github.io/rotary-3523-liff/golf.html")
