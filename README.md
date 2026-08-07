@@ -54,6 +54,45 @@ public URLs stay `https://<user>.github.io/rotary-3523-liff/index.html` (and
 **One-time setup:** repo **Settings → Pages → Source = "GitHub Actions"**.
 After that, every push to `main` that touches `frontend/` redeploys automatically.
 
+#### When a deploy doesn't land
+
+A green workflow only means the artifact was uploaded and a deployment was
+**requested** — publishing happens on GitHub's side afterwards. The two have
+come apart, so verify against the served page, not the badge:
+
+```bash
+curl -sI https://<user>.github.io/rotary-3523-liff/ | grep -i last-modified
+```
+
+Failure modes seen in one afternoon (2026-08-06), all GitHub-side, none fixable
+in this repo:
+
+| Symptom in the log | What it means | What to do |
+|---|---|---|
+| `Current status: deployment_queued` repeating until `Timeout reached, aborting!` | The deployment was accepted but no Pages runner picked it up. `deploy-pages` clamps its wait to 10 min (`MAX_TIMEOUT = 600000`; the `timeout` input is `Math.min`'d against it, so raising it does nothing). | Wait, then re-dispatch. If it stays broken, use the branch fallback below. |
+| Job `cancelled` with `steps: 0`, or a step failing at `Set up job` | No Actions runner was allocated at all. | `gh run rerun <id>` once runners recover. |
+| `Multiple artifacts named "github-pages" … Artifact count is 2` | A **re-run** uploaded a second artifact beside the first instead of replacing it, and `deploy-pages` won't guess. The run is now poisoned. | Never "Re-run jobs" for this workflow — start a fresh run (`gh workflow run pages.yml`). |
+| `Deployment cancelled` within seconds, on a commit that failed before | Pages keys a deployment by **commit sha**, and a timed-out deploy cancels its own record. That sha can never deploy again. | Push a new commit; an empty one (`git commit --allow-empty`) is enough. |
+
+**Fallback: publish through the `gh-pages` branch.** The Actions deployment
+pipeline and the legacy branch-build pipeline are separate, and the legacy one
+kept working while the other was stuck. The `gh-pages` branch is left in place
+for exactly this. To switch over, restore the branch-push version of
+`pages.yml` (see `git log -- .github/workflows/pages.yml`) and point Pages at
+the branch:
+
+```bash
+gh api -X PUT repos/:owner/:repo/pages --input - <<< \
+  '{"build_type":"legacy","source":{"branch":"gh-pages","path":"/"}}'
+gh api -X POST repos/:owner/:repo/pages/builds   # force a build; auto-triggers can stall
+gh api repos/:owner/:repo/pages/builds/latest --jq '{status, commit}'
+```
+
+Switching the source does **not** tear down the currently served site, so this
+is safe to do while members are using the app. Going back is
+`'{"build_type":"workflow"}'` plus reverting `pages.yml`. Either way the public
+URLs are identical, so the LIFF endpoint never changes.
+
 ---
 
 ## Backend (`backend/`)
