@@ -429,6 +429,9 @@ def ensure_event_guests_table() -> None:
             created_at TIMESTAMPTZ DEFAULT NOW()
         )
     """)
+    # 來賓的高球差點。必須存在這裡而不是只存 golf_groups——重新分組會整批刪除重建，
+    # 來賓沒有 registrations 可以回頭查，差點就會一按歸零。
+    execute("ALTER TABLE event_guests ADD COLUMN IF NOT EXISTS handicap REAL")
 
 
 def ensure_admin_users_table() -> None:
@@ -1218,22 +1221,28 @@ def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
         _release_conn(conn)
 
 
-def add_event_guests(event_id: int, names: list[str], registered_by: str = "",
+def add_event_guests(event_id: int, names: list, registered_by: str = "",
                      bank_digits: str = "") -> int:
-    names = [n.strip() for n in names if n and n.strip()]
-    if not names:
+    """names 可以是字串，也可以是 {'name': ..., 'handicap': ...}（高球賽事用）。"""
+    rows = []
+    for g in names:
+        item = g if isinstance(g, dict) else {"name": g}
+        nm = str(item.get("name", "")).strip()
+        if nm:
+            rows.append((event_id, nm, registered_by, bank_digits or None, item.get("handicap")))
+    if not rows:
         return 0
     conn = _get_conn()
     try:
         with conn.cursor() as cur:
             psycopg2.extras.execute_batch(
                 cur,
-                "INSERT INTO event_guests (event_id, name, registered_by, bank_digits) "
-                "VALUES (%s, %s, %s, %s)",
-                [(event_id, n, registered_by, bank_digits or None) for n in names],
+                "INSERT INTO event_guests (event_id, name, registered_by, bank_digits, handicap) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                rows,
             )
         conn.commit()
-        return len(names)
+        return len(rows)
     except Exception:
         conn.rollback()
         raise
@@ -1894,9 +1903,13 @@ def get_club_admins(club_name: str) -> list[str]:
     return [r["line_user_id"] for r in rows]
 
 
+def set_guest_handicap(guest_id: int, handicap: float | None) -> None:
+    execute("UPDATE event_guests SET handicap = %s WHERE id = %s", (handicap, guest_id))
+
+
 def get_event_guests(event_id: int) -> list[dict]:
     return query(
-        "SELECT id, name, registered_by FROM event_guests WHERE event_id = %s ORDER BY id",
+        "SELECT id, name, registered_by, handicap FROM event_guests WHERE event_id = %s ORDER BY id",
         (event_id,),
     )
 

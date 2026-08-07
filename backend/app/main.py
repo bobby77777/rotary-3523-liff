@@ -2232,7 +2232,8 @@ async def golf_groups_auto(request: Request):
          "handicap": r.get("handicap")}
         for r in db.get_event_registrants(ev["id"])
     ]
-    players += [{"uid": "", "name": f"{g['name']}（來賓）"} for g in db.get_event_guests(ev["id"])]
+    players += [{"uid": "", "name": f"{g['name']}（來賓）", "handicap": g.get("handicap")}
+                for g in db.get_event_guests(ev["id"])]
     if not players:
         return {"status": "empty", "message": "此賽事還沒有人報名，無法分組"}
     # mode='balanced' 依差點蛇形分配，各組實力相當；預設仍是依報名順序。
@@ -2840,7 +2841,16 @@ async def admin_bulk_register(request: Request):
         return {"status": "forbidden", "message": "無批次報名權限"}
     body = await request.json()
     uids = [str(u) for u in body.get("uids", []) if u]
-    guests = [str(g) for g in body.get("guests", []) if g]
+    guests = []
+    for g in body.get("guests", []) or []:
+        item = g if isinstance(g, dict) else {"name": g}
+        nm = str(item.get("name", "")).strip()
+        if not nm:
+            continue
+        hcp, err = _parse_handicap(item.get("handicap"))
+        if err:
+            return {"status": "invalid", "message": f"來賓「{nm}」的{err}"}
+        guests.append({"name": nm, "handicap": hcp})
     bank_digits = str(body.get("bank_digits", "")).strip()
     event_id = body.get("event_id")
 
