@@ -1758,6 +1758,27 @@ async def admin_sync_notices(request: Request):
     return {"status": "ok", "report": report}
 
 
+# 個人基本資料：社別、中文名、Nickname、葷素。少了這些，報名名單、桌次、頒獎查詢
+# 都對不到人，所以第一次進 LIFF 就要填。
+_DIET_TYPES = ("葷食", "素食")
+_PROFILE_KEYS = ("club", "full_name", "nickname", "diet_type")
+
+
+def _member_profile(uid: str) -> dict:
+    rows = db.get_personal_info(uid) if uid else []
+    r = rows[0] if rows else {}
+    return {
+        "club": r.get("club_name") or "",
+        "full_name": r.get("full_name") or "",
+        "nickname": r.get("nickname") or "",
+        "diet_type": r.get("diet_type") or "",
+    }
+
+
+def _profile_incomplete(profile: dict) -> bool:
+    return not all(str(profile.get(k) or "").strip() for k in _PROFILE_KEYS)
+
+
 @app.get("/me")
 async def me(request: Request):
     """The caller's role / scope / club — LIFF uses this to gate the admin tab."""
@@ -1771,7 +1792,44 @@ async def me(request: Request):
         "club": db.get_user_club(uid),
         "is_admin": db.is_admin(uid),
         "name": _member_name(uid),
+        # 還沒填完基本資料的話，LIFF 一開就先請本人補（見 openProfileGate）。
+        "needs_profile": _profile_incomplete(_member_profile(uid)),
     }
+
+
+@app.get("/me/profile")
+async def me_profile(request: Request):
+    """本人的基本資料，連社別選單一起給——新社友要自己填，沒有 admin 權限可以撈社名。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user", "message": "請從 LINE 開啟"}
+    profile = _member_profile(uid)
+    return {
+        "status": "ok",
+        "profile": profile,
+        "needs_profile": _profile_incomplete(profile),
+        "clubs": db.list_clubs(),
+        "diet_types": list(_DIET_TYPES),
+    }
+
+
+@app.post("/me/profile")
+async def me_profile_save(request: Request):
+    """本人存自己的基本資料。身分一律看 header，不吃 body 傳來的 uid。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not uid:
+        return {"status": "no_user", "message": "請從 LINE 開啟"}
+    body = await request.json()
+    values = {k: str(body.get(k) or "").strip() for k in _PROFILE_KEYS}
+    if not all(values.values()):
+        return {"status": "invalid", "message": "四個欄位都要填"}
+    if any(len(v) > 40 for v in values.values()):
+        return {"status": "invalid", "message": "每個欄位最多 40 個字"}
+    if values["diet_type"] not in _DIET_TYPES:
+        return {"status": "invalid", "message": "葷素請從選單選擇"}
+    db.upsert_personal_info(uid, values["club"], values["full_name"],
+                            values["nickname"], values["diet_type"])
+    return {"status": "ok", "profile": values}
 
 
 @app.get("/awards/me")
