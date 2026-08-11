@@ -260,7 +260,7 @@
           <span class="block text-[14px] font-bold text-slate-800 truncate">${esc(p.name)}</span>
           ${p.club ? `<span class="block text-[11px] text-slate-400 truncate">${esc(p.club)}</span>` : ''}
         </span>
-        ${p.course_plan ? `<span class="shrink-0 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded" title="${esc(p.course_plan_label)}">${esc(p.course_plan)}</span>` : ''}
+        ${p.course_plan ? `<span class="shrink-0 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded" title="${esc(p.course_plan_label)}">${esc(p.course_plan)}${p.course_plan_fee != null ? ' · ' + Number(p.course_plan_fee).toLocaleString() + ' 元' : ''}</span>` : ''}
         <span class="shrink-0 text-[12px] font-black ${p.handicap != null ? 'text-emerald-700' : 'text-amber-600'}">
           ${p.handicap != null ? 'HDCP ' + p.handicap : '未填差點'}</span>
       </div>`;

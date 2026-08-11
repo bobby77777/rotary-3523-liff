@@ -2206,6 +2206,7 @@ async def golf_groups(request: Request, event: int | None = None):
             "handicap": r.get("handicap"),
             "course_plan": r.get("course_plan"),
             "course_plan_label": _plan_summary(ev, r.get("course_plan")),
+            "course_plan_fee": (_find_plan(ev, r.get("course_plan")) or {}).get("fee"),
         })
     return {
         "status": "ok", "event_id": ev["id"], "event_title": ev["title"],
