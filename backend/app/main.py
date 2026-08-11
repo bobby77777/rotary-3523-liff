@@ -2249,7 +2249,8 @@ async def golf_groups_auto(request: Request):
          "handicap": r.get("handicap")}
         for r in db.get_event_registrants(ev["id"])
     ]
-    players += [{"uid": "", "name": f"{g['name']}（來賓）", "handicap": g.get("handicap")}
+    players += [{"uid": "", "name": f"{g['name']}（來賓）", "handicap": g.get("handicap"),
+                 "guest_id": g["id"]}
                 for g in db.get_event_guests(ev["id"])]
     if not players:
         return {"status": "empty", "message": "此賽事還沒有人報名，無法分組"}
@@ -2291,6 +2292,62 @@ async def golf_groups_swap(request: Request):
     return {"status": "ok",
             "a": {"name": a["player_name"], "group_no": a["group_no"]},
             "b": {"name": b["player_name"], "group_no": b["group_no"]}}
+
+
+def _golf_row_target(admin_uid: str, body: dict) -> tuple[dict | None, dict | None, dict | None]:
+    """編輯與移除都要先確認：是主委、賽事在、而且那一列真的屬於這場賽事。
+    回傳 (賽事, 分組列, 錯誤)，錯誤不是 None 時就直接把它回給前端。"""
+    if not db.is_admin(admin_uid):
+        return None, None, {"status": "forbidden", "message": "無分組權限"}
+    ev_id = body.get("event_id")
+    ev = _lookup_event(admin_uid, int(ev_id)) if ev_id else _current_event(admin_uid)
+    if ev is None:
+        return None, None, {"status": "no_event", "message": "找不到對應賽事"}
+    try:
+        row_id = int(body.get("id"))
+    except (TypeError, ValueError):
+        return None, None, {"status": "invalid", "message": "請選擇一位球友"}
+    row = db.get_golf_player(ev["id"], row_id)
+    if row is None:
+        return None, None, {"status": "not_found", "message": "找不到這位球友的分組資料"}
+    return ev, row, None
+
+
+@app.post("/golf/groups/update")
+async def golf_groups_update(request: Request):
+    """訂正分組表上某一位的姓名與差點。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    body = await request.json()
+    ev, row, err = _golf_row_target(admin_uid, body)
+    if err is not None:
+        return err
+    name = str(body.get("name") or "").strip() or row["player_name"]
+    handicap, hcp_err = _parse_handicap(body.get("handicap"))
+    if hcp_err:
+        return {"status": "invalid", "message": hcp_err}
+    db.update_golf_player(ev["id"], row["id"], name, handicap)
+    # 差點也要寫回來源。重新分組是整批刪除重建，只改分組表的話一按就被舊值蓋回去。
+    if row["line_user_id"]:
+        db.set_registration_handicap(ev["id"], row["line_user_id"], handicap)
+    elif row.get("guest_id"):
+        db.set_guest_handicap(row["guest_id"], handicap)
+    return {"status": "ok", "name": name, "handicap": handicap}
+
+
+@app.post("/golf/groups/delete")
+async def golf_groups_delete(request: Request):
+    """把某一位從分組表移除（報名資料不動），同組後面的順位往前補，並通知本人。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    body = await request.json()
+    ev, row, err = _golf_row_target(admin_uid, body)
+    if err is not None:
+        return err
+    db.delete_golf_player(ev["id"], row["id"])
+    if row["line_user_id"]:
+        _push_receipt(row["line_user_id"],
+                      f"🔀 分組調整通知【{ev['title']}】\n"
+                      f"{row['player_name']} 已從分組表移除，如有疑問請洽主委。")
+    return {"status": "ok", "name": row["player_name"]}
 
 
 # ── 年會桌次安排 ─────────────────────────────────────────────────────────────

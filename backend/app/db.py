@@ -1389,6 +1389,9 @@ def ensure_golf_groups_table() -> None:
     # 分組表上那個人的差點，分組當下從報名資料帶入。存在這裡，來賓（沒有報名紀錄）
     # 也能有差點，分組表不必再依賴 join 才湊得出來。
     execute("ALTER TABLE golf_groups ADD COLUMN IF NOT EXISTS handicap REAL")
+    # 來賓沒有 line_user_id，靠這欄才認得回 event_guests；在分組表上改差點時，
+    # 才知道要把來賓的差點寫回哪一筆（不然只能用姓名猜，改過名字就對不上）。
+    execute("ALTER TABLE golf_groups ADD COLUMN IF NOT EXISTS guest_id INTEGER")
 
 
 def list_golf_groups(event_id: int) -> list[dict]:
@@ -1417,10 +1420,10 @@ def replace_golf_groups(event_id: int, players: list[dict], per_group: int = 4) 
             cur.execute("DELETE FROM golf_groups WHERE event_id = %s", (event_id,))
             for i, p in enumerate(players):
                 cur.execute(
-                    "INSERT INTO golf_groups (event_id, group_no, slot, player_name, line_user_id, handicap) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO golf_groups (event_id, group_no, slot, player_name, line_user_id, handicap, guest_id) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (event_id, i // per_group + 1, i % per_group + 1,
-                     p.get("name", ""), p.get("uid", ""), p.get("handicap")),
+                     p.get("name", ""), p.get("uid", ""), p.get("handicap"), p.get("guest_id")),
                 )
         conn.commit()
         return len(players)
@@ -1434,6 +1437,53 @@ def replace_golf_groups(event_id: int, players: list[dict], per_group: int = 4) 
 def swap_golf_players(event_id: int, id_a: int, id_b: int) -> tuple[dict, dict] | None:
     """Swap two players' seats, so each keeps the other's 組別/順位."""
     return _swap_rows("golf_groups", ("group_no", "slot"), event_id, id_a, id_b)
+
+
+def get_golf_player(event_id: int, row_id: int) -> dict | None:
+    rows = query("SELECT * FROM golf_groups WHERE event_id = %s AND id = %s", (event_id, row_id))
+    return rows[0] if rows else None
+
+
+def update_golf_player(event_id: int, row_id: int, name: str, handicap: float | None) -> None:
+    execute(
+        "UPDATE golf_groups SET player_name = %s, handicap = %s WHERE event_id = %s AND id = %s",
+        (name, handicap, event_id, row_id),
+    )
+
+
+def delete_golf_player(event_id: int, row_id: int) -> None:
+    """把一位球友從分組表刪掉，同組後面的順位往前補，不留空號。"""
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM golf_groups WHERE event_id = %s AND id = %s RETURNING group_no",
+                (event_id, row_id),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                group_no = row[0]
+                # 先整組搬到負數再照原順序重排；一句 UPDATE 直接補號會在中途撞上
+                # UNIQUE(event_id, group_no, slot)。
+                cur.execute(
+                    "UPDATE golf_groups SET slot = -slot WHERE event_id = %s AND group_no = %s",
+                    (event_id, group_no),
+                )
+                cur.execute(
+                    """
+                    UPDATE golf_groups g SET slot = s.rn
+                    FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY slot DESC) AS rn
+                          FROM golf_groups WHERE event_id = %s AND group_no = %s) s
+                    WHERE g.id = s.id
+                    """,
+                    (event_id, group_no),
+                )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
 
 
 # ── 年會桌次安排 ───────────────────────────────────────────────────────────────
@@ -1931,6 +1981,15 @@ def get_club_admins(club_name: str) -> list[str]:
 
 def set_guest_handicap(guest_id: int, handicap: float | None) -> None:
     execute("UPDATE event_guests SET handicap = %s WHERE id = %s", (handicap, guest_id))
+
+
+def set_registration_handicap(event_id: int, line_user_id: str, handicap: float | None) -> None:
+    """主委在分組表上訂正的差點。這裡是直接覆蓋（含清成空值），不像 report_payment
+    只補不蓋——訂正的重點就是蓋掉舊值。"""
+    execute(
+        "UPDATE registrations SET handicap = %s WHERE event_id = %s AND line_user_id = %s",
+        (handicap, event_id, line_user_id),
+    )
 
 
 def get_event_guests(event_id: int) -> list[dict]:

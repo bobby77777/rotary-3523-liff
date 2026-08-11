@@ -73,6 +73,35 @@
   </div>
 </div>
 
+<!-- ==================== 編輯球友 Modal ==================== -->
+<div id="edit-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+    <div class="px-5 py-3 bg-emerald-900 text-white flex items-center justify-between">
+      <span class="font-bold">編輯球友</span>
+      <button onclick="closeEdit()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-4">
+      <div>
+        <label class="block text-[11px] font-bold text-slate-400 mb-1">姓名</label>
+        <input id="edit-name" type="text" onkeydown="if (event.key === 'Enter') saveEdit()"
+          class="w-full border border-slate-300 rounded p-2.5 text-sm outline-none focus:border-emerald-600">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-400 mb-1">差點（0 ~ 54，留空表示未填）</label>
+        <input id="edit-handicap" type="number" step="0.1" min="0" max="54" onkeydown="if (event.key === 'Enter') saveEdit()"
+          class="w-full border border-slate-300 rounded p-2.5 text-sm outline-none focus:border-emerald-600">
+      </div>
+      <p class="text-[11px] text-slate-400 leading-relaxed">
+        差點會一併寫回報名資料，重新分組後仍然保留；姓名只改分組表上的顯示。
+      </p>
+    </div>
+    <div class="px-5 pb-5 flex justify-end gap-2">
+      <button onclick="closeEdit()" class="px-4 py-2 rounded text-sm font-medium text-slate-500 hover:bg-slate-100 transition-colors">取消</button>
+      <button onclick="saveEdit()" class="px-4 py-2 rounded text-sm font-bold bg-emerald-800 hover:bg-emerald-700 text-white transition-colors">儲存</button>
+    </div>
+  </div>
+</div>
+
 <!-- 列印用（螢幕上永遠隱藏，只有列印時出現） -->
 <div id="print-zone"></div>
 
@@ -122,6 +151,7 @@
   let activeEventId = null;
   let board = { groups: [], title: '', date: '', location: '' };
   let swapFrom = null;        // 調組時先選的那一位 {id, name}
+  let editingId = null;       // 編輯 Modal 正在改的那一位
 
   function canEdit() { return !!me.is_admin; }   // 分組／調組是 admin 才有（後端也這樣擋）
   function esc(v) {
@@ -263,6 +293,15 @@
         ${p.course_plan ? `<span class="shrink-0 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded" title="${esc(p.course_plan_label)}">${esc(p.course_plan)}${p.course_plan_fee != null ? ' · ' + Number(p.course_plan_fee).toLocaleString() + ' 元' : ''}</span>` : ''}
         <span class="shrink-0 text-[12px] font-black ${p.handicap != null ? 'text-emerald-700' : 'text-amber-600'}">
           ${p.handicap != null ? 'HDCP ' + p.handicap : '未填差點'}</span>
+        ${clickable ? `
+        <span class="shrink-0 flex items-center">
+          <button onclick="event.stopPropagation(); openEdit(${p.id})" title="編輯"
+            class="p-1.5 rounded text-slate-300 hover:text-emerald-700 hover:bg-emerald-100 transition-colors">
+            <i data-lucide="pencil" class="w-4 h-4"></i></button>
+          <button onclick="event.stopPropagation(); removePlayer(${p.id})" title="從分組表移除"
+            class="p-1.5 rounded text-slate-300 hover:text-red-600 hover:bg-red-100 transition-colors">
+            <i data-lucide="trash-2" class="w-4 h-4"></i></button>
+        </span>` : ''}
       </div>`;
   }
 
@@ -307,6 +346,65 @@
     } catch (e) {
       alert('調組失敗：' + e.message);
       clearSwap();
+    }
+  }
+
+  // ==================== 編輯／移除 ====================
+  function openEdit(id) {
+    if (!canEdit()) return;
+    const p = findPlayer(id);
+    if (!p) return;
+    editingId = id;
+    // value 是屬性設定，不是解析標記，姓名不需要轉義。
+    document.getElementById('edit-name').value = p.name;
+    document.getElementById('edit-handicap').value = p.handicap != null ? p.handicap : '';
+    const m = document.getElementById('edit-modal');
+    m.classList.remove('hidden');
+    m.classList.add('flex');
+    document.getElementById('edit-name').focus();
+  }
+
+  function closeEdit() {
+    editingId = null;
+    const m = document.getElementById('edit-modal');
+    m.classList.add('hidden');
+    m.classList.remove('flex');
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    const name = document.getElementById('edit-name').value.trim();
+    if (!name) { alert('請填姓名。'); return; }
+    // 空字串代表清掉差點；後端 _parse_handicap 也是這樣看待空值。
+    const handicap = document.getElementById('edit-handicap').value.trim();
+    try {
+      const data = await apiFetch('/golf/groups/update', {
+        method: 'POST',
+        body: JSON.stringify({ event_id: activeEventId, id: editingId, name, handicap }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      closeEdit();
+      await loadGroups();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    }
+  }
+
+  async function removePlayer(id) {
+    if (!canEdit()) return;
+    const p = findPlayer(id);
+    if (!p) return;
+    if (!confirm(`確定把「${p.name}」從分組表移除？\n報名資料不會刪除，重新分組後這個人還是會回到分組表。本人若有 LINE 帳號會收到通知。`)) return;
+    try {
+      const data = await apiFetch('/golf/groups/delete', {
+        method: 'POST',
+        body: JSON.stringify({ event_id: activeEventId, id }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '移除失敗'); return; }
+      if (swapFrom && swapFrom.id === id) clearSwap();   // 移除的正好是選起來要對調的那位
+      await loadGroups();
+    } catch (e) {
+      alert('移除失敗：' + e.message);
     }
   }
 
