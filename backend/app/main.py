@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import random
+import threading
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -15,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from . import agenda_pdf, db, event_pdfs, line_api
+from . import agenda_pdf, db, event_pdfs, line_api, notices
 from urllib.parse import quote
 from .config import APP_BASE_URL, CALENDAR_BASE_URL, GOLF_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
 
@@ -54,6 +55,10 @@ async def lifespan(app: FastAPI):
     if db.events_count() == 0:
         db.seed_events(list(_EVENT_SCHEDULE) + _club_events("本社"))
     db.ensure_personal_information_columns()
+    # 背景固定抓新公文進行事曆：開機先跑一次，之後每 6 小時再查一次（只處理沒同步
+    # 過的，穩態幾乎不做事）。這後端沒有排程器，這條 daemon 執行緒就是它的 cron；
+    # 用執行緒是因為 sync 走的是 requests/Drive/OpenAI 的同步 I/O，不該卡住啟動。
+    threading.Thread(target=notices.run_periodic, daemon=True).start()
     yield
 
 
@@ -1740,6 +1745,16 @@ async def admin_delete_event(event_id: int, request: Request):
         raise HTTPException(status_code=403, detail="Not an admin")
     db.delete_event(event_id)
     return {"status": "ok"}
+
+
+@app.post("/admin/events/sync-notices")
+async def admin_sync_notices(request: Request):
+    """從地區網站抓 【公文】 貼文，補進地區行事曆（已同步過的略過）。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    report = await run_in_threadpool(notices.sync_notices)
+    return {"status": "ok", "report": report}
 
 
 @app.get("/me")

@@ -650,7 +650,8 @@ def search_business(q: str, exclude_uid: str = "", limit: int = 10) -> list[dict
 _WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 # Simple scalar text/date fields (agenda is handled separately as a JSON string).
 _EVENT_FIELDS = ("scope", "club_name", "date", "title", "location",
-                 "chair", "time", "type", "fee", "pdf_url", "start_time", "mc", "geo")
+                 "chair", "time", "type", "fee", "pdf_url", "start_time", "mc", "geo",
+                 "source_url")
 
 
 def ensure_events_table() -> None:
@@ -682,6 +683,9 @@ def ensure_events_table() -> None:
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS golf_plans TEXT NOT NULL DEFAULT '[]'")
     # 會場座標 "緯度,經度"，供報到的 LBS 距離驗證用；留空 = 該活動不做定位驗證。
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS geo TEXT NOT NULL DEFAULT ''")
+    # 公文自動同步（notices.py）：來源貼文網址，當作去重鍵——已同步過的公文不再重覆新增。
+    # 空字串 = 人工在行事曆建立的活動，跟自動抓來的公文區分開。
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS source_url TEXT NOT NULL DEFAULT ''")
 
 
 def events_count() -> int:
@@ -734,6 +738,7 @@ def _row_to_event(r: dict) -> dict:
         "start_time": r.get("start_time") or "",
         "mc": r.get("mc") or "",
         "geo": r.get("geo") or "",
+        "source_url": r.get("source_url") or "",
         "agenda": agenda,
         "golf_holes": golf_holes,
         "golf_plans": golf_plans,
@@ -762,6 +767,13 @@ def get_event(event_id: int) -> dict | None:
     return _row_to_event(rows[0]) if rows else None
 
 
+def event_source_urls() -> set[str]:
+    """Post URLs of events already synced from an external source (notices.py),
+    so a re-sync skips them instead of inserting duplicates."""
+    rows = query("SELECT source_url FROM events WHERE source_url <> ''")
+    return {r["source_url"] for r in rows}
+
+
 def create_event(data: dict) -> dict:
     conn = _get_conn()
     try:
@@ -770,8 +782,8 @@ def create_event(data: dict) -> dict:
                 """
                 INSERT INTO events (scope, club_name, date, title, location,
                                     chair, time, type, fee, pdf_url,
-                                    start_time, mc, geo, agenda, golf_plans)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                    start_time, mc, geo, agenda, golf_plans, source_url)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
                 """,
                 (data.get("scope", "district"), data.get("club_name", ""),
@@ -780,7 +792,8 @@ def create_event(data: dict) -> dict:
                  data.get("fee", ""), data.get("pdf_url", ""),
                  data.get("start_time", ""), data.get("mc", ""), data.get("geo", ""),
                  json.dumps(data.get("agenda") or []),
-                 json.dumps(data.get("golf_plans") or [])),
+                 json.dumps(data.get("golf_plans") or []),
+                 data.get("source_url", "")),
             )
             row = cur.fetchone()
         conn.commit()
