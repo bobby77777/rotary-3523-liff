@@ -429,9 +429,10 @@ def ensure_event_guests_table() -> None:
             created_at TIMESTAMPTZ DEFAULT NOW()
         )
     """)
-    # 來賓的高球差點。必須存在這裡而不是只存 golf_groups——重新分組會整批刪除重建，
-    # 來賓沒有 registrations 可以回頭查，差點就會一按歸零。
+    # 來賓的高球差點與球場方案。必須存在這裡而不是只存 golf_groups——重新分組會整批
+    # 刪除重建，來賓沒有 registrations 可以回頭查，這兩項就會一按歸零。
     execute("ALTER TABLE event_guests ADD COLUMN IF NOT EXISTS handicap REAL")
+    execute("ALTER TABLE event_guests ADD COLUMN IF NOT EXISTS course_plan TEXT")
 
 
 def ensure_admin_users_table() -> None:
@@ -1396,14 +1397,17 @@ def ensure_golf_groups_table() -> None:
 
 def list_golf_groups(event_id: int) -> list[dict]:
     # 分組表要看得到差點與方案（分組本來就參考差點），所以帶上報名資料。
-    # 來賓沒有 line_user_id，join 不到就是 NULL，分組表照樣列得出來。
+    # 來賓沒有 line_user_id，報名那邊 join 不到，改用 guest_id 接回來賓資料。
     return query(
         """
         SELECT g.id, g.group_no, g.slot, g.player_name, g.line_user_id,
-               COALESCE(g.handicap, r.handicap) AS handicap, r.course_plan, pi.club_name
+               COALESCE(g.handicap, r.handicap, eg.handicap) AS handicap,
+               COALESCE(r.course_plan, eg.course_plan) AS course_plan,
+               pi.club_name
         FROM golf_groups g
         LEFT JOIN registrations r
                ON r.line_user_id = NULLIF(g.line_user_id, '') AND r.event_id = g.event_id
+        LEFT JOIN event_guests eg ON eg.id = g.guest_id
         LEFT JOIN personal_information pi ON pi.line_user_id = NULLIF(g.line_user_id, '')
         WHERE g.event_id = %s
         ORDER BY g.group_no, g.slot
@@ -1440,7 +1444,18 @@ def swap_golf_players(event_id: int, id_a: int, id_b: int) -> tuple[dict, dict] 
 
 
 def get_golf_player(event_id: int, row_id: int) -> dict | None:
-    rows = query("SELECT * FROM golf_groups WHERE event_id = %s AND id = %s", (event_id, row_id))
+    # 帶上目前的方案（社友看報名、來賓看來賓資料），編輯時沒送方案就照原樣留著。
+    rows = query(
+        """
+        SELECT g.*, COALESCE(r.course_plan, eg.course_plan) AS course_plan
+        FROM golf_groups g
+        LEFT JOIN registrations r
+               ON r.line_user_id = NULLIF(g.line_user_id, '') AND r.event_id = g.event_id
+        LEFT JOIN event_guests eg ON eg.id = g.guest_id
+        WHERE g.event_id = %s AND g.id = %s
+        """,
+        (event_id, row_id),
+    )
     return rows[0] if rows else None
 
 
@@ -1979,16 +1994,21 @@ def get_club_admins(club_name: str) -> list[str]:
     return [r["line_user_id"] for r in rows]
 
 
-def set_guest_handicap(guest_id: int, handicap: float | None) -> None:
-    execute("UPDATE event_guests SET handicap = %s WHERE id = %s", (handicap, guest_id))
-
-
-def set_registration_handicap(event_id: int, line_user_id: str, handicap: float | None) -> None:
-    """主委在分組表上訂正的差點。這裡是直接覆蓋（含清成空值），不像 report_payment
-    只補不蓋——訂正的重點就是蓋掉舊值。"""
+def set_guest_golf_info(guest_id: int, handicap: float | None, course_plan: str | None) -> None:
     execute(
-        "UPDATE registrations SET handicap = %s WHERE event_id = %s AND line_user_id = %s",
-        (handicap, event_id, line_user_id),
+        "UPDATE event_guests SET handicap = %s, course_plan = %s WHERE id = %s",
+        (handicap, course_plan, guest_id),
+    )
+
+
+def set_registration_golf_info(event_id: int, line_user_id: str,
+                               handicap: float | None, course_plan: str | None) -> None:
+    """主委在分組表上訂正的差點與方案。這裡是直接覆蓋（含清成空值），不像
+    report_payment 只補不蓋——訂正的重點就是蓋掉舊值。"""
+    execute(
+        "UPDATE registrations SET handicap = %s, course_plan = %s "
+        "WHERE event_id = %s AND line_user_id = %s",
+        (handicap, course_plan, event_id, line_user_id),
     )
 
 

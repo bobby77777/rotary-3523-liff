@@ -2229,6 +2229,8 @@ async def golf_groups(request: Request, event: int | None = None):
         "event_date": ev.get("date", ""), "event_location": ev.get("location", ""),
         "groups": [{"group_no": g, "players": p} for g, p in sorted(groups.items())],
         "players": [{"id": r["id"], "name": r["player_name"], "group_no": r["group_no"]} for r in rows],
+        # 編輯球友時要能改方案，選項就是這場賽事自己設的那幾種。
+        "plans": _event_golf_plans(ev),
     }
 
 
@@ -2325,13 +2327,20 @@ async def golf_groups_update(request: Request):
     handicap, hcp_err = _parse_handicap(body.get("handicap"))
     if hcp_err:
         return {"status": "invalid", "message": hcp_err}
+    # 沒送 course_plan 就維持原方案——舊版頁面（瀏覽器快取）不會送這個欄位，
+    # 不能因此把人家選好的方案清掉。送空字串才是「清掉方案」。
+    plan = row.get("course_plan")
+    if "course_plan" in body:
+        plan, plan_err = _parse_course_plan(ev, body.get("course_plan"))
+        if plan_err:
+            return {"status": "invalid", "message": plan_err}
     db.update_golf_player(ev["id"], row["id"], name, handicap)
-    # 差點也要寫回來源。重新分組是整批刪除重建，只改分組表的話一按就被舊值蓋回去。
+    # 差點與方案也要寫回來源。重新分組是整批刪除重建，只改分組表的話一按就被舊值蓋回去。
     if row["line_user_id"]:
-        db.set_registration_handicap(ev["id"], row["line_user_id"], handicap)
+        db.set_registration_golf_info(ev["id"], row["line_user_id"], handicap, plan)
     elif row.get("guest_id"):
-        db.set_guest_handicap(row["guest_id"], handicap)
-    return {"status": "ok", "name": name, "handicap": handicap}
+        db.set_guest_golf_info(row["guest_id"], handicap, plan)
+    return {"status": "ok", "name": name, "handicap": handicap, "course_plan": plan}
 
 
 @app.post("/golf/groups/delete")

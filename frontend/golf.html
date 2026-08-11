@@ -91,8 +91,14 @@
         <input id="edit-handicap" type="number" step="0.1" min="0" max="54" onkeydown="if (event.key === 'Enter') saveEdit()"
           class="w-full border border-slate-300 rounded p-2.5 text-sm outline-none focus:border-emerald-600">
       </div>
+      <!-- 這場賽事沒設球場方案時整塊隱藏（見 openEdit） -->
+      <div id="edit-plan-row" class="hidden">
+        <label class="block text-[11px] font-bold text-slate-400 mb-1">球場方案</label>
+        <select id="edit-plan"
+          class="w-full border border-slate-300 rounded p-2.5 text-sm bg-white outline-none focus:border-emerald-600"></select>
+      </div>
       <p class="text-[11px] text-slate-400 leading-relaxed">
-        差點會一併寫回報名資料，重新分組後仍然保留；姓名只改分組表上的顯示。
+        差點與方案會一併寫回報名資料，重新分組後仍然保留；姓名只改分組表上的顯示。
       </p>
     </div>
     <div class="px-5 pb-5 flex justify-end gap-2">
@@ -149,7 +155,7 @@
   let me = { is_admin: false, club: '', scope: 'district' };
   let golfEvents = [];        // 可分組的賽事（後端標記 is_golf 的那些）
   let activeEventId = null;
-  let board = { groups: [], title: '', date: '', location: '' };
+  let board = { groups: [], plans: [], title: '', date: '', location: '' };
   let swapFrom = null;        // 調組時先選的那一位 {id, name}
   let editingId = null;       // 編輯 Modal 正在改的那一位
 
@@ -219,6 +225,7 @@
     if (data.status !== 'ok') { showEmpty(data.message || '找不到對應賽事。'); return; }
     board = {
       groups: data.groups || [],
+      plans: data.plans || [],
       title: data.event_title || '',
       date: data.event_date || '',
       location: data.event_location || '',
@@ -358,6 +365,12 @@
     // value 是屬性設定，不是解析標記，姓名不需要轉義。
     document.getElementById('edit-name').value = p.name;
     document.getElementById('edit-handicap').value = p.handicap != null ? p.handicap : '';
+    // 方案選項是這場賽事自己設的那幾種，隨賽事重建。
+    const sel = document.getElementById('edit-plan');
+    document.getElementById('edit-plan-row').classList.toggle('hidden', !board.plans.length);
+    sel.innerHTML = '<option value="">（未選方案）</option>' + board.plans.map(pl =>
+      `<option value="${esc(pl.code)}">${esc(pl.code)}. ${esc(pl.label)} ${Number(pl.fee).toLocaleString()} 元${pl.plays === false ? '（不下場）' : ''}</option>`).join('');
+    sel.value = p.course_plan || '';
     const m = document.getElementById('edit-modal');
     m.classList.remove('hidden');
     m.classList.add('flex');
@@ -377,10 +390,13 @@
     if (!name) { alert('請填姓名。'); return; }
     // 空字串代表清掉差點；後端 _parse_handicap 也是這樣看待空值。
     const handicap = document.getElementById('edit-handicap').value.trim();
+    const payload = { event_id: activeEventId, id: editingId, name, handicap };
+    // 這場沒設方案就不送這個欄位，後端才知道是「不動方案」而不是「清掉方案」。
+    if (board.plans.length) payload.course_plan = document.getElementById('edit-plan').value;
     try {
       const data = await apiFetch('/golf/groups/update', {
         method: 'POST',
-        body: JSON.stringify({ event_id: activeEventId, id: editingId, name, handicap }),
+        body: JSON.stringify(payload),
       });
       if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
       closeEdit();
