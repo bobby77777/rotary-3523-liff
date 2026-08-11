@@ -1749,11 +1749,12 @@ async def admin_delete_event(event_id: int, request: Request):
 
 @app.post("/admin/events/sync-notices")
 async def admin_sync_notices(request: Request):
-    """從地區網站抓 【公文】 貼文，補進地區行事曆（已同步過的略過）。"""
+    """從地區網站抓 【公文】 貼文，補進地區行事曆（已同步過的略過），並回頭補讀
+    當初沒讀到公文 PDF、因此還缺日期/地點/費用的那幾筆。"""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="Not an admin")
-    report = await run_in_threadpool(notices.sync_notices)
+    report = await run_in_threadpool(notices.sync_notices, True)
     return {"status": "ok", "report": report}
 
 

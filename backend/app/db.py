@@ -774,6 +774,19 @@ def event_source_urls() -> set[str]:
     return {r["source_url"] for r in rows}
 
 
+def notice_events_missing_details() -> list[dict]:
+    """Synced 公文 that carry nothing read out of their PDF — no 地點/時間/費用, so
+    their date is still the post's publish date. notices.py retries these."""
+    rows = query(
+        """
+        SELECT id, title, date, pdf_url FROM events
+        WHERE type = '公文' AND source_url <> ''
+          AND location = '' AND time = '' AND fee = ''
+        ORDER BY id
+        """)
+    return [dict(r) for r in rows]
+
+
 def create_event(data: dict) -> dict:
     conn = _get_conn()
     try:

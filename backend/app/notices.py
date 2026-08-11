@@ -7,10 +7,14 @@ through the WordPress REST API, reads the real event date/location/fee out of th
 PDF each post links to on Google Drive, and files them into the district calendar
 as type="公文" events.
 
-Everything degrades gracefully: the WP fetch is the only hard dependency. If Drive
-credentials or the LLM are unavailable, the notice is still added to the calendar
-using the post's publish date as a stand-in, so nothing silently disappears — the
-date just gets refined once the PDF can be read.
+The PDFs live in world-readable Drive folders, so they are fetched anonymously over
+plain HTTP; the Drive API is only a fallback, because its OAuth token expires and a
+dead token used to leave every notice detail-less.
+
+Everything degrades gracefully: the WP fetch is the only hard dependency. If the PDF
+or the LLM is unavailable, the notice is still added to the calendar using the post's
+publish date as a stand-in, so nothing silently disappears — and refresh_notice_details()
+fills the real date/location/fee in later, once the PDF can be read.
 
 Idempotency: each event stores the post URL in events.source_url, and a re-sync
 skips URLs already present, so it is safe to run on every startup and on demand.
@@ -32,6 +36,9 @@ logger = logging.getLogger(__name__)
 WP_BASE = "https://ri3523.org/wp-json/wp/v2"
 _EVENTS_CATEGORY_SLUG = "events"     # 地區活動 archive shown at /category/events/
 _UA = {"User-Agent": "rotary-3523-liff notices sync"}
+# Drive serves the folder page (and its embedded file list) only to browser-ish
+# clients, so the anonymous PDF route needs a browser UA.
+_DRIVE_UA = {"User-Agent": "Mozilla/5.0 (compatible; rotary-3523-liff notices sync)"}
 _HTTP_TIMEOUT = 20
 
 
@@ -118,15 +125,96 @@ def _drive_file_id(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _drive_ivd_json(page_html: str) -> list | None:
+    """The file list a public Drive folder page embeds as window['_DRIVE_ivd'].
+
+    It is a JS string literal whose quotes/brackets are \\xNN-escaped; decode those
+    and the rest is plain JSON: [[[file_id, [parent_id], name, mime_type, …], …], …].
+    """
+    m = re.search(r"_DRIVE_ivd'\]\s*=\s*'(.*?)'\s*;", page_html, re.S)
+    if not m:
+        return None
+    body = re.sub(r"\\x([0-9a-fA-F]{2})",
+                  lambda h: chr(int(h.group(1), 16)), m.group(1))
+    try:
+        return json.loads(body)
+    except Exception as e:
+        logger.warning("notices: could not parse Drive folder listing: %s", e)
+        return None
+
+
+def _pdf_rank(name: str) -> int:
+    """Sort key that puts the 公文 letter itself ahead of its attachments.
+
+    A notice folder holds the letter (named with its 文號, e.g.
+    "CJ-DTLS-251231-01 函邀 …") plus 附件 (報名表、名單…). The letter is the only
+    file with the event's date/place in it — reading 附件一 instead yields nonsense."""
+    if re.match(r"\s*[A-Za-z]{2,6}-[A-Za-z]{2,6}-\d{6}", name or ""):
+        return 0
+    if re.search(r"附件|報名表|名單", name or ""):
+        return 2
+    return 1
+
+
+def _public_folder_pdf_ids(folder_id: str) -> list[str]:
+    """PDF file ids inside a *publicly shared* Drive folder, letter first.
+
+    公文 folders are shared with anyone-with-the-link, so the folder page itself
+    lists them — no credentials needed. That matters: the Drive API path below
+    depends on an OAuth token that silently expires, and when it does every
+    notice loses its date/location/fee."""
+    if not folder_id:
+        return []
+    try:
+        r = requests.get(f"https://drive.google.com/drive/folders/{folder_id}",
+                         headers=_DRIVE_UA, timeout=_HTTP_TIMEOUT)
+        r.raise_for_status()
+    except Exception as e:
+        logger.warning("notices: fetching Drive folder %s failed: %s", folder_id, e)
+        return []
+    listing = _drive_ivd_json(r.text)
+    if not listing or not isinstance(listing[0], list):
+        return []
+    pdfs = [f for f in listing[0]
+            if isinstance(f, list) and len(f) > 3 and f[3] == "application/pdf"]
+    pdfs.sort(key=lambda f: (_pdf_rank(f[2] or ""), f[2] or ""))
+    return [f[0] for f in pdfs]
+
+
+def _public_pdf_bytes(file_id: str) -> bytes | None:
+    """Download a world-readable Drive file without credentials. Returns None for
+    anything that isn't a PDF — a permission wall answers with an HTML page."""
+    try:
+        r = requests.get("https://drive.google.com/uc",
+                         params={"export": "download", "id": file_id},
+                         headers=_DRIVE_UA, timeout=_HTTP_TIMEOUT)
+        r.raise_for_status()
+    except Exception as e:
+        logger.warning("notices: public download of %s failed: %s", file_id, e)
+        return None
+    return r.content if r.content[:4] == b"%PDF" else None
+
+
 def _notice_pdf_bytes(drive_url: str) -> bytes | None:
     """Resolve the notice's Drive link to PDF bytes — the link is usually a shared
-    folder (list it, take the first PDF) but may point straight at a file."""
-    svc = event_pdfs._drive_service()
-    if svc is None or not drive_url:
+    folder (list it, take the first PDF) but may point straight at a file.
+
+    Tries the public HTTP route first and only then the Drive API, so a missing or
+    expired OAuth token costs nothing as long as the notice is publicly shared."""
+    if not drive_url:
         return None
     file_id = _drive_file_id(drive_url)
+    folder_id = None if file_id else _drive_folder_id(drive_url)
+
+    for fid in ([file_id] if file_id else _public_folder_pdf_ids(folder_id or "")):
+        pdf = _public_pdf_bytes(fid)
+        if pdf:
+            return pdf
+
+    svc = event_pdfs._drive_service()
+    if svc is None:
+        return None
     if not file_id:
-        folder_id = _drive_folder_id(drive_url)
         if not folder_id:
             return None
         try:
@@ -141,6 +229,7 @@ def _notice_pdf_bytes(drive_url: str) -> bytes | None:
             return None
         if not files:
             return None
+        files.sort(key=lambda f: (_pdf_rank(f.get("name", "")), f.get("name", "")))
         file_id = files[0]["id"]
     return event_pdfs.download_pdf(file_id)
 
@@ -161,10 +250,17 @@ _EXTRACT_PROMPT = """你是扶輪地區秘書處的助理。以下是一份地�
 並抽取活動資訊。只根據內文，不得臆測。
 
 規則：
-- 純粹公告、通知結果、催繳費用、提供名單這類「沒有要出席的活動」→ is_event=false。
+- is_event 先看公文有沒有要求收件人「出席／報名／派員參加」某一場活動。純粹公告、
+  通知決議結果、催繳費用、通過預算、提供名單 → is_event=false，即使內文順帶提到
+  某個未來日期（例如決議通過的明年年會日期），也不要當成活動。
+- 活動日期寫在「說明」段落裡（多半是「時間：2025 年 08 月 09 日(星期六) 13:00-17:30」）。
+  公文開頭信頭的「日期：」是發文日期，文號裡的數字也是發文日期，兩者都不是活動日期，
+  絕對不要拿來當 date。內文找不到活動日期就 is_event=false。
 - 日期一律用西元 YYYY-MM-DD。看到民國年請換算（民國115年=西元2026年）。
+- time 只填時刻，不要填日期。
 - 找不到的欄位留空字串。時間用 24 小時制範圍（例：13:30-17:00），整天可寫「整天」。
-- 費用照原文（例：NT$500、免費），沒寫就留空。
+- 費用只寫金額，越短越好（例：每社 NT$3,000、每位 NT$500、免費），不要整段抄說明。
+- 地點寫場地名稱，可加括號地址，不要抄整段。
 
 只輸出 JSON，格式：
 {"is_event": true/false, "date": "", "location": "", "time": "", "fee": ""}"""
@@ -214,14 +310,26 @@ def _extract_event_details(title: str, pdf_text: str, publish_date: str) -> dict
 
 
 # ── Orchestration ─────────────────────────────────────────────────────────────
+def _read_notice_details(title: str, drive_url: str, fallback_date: str) -> dict:
+    """{date, location, time, fee} read out of the notice's PDF — {} if the PDF is
+    unreachable/unreadable, or if the 公文 announces no event to attend (a fee
+    reminder, a name list, a result notice), in which case there is no date to
+    put on the calendar and the publish date must stand."""
+    if not drive_url:
+        return {}
+    pdf = _notice_pdf_bytes(drive_url)
+    if not pdf:
+        return {}
+    details = _extract_event_details(title, _pdf_text(pdf), fallback_date)
+    if not details or not details.get("is_event"):
+        return {}
+    return {k: details[k] for k in ("date", "location", "time", "fee")}
+
+
 def _build_event(post: dict) -> dict:
     """Map a notice post (+ whatever we could read from its PDF) to an event row."""
-    details = {}
-    if post.get("drive_url"):
-        pdf = _notice_pdf_bytes(post["drive_url"])
-        if pdf:
-            details = _extract_event_details(
-                post["title"], _pdf_text(pdf), post["publish_date"])
+    details = _read_notice_details(
+        post["title"], post.get("drive_url", ""), post["publish_date"])
     # Real event date when we could read it; otherwise fall back to the publish date
     # so the notice still lands on the calendar rather than vanishing.
     return {
@@ -237,8 +345,34 @@ def _build_event(post: dict) -> dict:
     }
 
 
-def sync_notices() -> dict:
-    """Pull 【公文】 posts and add any not already synced. Returns a summary report."""
+def refresh_notice_details() -> dict:
+    """Re-read the PDF of every synced 公文 that still has no 地點/時間/費用 and fill
+    them in. Notices synced while Drive was unreachable are stuck on their publish
+    date with empty details; this is what unsticks them without re-adding rows."""
+    rows = db.notice_events_missing_details()
+    updated = errors = 0
+    for row in rows:
+        try:
+            details = _read_notice_details(
+                row["title"], row.get("pdf_url") or "", str(row.get("date") or ""))
+        except Exception as e:
+            errors += 1
+            logger.warning("notices: refresh failed for %r: %s", row["title"], e)
+            continue
+        if not any(details.values()):
+            continue
+        patch = {k: v for k, v in details.items() if v}
+        db.update_event(row["id"], patch)
+        updated += 1
+    report = {"checked": len(rows), "updated": updated, "errors": errors}
+    logger.info("notices: refresh done %s", report)
+    return report
+
+
+def sync_notices(refresh: bool = False) -> dict:
+    """Pull 【公文】 posts and add any not already synced. With refresh=True, also
+    re-read the PDFs of previously synced notices whose details came out empty.
+    Returns a summary report."""
     posts = fetch_notice_posts()
     if not posts:
         return {"found": 0, "added": 0, "skipped": 0, "errors": 0}
@@ -256,14 +390,16 @@ def sync_notices() -> dict:
             logger.warning("notices: failed to add %r: %s", post.get("title"), e)
     report = {"found": len(posts), "added": added,
               "skipped": skipped, "errors": errors}
+    if refresh:
+        report["refreshed"] = refresh_notice_details()
     logger.info("notices: sync done %s", report)
     return report
 
 
-def sync_notices_safe() -> dict:
+def sync_notices_safe(refresh: bool = False) -> dict:
     """sync_notices() that never raises — for fire-and-forget background use."""
     try:
-        return sync_notices()
+        return sync_notices(refresh=refresh)
     except Exception as e:
         logger.warning("notices: sync aborted: %s", e)
         return {"found": 0, "added": 0, "skipped": 0, "errors": 0}
@@ -276,7 +412,11 @@ def run_periodic(interval: float = SYNC_INTERVAL_SECONDS) -> None:
     """Sync once now, then every `interval` seconds. Runs forever — meant to be the
     target of a daemon thread started at app startup. Since there is no scheduler in
     this backend, this is the whole cron: it lives as long as the process does, and
-    each pass only touches 公文 not already in the calendar."""
+    each pass only touches 公文 not already in the calendar. The first pass also
+    retries the PDFs of notices that were synced without details — once per boot,
+    not every pass, so a 公文 that genuinely has no event isn't re-read forever."""
+    first = True
     while True:
-        sync_notices_safe()
+        sync_notices_safe(refresh=first)
+        first = False
         time.sleep(interval)
