@@ -2401,6 +2401,33 @@ async def golf_groups_update(request: Request):
     return {"status": "ok", "name": name, "handicap": handicap, "course_plan": plan}
 
 
+@app.post("/golf/groups/move")
+async def golf_groups_move(request: Request):
+    """把一位球友搬到另一組的空位。對調要兩個人，空位沒有人可以換。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    body = await request.json()
+    ev, row, err = _golf_row_target(admin_uid, body)
+    if err is not None:
+        return err
+    try:
+        group_no = int(body.get("group_no"))
+    except (TypeError, ValueError):
+        return {"status": "invalid", "message": "請選擇要搬到哪一組"}
+    status, moved = db.move_golf_player(ev["id"], row["id"], group_no)
+    if status == "no_group":
+        return {"status": "no_group", "message": f"找不到第 {group_no} 組"}
+    if status == "full":
+        return {"status": "full", "message": f"第 {group_no} 組已經滿 4 位，請改用對調"}
+    if moved is None:
+        return {"status": "not_found", "message": "找不到這位球友的分組資料"}
+    if moved["line_user_id"]:
+        _push_receipt(moved["line_user_id"],
+                      f"🔀 分組調整通知【{ev['title']}】\n"
+                      f"{moved['player_name']} 已改分至第 {moved['group_no']} 組（第 {moved['slot']} 位）。")
+    return {"status": "ok", "name": moved["player_name"],
+            "group_no": moved["group_no"], "slot": moved["slot"]}
+
+
 @app.post("/golf/groups/delete")
 async def golf_groups_delete(request: Request):
     """把某一位從分組表移除（報名資料不動），同組後面的順位往前補，並通知本人。"""

@@ -1466,6 +1466,25 @@ def update_golf_player(event_id: int, row_id: int, name: str, handicap: float | 
     )
 
 
+def _compact_golf_slots(cur, event_id: int, group_no: int) -> None:
+    """把一組的順位重排成 1、2、3…，中間不留空號。
+    先整組搬到負數再照原順序排回來；一句 UPDATE 直接補號會在中途撞上
+    UNIQUE(event_id, group_no, slot)。"""
+    cur.execute(
+        "UPDATE golf_groups SET slot = -slot WHERE event_id = %s AND group_no = %s",
+        (event_id, group_no),
+    )
+    cur.execute(
+        """
+        UPDATE golf_groups g SET slot = s.rn
+        FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY slot DESC) AS rn
+              FROM golf_groups WHERE event_id = %s AND group_no = %s) s
+        WHERE g.id = s.id
+        """,
+        (event_id, group_no),
+    )
+
+
 def delete_golf_player(event_id: int, row_id: int) -> None:
     """把一位球友從分組表刪掉，同組後面的順位往前補，不留空號。"""
     conn = _get_conn()
@@ -1477,23 +1496,50 @@ def delete_golf_player(event_id: int, row_id: int) -> None:
             )
             row = cur.fetchone()
             if row is not None:
-                group_no = row[0]
-                # 先整組搬到負數再照原順序重排；一句 UPDATE 直接補號會在中途撞上
-                # UNIQUE(event_id, group_no, slot)。
-                cur.execute(
-                    "UPDATE golf_groups SET slot = -slot WHERE event_id = %s AND group_no = %s",
-                    (event_id, group_no),
-                )
-                cur.execute(
-                    """
-                    UPDATE golf_groups g SET slot = s.rn
-                    FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY slot DESC) AS rn
-                          FROM golf_groups WHERE event_id = %s AND group_no = %s) s
-                    WHERE g.id = s.id
-                    """,
-                    (event_id, group_no),
-                )
+                _compact_golf_slots(cur, event_id, row[0])
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def move_golf_player(event_id: int, row_id: int, group_no: int,
+                     per_group: int = 4) -> tuple[str, dict | None]:
+    """把一位球友搬到另一組的空位（對調是兩個人互換，這支是搬到沒人的位子）。
+    回傳 (狀態, 搬完的那一列)，狀態 ∈ ok / not_found / no_group / full。
+    落點取那一組最前面的空號，原本那組的順位往前補。"""
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM golf_groups WHERE event_id = %s AND id = %s FOR UPDATE",
+                (event_id, row_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return "not_found", None
+            row = dict(row)
+            if row["group_no"] == group_no:
+                return "ok", row                      # 已經在這一組，不用搬
+            cur.execute(
+                "SELECT slot FROM golf_groups WHERE event_id = %s AND group_no = %s",
+                (event_id, group_no),
+            )
+            used = {r["slot"] for r in cur.fetchall()}
+            if not used:
+                return "no_group", None               # 沒有這一組，不要無中生有
+            free = next((s for s in range(1, per_group + 1) if s not in used), None)
+            if free is None:
+                return "full", None
+            cur.execute(
+                "UPDATE golf_groups SET group_no = %s, slot = %s WHERE id = %s",
+                (group_no, free, row_id),
+            )
+            _compact_golf_slots(cur, event_id, row["group_no"])
+        conn.commit()
+        return "ok", {**row, "group_no": group_no, "slot": free}
     except Exception:
         conn.rollback()
         raise

@@ -58,7 +58,7 @@
   <div id="swap-bar" class="hidden bg-amber-100 border-b border-amber-200 px-5 py-2.5 flex items-center justify-between gap-3 flex-shrink-0">
     <p class="text-[13px] text-amber-900 min-w-0 truncate">
       <i data-lucide="arrow-left-right" class="w-4 h-4 inline-block -mt-0.5"></i>
-      已選 <b id="swap-a-name">—</b>，再點另一位球友即可對調。
+      已選 <b id="swap-a-name">—</b>，再點另一位球友即可對調，或點空位把他移過去。
     </p>
     <button onclick="clearSwap()" class="text-[12px] font-bold text-amber-800 hover:text-amber-950 flex-shrink-0">取消</button>
   </div>
@@ -278,8 +278,8 @@
         </div>
         <div class="divide-y divide-slate-100">
           ${g.players.map(p => renderPlayer(p)).join('')}
-          ${Array.from({ length: Math.max(0, 4 - g.players.length) }, () =>
-            `<div class="px-4 py-3 text-[13px] text-slate-300">—— 空位 ——</div>`).join('')}
+          ${Array.from({ length: Math.max(0, 4 - g.players.length) },
+            () => renderEmptySlot(g.group_no)).join('')}
         </div>
       </div>`;
     }).join('');
@@ -309,6 +309,18 @@
             class="p-1.5 rounded text-slate-300 hover:text-red-600 hover:bg-red-100 transition-colors">
             <i data-lucide="trash-2" class="w-4 h-4"></i></button>
         </span>` : ''}
+      </div>`;
+  }
+
+  // 空位：選了人之後就是落點。沒選人時只是灰字，點了也沒有意義。
+  function renderEmptySlot(groupNo) {
+    const target = canEdit() && swapFrom;
+    return `
+      <div ${target ? `onclick="movePlayer(${groupNo})"` : ''}
+        class="px-4 py-3 text-[13px] ${target
+          ? 'text-emerald-700 font-bold cursor-pointer hover:bg-emerald-50'
+          : 'text-slate-300'}">
+        ${target ? '—— 移到這裡 ——' : '—— 空位 ——'}
       </div>`;
   }
 
@@ -421,6 +433,24 @@
       await loadGroups();
     } catch (e) {
       alert('移除失敗：' + e.message);
+    }
+  }
+
+  // 搬到空位：只要一位球友，跟對調（兩位互換）是兩回事。
+  async function movePlayer(groupNo) {
+    if (!canEdit() || !swapFrom) return;
+    try {
+      const data = await apiFetch('/golf/groups/move', {
+        method: 'POST',
+        body: JSON.stringify({ event_id: activeEventId, id: swapFrom.id, group_no: groupNo }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '移動失敗'); clearSwap(); return; }
+      swapFrom = null;
+      document.getElementById('swap-bar').classList.add('hidden');
+      await loadGroups();          // 以後端為準重載，不在前端自己搬位置
+    } catch (e) {
+      alert('移動失敗：' + e.message);
+      clearSwap();
     }
   }
 
