@@ -1423,10 +1423,14 @@ function getActiveEventsData() {
     return eventsCache[systemScope] || [];
 }
 
+// 首頁主打的活動。全部辦完就回 null（首頁改顯示「目前沒有近期活動」）——以前是
+// 退而求其次挑最後一筆，結果已結束的活動還掛在首頁，底下還有一顆「我要報名」。
+// 主委要處理辦完的活動，走主委頁那個「目前活動」下拉，那邊列的是全部活動。
 function findClosestUpcomingEvent() {
-    const today = new Date();
-    const events = getActiveEventsData().filter(e => new Date(e.date) >= today).sort((a,b) => new Date(a.date)-new Date(b.date));
-    return events[0] || getActiveEventsData().at(-1);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return getActiveEventsData()
+        .filter(e => e.date && new Date(e.date) >= today)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))[0] || null;
 }
 
 function selectEvent(eventId) {
@@ -1523,10 +1527,11 @@ function renderHomePage() {
 function renderHomeEvents() {
     const box = document.getElementById('home-events-list');
     if (!box) return;
+    // 辦完的活動不列（當天的還算沒結束，所以基準是今天 00:00）。要回顧看
+    // 「個人 → 我的報名紀錄」，那邊才是歷史。
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 10);
     const list = getActiveEventsData()
-        .filter(e => e.date && new Date(e.date) >= cutoff)
+        .filter(e => e.date && new Date(e.date) >= today)
         .sort((a, b) => new Date(a.date) - new Date(b.date))
         .slice(0, 10);
 
@@ -1537,11 +1542,10 @@ function renderHomeEvents() {
         return;
     }
     box.innerHTML = list.map(ev => {
-        const upcoming = new Date(ev.date) >= today;
         const isCurrent = currentActiveEvent && currentActiveEvent.id === ev.id;
         return `<div class="card p-3 ${isCurrent ? 'ring-2 ring-blue-500' : ''}">
             <div class="flex justify-between items-center gap-2">
-                <span class="px-2 py-0.5 rounded text-white text-[12px] font-bold ${upcoming ? 'bg-emerald-500' : 'bg-slate-400'}">${upcoming ? '即將到來' : '已結束'}</span>
+                <span class="px-2 py-0.5 rounded text-white text-[12px] font-bold bg-emerald-500">即將到來</span>
                 <span class="text-slate-500 font-bold text-[13px]">${_escHtml(ev.displayDate || ev.date)}</span>
             </div>
             <h3 class="font-bold text-slate-900 text-[15px] leading-snug mt-1.5">${_escHtml(ev.title)}</h3>
