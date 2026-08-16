@@ -1645,7 +1645,7 @@ async def events(request: Request, scope: str = ""):
                           or e.get("id") in stored or e.get("id") in pmap)
         agenda_url = f"{APP_BASE_URL}/events/{e['id']}/pdf" if has_agenda_pdf else ""
         # 兩份文件是不同的東西，活動卡要能各開各的：公文本文是地區網站那份 PDF
-        # （notices 同步時存進 pdf_url），流程表是議程產生的。以前只有一個 pdf_url，
+        # （notices 同步時存進 pdf_url），議程 PDF 是議程編輯器產生的。以前只有一個 pdf_url，
         # 有議程就把公文連結蓋掉，公文本文就再也點不到了。
         return {**e,
                 "notice_pdf_url": e.get("pdf_url") or "",

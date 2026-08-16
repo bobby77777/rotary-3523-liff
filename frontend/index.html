@@ -3567,8 +3567,8 @@ async function clickEbook(name) {
 
 // 行事曆活動卡的 PDF 鈕路由：
 //  ・例會   → 開啟本社最新社刊（openBulletinPdf）。
-//  ・其他活動 → 公文本文、流程表各一顆，有哪份就出哪顆。
-//  ・兩份都還沒有 → 顯示停用的「流程表準備中」。
+//  ・其他活動 → 公文本文、議程各一顆，有哪份就出哪顆。
+//  ・兩份都還沒有 → 顯示停用的「議程準備中」。
 function isRegularMeeting(ev) {
     // 只有「本社例會」連到社刊；活動內容或類型含「例會」即算（快速新增的活動可能沒填 type）。
     // 地區活動一律走各自上傳到 Drive 的 PDF。
@@ -3577,7 +3577,7 @@ function isRegularMeeting(ev) {
 }
 
 // 舊後端只送一個 pdf_url，看網址就分得出是哪一份：/events/{id}/pdf 是後端產生的
-// 流程表，其他（Drive 連結）就是公文本文。後端重啟前也不會少一顆鈕。
+// 議程，其他（Drive 連結）就是公文本文。後端重啟前也不會少一顆鈕。
 function eventPdfUrls(ev) {
     const legacy = (ev && ev.pdf_url) || '';
     const isAgendaUrl = /\/events\/\d+\/pdf$/.test(legacy);
@@ -3603,12 +3603,12 @@ function eventPdfButtonHTML(ev) {
     }
     if (agenda) {
         buttons.push(`<button onclick="event.stopPropagation(); openEventPdf(${ev.id})" class="bg-indigo-600 text-white ${base} btn-3d btn-3d-primary">
-                    <i class="fa-solid fa-list-ol"></i> 流程表
+                    <i class="fa-solid fa-list-ol"></i> 議程
                 </button>`);
     }
     if (buttons.length) return buttons.join('');
     return `<button disabled class="bg-gray-300 text-gray-400 ${base} cursor-not-allowed">
-                <i class="fa-solid fa-file-pdf"></i> 流程表準備中
+                <i class="fa-solid fa-file-pdf"></i> 議程準備中
             </button>`;
 }
 
@@ -3635,8 +3635,8 @@ function openEventFile(id, which, missingMsg) {
     else window.open(url, '_blank');
 }
 
-function openEventPdf(id) {      // 流程表（議程產生的向量 PDF，或執秘上傳的檔）
-    openEventFile(id, 'agenda', '此活動的流程表尚未建立。');
+function openEventPdf(id) {      // 議程（存檔後產生的向量 PDF，或執秘上傳的檔）
+    openEventFile(id, 'agenda', '此活動的議程尚未建立。');
 }
 
 function openNoticePdf(id) {     // 公文本文（地區網站那份 PDF）
