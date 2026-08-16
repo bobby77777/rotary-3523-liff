@@ -40,7 +40,6 @@ async def lifespan(app: FastAPI):
     db.ensure_golf_scores_table()
     db.ensure_club_dues_table()
     db.ensure_club_dues_settings_table()
-    db.ensure_club_bank_account_table()
     db.ensure_event_surveys_table()
     db.ensure_event_vips_table()
     db.ensure_golf_groups_table()
@@ -1886,40 +1885,6 @@ async def dues_settings_save(request: Request):
     db.save_dues_settings(club, month, base, district)
     return {"status": "ok", "effective_month": month, "base": base, "district": district,
             "total": base + district}
-
-
-_BANK_FIELDS = ("bank_name", "bank_code", "branch", "account_no", "account_name", "note")
-
-
-@app.get("/club/bank_account")
-async def club_bank_account_get(request: Request):
-    """本社的收款帳戶。**不擋 admin** —— 這是要給社友看「錢匯去哪」的，
-    擋起來就等於沒做。沒設定過回 configured=false，畫面才知道要提示執秘去填。"""
-    uid = request.headers.get("X-Line-UserId", "")
-    if not uid:
-        return {"status": "no_user", "configured": False}
-    club = db.get_user_club(uid)
-    row = db.get_club_bank_account(club) if club else None
-    account = {f: (row or {}).get(f) or "" for f in _BANK_FIELDS}
-    return {"status": "ok", "club": club, "account": account,
-            "configured": bool(account["account_no"])}
-
-
-@app.post("/club/bank_account")
-async def club_bank_account_save(request: Request):
-    """執秘 sets the club's remittance account."""
-    uid = request.headers.get("X-Line-UserId", "")
-    if not db.is_admin(uid):
-        return {"status": "forbidden", "message": "無收款帳戶設定權限"}
-    club = db.get_user_club(uid)
-    if not club:
-        return {"status": "no_club", "message": "找不到您的社別"}
-    body = await request.json()
-    data = {f: str(body.get(f, "") or "").strip() for f in _BANK_FIELDS}
-    if not data["account_no"]:
-        return {"status": "invalid", "message": "請填寫帳號"}
-    db.save_club_bank_account(club, data)
-    return {"status": "ok", "club": club, "account": data}
 
 
 @app.post("/dues/settings/delete")
