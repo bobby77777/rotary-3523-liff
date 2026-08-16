@@ -2139,49 +2139,6 @@ async def admin_update_event(event_id: int, request: Request):
     return {"status": "ok", "event": ev}
 
 
-@app.post("/admin/events/{event_id}/link_dues")
-async def admin_link_event_dues(event_id: int, request: Request):
-    """補記：charge everyone already registered for this event.
-
-    Registration-time charging only covers people who register *after* 執秘 fills
-    in 每人報名費. Every event that predates the field — which today is all of
-    them — already has registrants who were never charged. This catches them up.
-
-    Charged to the current month, not the month they registered in: a March
-    registration must not reopen March's already-reconciled bill. The duplicate
-    guard spans all months (db.add_dues_custom_item), so anyone charged at
-    registration time is skipped rather than billed twice."""
-    admin_uid = request.headers.get("X-Line-UserId", "")
-    if not db.is_admin(admin_uid):
-        return {"status": "forbidden", "message": "無記帳權限"}
-    ev = db.get_event(event_id)
-    if ev is None:
-        return {"status": "no_event", "message": "找不到活動"}
-    if ev.get("scope") != "district":
-        return {"status": "invalid", "message": "只有地區活動會自動記入社費"}
-    body = await request.json() if await request.body() else {}
-    notify = bool(body.get("notify", True))
-
-    charged, skipped, total = [], 0, 0
-    for reg in db.event_registrant_plans(event_id):
-        uid = reg["line_user_id"]
-        amount = _link_fee_to_dues(uid, ev, reg.get("course_plan"))
-        if amount:
-            charged.append((uid, amount))
-            total += amount
-        else:
-            skipped += 1
-    if notify:
-        for uid, amount in charged:
-            try:
-                line_api.push_text(uid, f"💵 【{ev['title']}】報名費 NT${amount:,} 已列入您本月的社費帳單，"
-                                        f"不必另外匯款。")
-            except Exception:
-                logger.exception("link-dues push failed for %s", uid)
-    return {"status": "ok", "event_title": ev["title"], "charged": len(charged),
-            "skipped": skipped, "total": total, "notified": notify}
-
-
 @app.delete("/admin/events/{event_id}")
 async def admin_delete_event(event_id: int, request: Request):
     """執秘 從管理面板刪除活動。"""

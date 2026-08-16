@@ -386,10 +386,6 @@ def add_dues_custom_item(club_name: str, month: str, line_user_id: str,
     main._clean_dues_items), which is the whole reason it lives in the item
     rather than in a separate table.
 
-    The duplicate check spans every month, not just the target one. A member
-    charged in August and then caught by a September back-fill would otherwise
-    pay twice, because September's bill has no record of August's item.
-
     Reads and writes in one transaction with FOR UPDATE: two members registering
     at the same moment would otherwise each read the old list and the second
     write would drop the first one's fee. Only touches customs, so 餐費/IOU and
@@ -398,18 +394,15 @@ def add_dues_custom_item(club_name: str, month: str, line_user_id: str,
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT month, customs FROM club_dues "
-                "WHERE club_name = %s AND line_user_id = %s FOR UPDATE",
-                (club_name, line_user_id),
+                "SELECT customs FROM club_dues "
+                "WHERE club_name = %s AND month = %s AND line_user_id = %s FOR UPDATE",
+                (club_name, month, line_user_id),
             )
-            rows = cur.fetchall()
-            for r in rows:
-                if any(isinstance(c, dict) and c.get("event_id") == event_id
-                       for c in (r["customs"] or [])):
-                    conn.commit()
-                    return False
-            row = next((r for r in rows if r["month"] == month), None)
+            row = cur.fetchone()
             customs = list(row["customs"] or []) if row else []
+            if any(isinstance(c, dict) and c.get("event_id") == event_id for c in customs):
+                conn.commit()
+                return False
             customs.append({"name": name, "amount": int(amount), "event_id": event_id})
             if row is not None:
                 cur.execute(
@@ -1152,17 +1145,6 @@ def get_event_checkin_count(event_id: int) -> int:
         (event_id,),
     )
     return rows[0]["cnt"] if rows else 0
-
-
-def event_registrant_plans(event_id: int) -> list[dict]:
-    """Everyone registered for one event, with the golf plan they picked. Used by
-    the 補記 pass, which has to charge people who registered before the event had
-    a 每人報名費 — they were never charged at registration time."""
-    return query(
-        "SELECT line_user_id, course_plan FROM registrations "
-        "WHERE event_id = %s ORDER BY id",
-        (event_id,),
-    )
 
 
 def get_event_stats(event_id: int) -> dict:
