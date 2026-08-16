@@ -33,14 +33,17 @@
       <div class="flex items-center gap-3 min-w-0">
         <i data-lucide="wallet" class="w-8 h-8 text-amber-400 flex-shrink-0"></i>
         <div class="min-w-0">
-          <h1 class="text-xl md:text-2xl font-bold tracking-wider truncate">社費財務看板</h1>
-          <p class="text-[11px] text-indigo-200 truncate" id="subtitle">載入中…</p>
+          <h1 class="text-2xl md:text-3xl font-bold tracking-wider truncate">社費財務看板</h1>
+          <p class="text-[13px] text-indigo-200 truncate" id="subtitle">載入中…</p>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <select id="month-selector" onchange="selectMonth(this.value)"
-          class="bg-indigo-900 border border-indigo-800 text-white text-sm rounded p-2.5 outline-none cursor-pointer shadow-sm min-w-[10rem]"></select>
-        <button onclick="printSheet()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-sm flex items-center gap-2 transition-colors">
+          class="bg-indigo-900 border border-indigo-800 text-white text-base rounded p-2.5 outline-none cursor-pointer shadow-sm min-w-[10rem]"></select>
+        <button id="btn-bulk" onclick="openBulkBill()" class="hidden bg-amber-400 hover:bg-amber-300 text-indigo-950 px-4 py-2.5 rounded font-bold text-base flex items-center gap-2 transition-colors shadow-md">
+          <i data-lucide="file-plus-2" class="w-4 h-4"></i> <span id="btn-bulk-label">批次開帳單</span>
+        </button>
+        <button onclick="printSheet()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
           <i data-lucide="printer" class="w-4 h-4"></i> 下載收繳明細
         </button>
       </div>
@@ -50,7 +53,7 @@
   <!-- ==================== 看板 ==================== -->
   <div class="flex-1 overflow-y-auto p-5 md:p-8">
     <div class="max-w-6xl mx-auto space-y-5">
-      <p id="notice" class="hidden text-center text-slate-400 text-sm py-16"></p>
+      <p id="notice" class="hidden text-center text-slate-400 text-base py-16"></p>
 
       <div id="board" class="hidden space-y-5">
         <!-- 收繳四格 + 收繳率 -->
@@ -58,15 +61,15 @@
           <div id="cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
           <div class="mt-3 bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-[12px] font-bold text-slate-500">收繳進度（以已收訖計）</span>
-              <span class="text-[12px] font-black text-slate-800" id="rate-label">—</span>
+              <span class="text-[14px] font-bold text-slate-500">收繳進度（以已收訖計）</span>
+              <span class="text-[14px] font-black text-slate-800" id="rate-label">—</span>
             </div>
             <!-- 三段長條：已收訖 / 待對帳 / 未繳，一眼看出錢卡在哪一段 -->
             <div class="h-3 w-full rounded-full bg-slate-100 overflow-hidden flex">
               <div id="bar-confirmed" class="h-full bg-emerald-500" style="width:0%"></div>
               <div id="bar-reported"  class="h-full bg-amber-400"   style="width:0%"></div>
             </div>
-            <div class="flex flex-wrap gap-4 mt-2 text-[11px] text-slate-500">
+            <div class="flex flex-wrap gap-4 mt-2 text-[13px] text-slate-500">
               <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>已收訖</span>
               <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>待對帳</span>
               <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-slate-200"></span>未繳／未開帳單</span>
@@ -77,16 +80,20 @@
         <!-- 收支結餘 -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="px-4 py-2.5 bg-slate-800 text-white flex items-center gap-2">
-              <i data-lucide="scale" class="w-4 h-4"></i><span class="font-black tracking-wide text-sm">本月收支</span>
+            <div class="px-4 py-2.5 bg-slate-800 text-white flex items-center justify-between gap-2">
+              <span class="flex items-center gap-2"><i data-lucide="scale" class="w-4 h-4"></i>
+                <span class="font-black tracking-wide text-base">本月收支</span></span>
+              <button onclick="openExpense()" class="text-[13px] font-bold bg-white/10 hover:bg-white/20 border border-white/20 px-2 py-1 rounded flex items-center gap-1 transition-colors">
+                <i data-lucide="pencil" class="w-3 h-3"></i> 編輯支出
+              </button>
             </div>
-            <div id="balance" class="p-4 space-y-2 text-sm"></div>
+            <div id="balance" class="p-4 space-y-2 text-base"></div>
           </div>
           <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-4 py-2.5 bg-slate-800 text-white flex items-center justify-between">
               <span class="flex items-center gap-2"><i data-lucide="trending-up" class="w-4 h-4"></i>
-                <span class="font-black tracking-wide text-sm">近 6 個月</span></span>
-              <span class="text-[11px] text-slate-300">收 / 支</span>
+                <span class="font-black tracking-wide text-base">近 6 個月</span></span>
+              <span class="text-[13px] text-slate-300">收 / 支</span>
             </div>
             <div id="trend" class="p-4"></div>
           </div>
@@ -96,13 +103,14 @@
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="px-4 py-2.5 bg-indigo-950 text-white flex items-center justify-between gap-3 flex-wrap">
             <span class="flex items-center gap-2"><i data-lucide="users" class="w-4 h-4"></i>
-              <span class="font-black tracking-wide text-sm">社友收繳明細</span></span>
+              <span class="font-black tracking-wide text-base">社友收繳明細</span></span>
             <div id="filters" class="flex flex-wrap gap-1.5"></div>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm min-w-[46rem]">
+            <!-- 字放大後六欄需要更多寬度，min-w 一起放大，手機上照樣橫向捲動 -->
+            <table class="w-full text-base min-w-[54rem]">
               <thead>
-                <tr class="bg-slate-100 text-slate-500 text-[11px]">
+                <tr class="bg-slate-100 text-slate-500 text-[13px]">
                   <th class="text-left  px-4 py-2 font-bold">社友</th>
                   <th class="text-right px-4 py-2 font-bold">應繳</th>
                   <th class="text-left  px-4 py-2 font-bold">明細</th>
@@ -114,8 +122,110 @@
               <tbody id="rows" class="divide-y divide-slate-100"></tbody>
             </table>
           </div>
-          <p id="rows-empty" class="hidden text-center text-slate-400 text-sm py-10"></p>
+          <p id="rows-empty" class="hidden text-center text-slate-400 text-base py-10"></p>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 帳單編輯 Modal（單筆／批次共用） ==================== -->
+<div id="bill-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+    <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between flex-shrink-0">
+      <span class="font-bold" id="bill-title">編輯帳單</span>
+      <button onclick="closeBill()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-3 overflow-y-auto">
+      <p id="bill-target" class="text-[14px] text-slate-500"></p>
+
+      <!-- 固定兩項不可改：金額是地區與社章程訂的，不該在對帳時被個別調整 -->
+      <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5 text-[15px]">
+        <div class="flex justify-between text-slate-600"><span>常年月費</span><span class="font-bold tabular-nums" id="bill-base">—</span></div>
+        <div class="flex justify-between text-slate-600"><span>地區分攤金</span><span class="font-bold tabular-nums" id="bill-district">—</span></div>
+      </div>
+
+      <div class="space-y-2">
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-[15px] font-semibold text-slate-700">例會餐費</span>
+          <input id="bill-meal" type="number" placeholder="0" onfocus="this.select()" oninput="renderBillTotal()"
+            class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-indigo-600">
+        </label>
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-[15px] font-semibold text-slate-700">例會 IOU</span>
+          <input id="bill-iou" type="number" placeholder="0" onfocus="this.select()" oninput="renderBillTotal()"
+            class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-indigo-600">
+        </label>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[13px] font-bold text-slate-400">臨時費用（總監之夜、地區年會…）</span>
+          <button onclick="addCustomRow()" class="text-[13px] font-bold text-indigo-600 hover:text-indigo-800">＋ 新增</button>
+        </div>
+        <div id="bill-customs" class="space-y-2"></div>
+      </div>
+
+      <label class="flex items-start gap-2 pt-1">
+        <input id="bill-notify" type="checkbox" class="mt-0.5 accent-indigo-600">
+        <span class="text-[13px] text-slate-500 leading-relaxed">
+          存檔後用 LINE 通知社友帳單已產出。<br>
+          <span class="text-slate-400">修正既有帳單時建議不要勾 —— 重複推播「帳單已產出」會讓社友學會忽略它。</span>
+        </span>
+      </label>
+    </div>
+    <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
+      <div class="text-[14px] text-slate-500">本月總計
+        <span class="font-black text-slate-900 text-lg ml-1 tabular-nums" id="bill-total">—</span></div>
+      <div class="flex gap-2">
+        <button onclick="closeBill()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">取消</button>
+        <button onclick="saveBill()" id="bill-save" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 社務支出 Modal ==================== -->
+<div id="expense-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+    <div class="px-5 py-3 bg-slate-800 text-white flex items-center justify-between flex-shrink-0">
+      <span class="font-bold" id="expense-title">編輯社務支出</span>
+      <button onclick="closeExpense()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-3 overflow-y-auto">
+      <div class="space-y-2">
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-[15px] font-semibold text-slate-700">場地租金</span>
+          <input id="exp-rent" type="number" placeholder="0" onfocus="this.select()" oninput="renderExpenseTotal()"
+            class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-slate-700">
+        </label>
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-[15px] font-semibold text-slate-700">人事薪資</span>
+          <input id="exp-salary" type="number" placeholder="0" onfocus="this.select()" oninput="renderExpenseTotal()"
+            class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-slate-700">
+        </label>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[13px] font-bold text-slate-400">其他固定支出</span>
+          <button onclick="addFixedRow()" class="text-[13px] font-bold text-slate-600 hover:text-slate-900">＋ 新增</button>
+        </div>
+        <div id="exp-fixed" class="space-y-2"></div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[13px] font-bold text-slate-400">社友代墊款（待歸墊）</span>
+          <button onclick="addAdvanceRow()" class="text-[13px] font-bold text-amber-600 hover:text-amber-800">＋ 新增</button>
+        </div>
+        <div id="exp-advances" class="space-y-2"></div>
+      </div>
+    </div>
+    <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
+      <div class="text-[14px] text-slate-500">支出合計
+        <span class="font-black text-rose-600 text-lg ml-1 tabular-nums" id="exp-total">—</span></div>
+      <div class="flex gap-2">
+        <button onclick="closeExpense()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">取消</button>
+        <button onclick="saveExpense()" id="exp-save" class="px-4 py-2 rounded text-base font-bold bg-slate-800 hover:bg-slate-700 text-white transition-colors">儲存</button>
       </div>
     </div>
   </div>
@@ -258,9 +368,9 @@
     const t = board.totals;
     const card = (label, value, sub, cls) => `
       <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-        <p class="text-[11px] text-slate-400 font-bold">${label}</p>
-        <p class="text-xl font-black ${cls} mt-0.5">${money(value)}</p>
-        <p class="text-[11px] text-slate-400 mt-0.5">${sub}</p>
+        <p class="text-[13px] text-slate-400 font-bold">${label}</p>
+        <p class="text-2xl font-black ${cls} mt-0.5">${money(value)}</p>
+        <p class="text-[13px] text-slate-400 mt-0.5">${sub}</p>
       </div>`;
     document.getElementById('cards').innerHTML = [
       card('應收（已開帳單）', t.expected, `${t.billed} / ${t.members} 位社友已開帳單`, 'text-slate-800'),
@@ -275,6 +385,10 @@
     document.getElementById('bar-reported').style.width = pct(t.reported);
     document.getElementById('rate-label').textContent =
       `${t.rate}%　${money(t.confirmed)} / ${money(t.expected)}`;
+
+    // 還沒開帳單的人才是這個月最該處理的事，按鈕就只在有人沒開時出現。
+    document.getElementById('btn-bulk').classList.toggle('hidden', t.no_bill === 0);
+    document.getElementById('btn-bulk-label').textContent = `批次開帳單（${t.no_bill}）`;
   }
 
   function renderBalance() {
@@ -296,25 +410,25 @@
       <div class="border-t-2 border-slate-800 pt-2 mt-2"></div>
       <div class="flex justify-between items-center">
         <span class="font-black">本月結餘</span>
-        <span class="font-black text-lg tabular-nums ${net >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${money(net)}</span>
+        <span class="font-black text-xl tabular-nums ${net >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${money(net)}</span>
       </div>
-      ${e.total === 0 ? `<p class="text-[11px] text-slate-400 pt-1">本月尚未填社務對帳表（支出以 0 計）。可在 LIFF 的「社務對帳」填寫。</p>` : ''}
-      ${t.reported > 0 ? `<p class="text-[11px] text-amber-600 pt-1">另有 ${money(t.reported)} 已回報但未對帳，尚未計入收入。</p>` : ''}`;
+      ${e.total === 0 ? `<p class="text-[13px] text-slate-400 pt-1">本月尚未填社務對帳表（支出以 0 計）。按右上角「編輯支出」填寫。</p>` : ''}
+      ${t.reported > 0 ? `<p class="text-[13px] text-amber-600 pt-1">另有 ${money(t.reported)} 已回報但未對帳，尚未計入收入。</p>` : ''}`;
   }
 
   // 趨勢圖獨立載入：一次要算 6 個月，比當月看板慢，不該讓它擋住主要數字。
   async function loadTrend() {
     const el = document.getElementById('trend');
-    el.innerHTML = `<p class="text-[12px] text-slate-400 text-center py-6">載入中…</p>`;
+    el.innerHTML = `<p class="text-[14px] text-slate-400 text-center py-6">載入中…</p>`;
     let data;
     try {
       data = await apiFetch('/finance/trend?months=6&end=' + encodeURIComponent(activeMonth));
     } catch (e) {
-      el.innerHTML = `<p class="text-[12px] text-slate-400 text-center py-6">趨勢載入失敗：${esc(e.message)}</p>`;
+      el.innerHTML = `<p class="text-[14px] text-slate-400 text-center py-6">趨勢載入失敗：${esc(e.message)}</p>`;
       return;
     }
     if (data.status !== 'ok' || !(data.months || []).length) {
-      el.innerHTML = `<p class="text-[12px] text-slate-400 text-center py-6">沒有可比較的月份。</p>`;
+      el.innerHTML = `<p class="text-[14px] text-slate-400 text-center py-6">沒有可比較的月份。</p>`;
       return;
     }
     // 收與支共用同一個高度基準，兩根柱子才比得出大小。
@@ -328,7 +442,7 @@
             <div class="w-1/3 bg-emerald-500 rounded-t" style="height:${(m.received / max * 100).toFixed(1)}%"></div>
             <div class="w-1/3 bg-rose-400 rounded-t"    style="height:${(m.expense  / max * 100).toFixed(1)}%"></div>
           </div>
-          <span class="text-[10px] ${cur ? 'font-black text-indigo-700' : 'text-slate-400'} truncate">${parseInt(m.month.slice(5))}月</span>
+          <span class="text-[12px] ${cur ? 'font-black text-indigo-700' : 'text-slate-400'} truncate">${parseInt(m.month.slice(5))}月</span>
         </div>`;
       }).join('')}
     </div>`;
@@ -346,7 +460,7 @@
     ];
     document.getElementById('filters').innerHTML = chips.map(([key, label, n]) => `
       <button onclick="setFilter('${key}')"
-        class="px-2.5 py-1 rounded text-[11px] font-bold border transition-colors ${
+        class="px-2.5 py-1 rounded text-[13px] font-bold border transition-colors ${
           filter === key ? 'bg-amber-400 text-indigo-950 border-amber-400'
                          : 'bg-white/10 text-indigo-100 border-white/20 hover:bg-white/20'}">
         ${label} ${n}</button>`).join('');
@@ -367,38 +481,44 @@
     if (!rows.length) empty.textContent = '這個篩選條件下沒有社友。';
   }
 
-  function rowHtml(r) {
-    const s = STATUS[r.status];
+  function billItems(r) {
     // 帳單明細只列常年月費／分攤金以外的變動項目，那才是社友會問「這筆是什麼」的部分。
-    const items = [
+    return [
       r.meal ? `餐費 ${r.meal.toLocaleString()}` : '',
       r.iou ? `IOU ${r.iou.toLocaleString()}` : '',
       ...(r.customs || []).map(c => `${c.name} ${Number(c.amount || 0).toLocaleString()}`),
     ].filter(Boolean);
+  }
+
+  function rowHtml(r) {
+    const s = STATUS[r.status];
+    const items = billItems(r);
+    // 整列可點進帳單編輯；對帳那一欄的按鈕自己 stopPropagation，兩者不會互相誤觸。
     return `
-      <tr class="hover:bg-slate-50">
+      <tr class="hover:bg-indigo-50/60 cursor-pointer" onclick="openBill('${r.uid}')" title="點一下編輯這位社友的帳單">
         <td class="px-4 py-2.5">
           <span class="font-bold text-slate-800">${esc(r.name)}</span>
-          ${r.nickname ? `<span class="text-slate-400 text-[12px]">（${esc(r.nickname)}）</span>` : ''}
-          ${r.orphan ? `<span class="ml-1 text-[10px] text-amber-600" title="有帳單，但社友名冊查不到這個人">名冊外</span>` : ''}
+          ${r.nickname ? `<span class="text-slate-400 text-[14px]">（${esc(r.nickname)}）</span>` : ''}
+          ${r.orphan ? `<span class="ml-1 text-[12px] text-amber-600" title="有帳單，但社友名冊查不到這個人">名冊外</span>` : ''}
         </td>
         <td class="px-4 py-2.5 text-right font-bold tabular-nums ${r.has_bill ? 'text-slate-800' : 'text-slate-300'}">
           ${r.has_bill ? money(r.total) : '—'}</td>
-        <td class="px-4 py-2.5 text-[11px] text-slate-500">${items.length ? esc(items.join('、')) : '—'}</td>
+        <td class="px-4 py-2.5 text-[13px] text-slate-500">${items.length ? esc(items.join('、')) : '—'}</td>
         <td class="px-4 py-2.5 text-center">
-          <span class="px-2 py-0.5 rounded text-[11px] font-black border ${s.cls}">${s.label}</span></td>
-        <td class="px-4 py-2.5 text-center text-[12px] tracking-widest text-slate-500">${esc(r.bank_digits) || '—'}</td>
+          <span class="px-2 py-0.5 rounded text-[13px] font-black border ${s.cls}">${s.label}</span></td>
+        <td class="px-4 py-2.5 text-center text-[14px] tracking-widest text-slate-500">${esc(r.bank_digits) || '—'}</td>
         <td class="px-4 py-2.5 text-center">${confirmBtn(r)}</td>
       </tr>`;
   }
 
   function confirmBtn(r) {
-    if (!r.has_bill) return `<span class="text-[11px] text-slate-300">—</span>`;
+    if (!r.has_bill) return `<span class="text-[13px] text-slate-300">—</span>`;
+    const stop = 'event.stopPropagation();';   // 不要順手把帳單編輯也打開
     return r.confirmed
-      ? `<button onclick="setConfirmed('${r.uid}', false)" title="取消對帳（社友自己回報的繳款紀錄會保留）"
-           class="px-2 py-1 rounded text-[11px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">取消對帳</button>`
-      : `<button onclick="setConfirmed('${r.uid}', true)"
-           class="px-2.5 py-1 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm">標記已收</button>`;
+      ? `<button onclick="${stop} setConfirmed('${r.uid}', false)" title="取消對帳（社友自己回報的繳款紀錄會保留）"
+           class="px-2 py-1 rounded text-[13px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">取消對帳</button>`
+      : `<button onclick="${stop} setConfirmed('${r.uid}', true)"
+           class="px-2.5 py-1 rounded text-[13px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm">標記已收</button>`;
   }
 
   async function setConfirmed(uid, confirmed) {
@@ -416,6 +536,226 @@
     } catch (e) {
       alert('對帳失敗：' + e.message);
     }
+  }
+
+  // ==================== 帳單編輯 ====================
+  // 單筆與批次共用同一個 Modal：欄位一模一樣，差別只在存檔時打去哪個端點。
+  // billTargets 為 null 代表單筆（editingUid），否則是這批要一起開帳單的社友。
+  let editingUid = null;
+  let billTargets = null;
+
+  function openBill(uid) {
+    const r = board.members.find(m => m.uid === uid);
+    if (!r) return;
+    editingUid = uid;
+    billTargets = null;
+    document.getElementById('bill-title').textContent = r.has_bill ? '編輯帳單' : '產出帳單';
+    document.getElementById('bill-target').innerHTML =
+      `<b>${esc(r.name)}</b>${r.nickname ? '（' + esc(r.nickname) + '）' : ''}　${esc(monthLabel(activeMonth))}`
+      + (r.confirmed ? `<span class="text-emerald-600 font-bold">　· 已對帳，改金額請記得重新確認</span>` : '');
+    // 已經開過帳單的人，預設不再推播；新開的帳單社友需要知道。
+    document.getElementById('bill-notify').checked = !r.has_bill;
+    fillBillForm(r.meal, r.iou, r.customs || []);
+    showModal('bill-modal');
+  }
+
+  function openBulkBill() {
+    const pending = board.members.filter(m => m.status === 'no_bill');
+    if (!pending.length) { alert('這個月每位社友都已經開過帳單了。'); return; }
+    editingUid = null;
+    billTargets = pending.map(m => m.uid);
+    document.getElementById('bill-title').textContent = '批次開帳單';
+    document.getElementById('bill-target').innerHTML =
+      `將替 <b>${pending.length} 位尚未開帳單</b>的社友建立 ${esc(monthLabel(activeMonth))} 的帳單，金額相同。`
+      + `<br><span class="text-slate-400">已經開過帳單的社友不受影響。個別差異（餐費、IOU）開完之後再逐筆調整。</span>`;
+    document.getElementById('bill-notify').checked = true;
+    fillBillForm(0, 0, []);
+    showModal('bill-modal');
+  }
+
+  function fillBillForm(meal, iou, customs) {
+    document.getElementById('bill-base').textContent = money(board.base);
+    document.getElementById('bill-district').textContent = money(board.district);
+    document.getElementById('bill-meal').value = meal ? meal : '';
+    document.getElementById('bill-iou').value = iou ? iou : '';
+    document.getElementById('bill-customs').innerHTML = '';
+    customs.forEach(c => addCustomRow(c.name, c.amount));
+    if (!customs.length) renderCustomEmpty();
+    renderBillTotal();
+    lucide.createIcons();
+  }
+
+  function renderCustomEmpty() {
+    document.getElementById('bill-customs').innerHTML =
+      `<p class="text-[13px] text-slate-400 italic text-center py-2" id="custom-empty">本月無臨時費用</p>`;
+  }
+
+  function addCustomRow(name = '', amount = 0) {
+    document.getElementById('custom-empty')?.remove();
+    const div = document.createElement('div');
+    div.className = 'flex gap-2 items-center custom-row';
+    div.innerHTML = `
+      <input type="text" placeholder="名目（如：總監之夜）" class="custom-name w-1/2 border border-slate-300 rounded p-2 text-[15px] outline-none focus:border-indigo-600">
+      <input type="number" placeholder="0" onfocus="this.select()" oninput="renderBillTotal()"
+        class="custom-amount w-1/2 border border-slate-300 rounded p-2 text-[15px] text-right font-bold outline-none focus:border-indigo-600">
+      <button onclick="this.parentElement.remove(); renderBillTotal();" class="text-slate-300 hover:text-rose-600 p-1 transition-colors">
+        <i data-lucide="trash-2" class="w-4 h-4"></i></button>`;
+    // value 用屬性設定，不是解析標記，名目不需要轉義
+    div.querySelector('.custom-name').value = name;
+    div.querySelector('.custom-amount').value = amount ? amount : '';
+    document.getElementById('bill-customs').appendChild(div);
+    lucide.createIcons();
+  }
+
+  function readBillForm() {
+    return {
+      meal: parseInt(document.getElementById('bill-meal').value) || 0,
+      iou: parseInt(document.getElementById('bill-iou').value) || 0,
+      customs: [...document.querySelectorAll('.custom-row')].map(row => ({
+        name: row.querySelector('.custom-name').value.trim(),
+        amount: parseInt(row.querySelector('.custom-amount').value) || 0,
+      })).filter(c => c.name),
+      notify: document.getElementById('bill-notify').checked,
+    };
+  }
+
+  function renderBillTotal() {
+    const d = readBillForm();
+    const total = board.base + board.district + d.meal + d.iou
+      + d.customs.reduce((s, c) => s + c.amount, 0);
+    document.getElementById('bill-total').textContent = money(total);
+  }
+
+  async function saveBill() {
+    const d = readBillForm();
+    const btn = document.getElementById('bill-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const bulk = billTargets !== null;
+      const data = await apiFetch(bulk ? '/dues/bulk_save' : '/dues/save', {
+        method: 'POST',
+        body: JSON.stringify(bulk
+          ? { month: activeMonth, uids: billTargets, ...d }
+          : { month: activeMonth, uid: editingUid, ...d }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      closeBill();
+      await loadBoard();
+      loadTrend();
+      if (bulk) alert(`已開出 ${data.saved} 張帳單，每張 ${money(data.total)}。`
+        + (data.skipped ? `\n（${data.skipped} 位已有帳單，未更動）` : '')
+        + (data.notified ? '\n已用 LINE 通知這些社友。' : ''));
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '儲存';
+    }
+  }
+
+  function closeBill() { editingUid = null; billTargets = null; hideModal('bill-modal'); }
+
+  // ==================== 社務支出編輯 ====================
+  function openExpense() {
+    const e = board.expense;
+    document.getElementById('expense-title').textContent = `編輯社務支出 · ${monthLabel(activeMonth)}`;
+    document.getElementById('exp-rent').value = e.rent ? e.rent : '';
+    document.getElementById('exp-salary').value = e.salary ? e.salary : '';
+    document.getElementById('exp-fixed').innerHTML = '';
+    document.getElementById('exp-advances').innerHTML = '';
+    e.fixed.forEach(f => addFixedRow(f.name, f.amount));
+    e.advances.forEach(a => addAdvanceRow(a.member, a.detail, a.amount));
+    renderExpenseTotal();
+    showModal('expense-modal');
+    lucide.createIcons();
+  }
+
+  function addFixedRow(name = '', amount = 0) {
+    const div = document.createElement('div');
+    div.className = 'flex gap-2 items-center fixed-row';
+    div.innerHTML = `
+      <input type="text" placeholder="名目（如：郵電費）" class="fx-name w-1/2 border border-slate-300 rounded p-2 text-[15px] outline-none focus:border-slate-700">
+      <input type="number" placeholder="0" onfocus="this.select()" oninput="renderExpenseTotal()"
+        class="fx-amount w-1/2 border border-slate-300 rounded p-2 text-[15px] text-right font-bold outline-none focus:border-slate-700">
+      <button onclick="this.parentElement.remove(); renderExpenseTotal();" class="text-slate-300 hover:text-rose-600 p-1 transition-colors">
+        <i data-lucide="trash-2" class="w-4 h-4"></i></button>`;
+    div.querySelector('.fx-name').value = name;
+    div.querySelector('.fx-amount').value = amount ? amount : '';
+    document.getElementById('exp-fixed').appendChild(div);
+    lucide.createIcons();
+  }
+
+  function addAdvanceRow(member = '', detail = '', amount = 0) {
+    const div = document.createElement('div');
+    div.className = 'space-y-1.5 advance-row bg-amber-50 border border-amber-200 rounded-lg p-2';
+    div.innerHTML = `
+      <div class="flex gap-2 items-center">
+        <input type="text" placeholder="代墊社友" class="adv-member w-1/2 border border-amber-300 rounded p-2 text-[15px] outline-none focus:border-amber-500">
+        <input type="number" placeholder="0" onfocus="this.select()" oninput="renderExpenseTotal()"
+          class="adv-amount w-1/2 border border-amber-300 rounded p-2 text-[15px] text-right font-bold outline-none focus:border-amber-500">
+        <button onclick="this.closest('.advance-row').remove(); renderExpenseTotal();" class="text-amber-300 hover:text-rose-600 p-1 transition-colors">
+          <i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      </div>
+      <input type="text" placeholder="用途（如：例會茶水）" class="adv-detail w-full border border-amber-300 rounded p-2 text-[14px] outline-none focus:border-amber-500">`;
+    div.querySelector('.adv-member').value = member;
+    div.querySelector('.adv-detail').value = detail;
+    div.querySelector('.adv-amount').value = amount ? amount : '';
+    document.getElementById('exp-advances').appendChild(div);
+    lucide.createIcons();
+  }
+
+  function readExpenseForm() {
+    return {
+      rent: parseInt(document.getElementById('exp-rent').value) || 0,
+      salary: parseInt(document.getElementById('exp-salary').value) || 0,
+      fixed: [...document.querySelectorAll('.fixed-row')].map(r => ({
+        name: r.querySelector('.fx-name').value.trim(),
+        amount: parseInt(r.querySelector('.fx-amount').value) || 0,
+      })).filter(f => f.name),
+      // 後端 /club/finance 以 amount 為準過濾（金額 0 的代墊款沒有意義）
+      advances: [...document.querySelectorAll('.advance-row')].map(r => ({
+        member: r.querySelector('.adv-member').value.trim(),
+        detail: r.querySelector('.adv-detail').value.trim(),
+        amount: parseInt(r.querySelector('.adv-amount').value) || 0,
+      })).filter(a => a.amount),
+    };
+  }
+
+  function renderExpenseTotal() {
+    const d = readExpenseForm();
+    const total = d.rent + d.salary
+      + d.fixed.reduce((s, f) => s + f.amount, 0)
+      + d.advances.reduce((s, a) => s + a.amount, 0);
+    document.getElementById('exp-total').textContent = money(total);
+  }
+
+  async function saveExpense() {
+    const btn = document.getElementById('exp-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const data = await apiFetch('/club/finance', {
+        method: 'POST',
+        body: JSON.stringify({ month: activeMonth, ...readExpenseForm() }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      closeExpense();
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '儲存';
+    }
+  }
+
+  function closeExpense() { hideModal('expense-modal'); }
+
+  function showModal(id) {
+    const m = document.getElementById(id);
+    m.classList.remove('hidden'); m.classList.add('flex');
+  }
+  function hideModal(id) {
+    const m = document.getElementById(id);
+    m.classList.add('hidden'); m.classList.remove('flex');
   }
 
   // ==================== 收繳明細 PDF ====================

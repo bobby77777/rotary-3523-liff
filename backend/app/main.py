@@ -1592,9 +1592,32 @@ async def dues_member(request: Request, club: str = "", month: str = "", uid: st
     return {"status": "ok", **_dues_payload(row)}
 
 
+def _clean_dues_items(body: dict) -> tuple[int, int, list]:
+    """例會餐費 / IOU / 臨時項目 out of a save request. Unnamed custom rows are
+    dropped — the member sees the name on their bill, so a nameless charge is
+    something 執秘 started typing and abandoned, not a fee."""
+    return (
+        int(body.get("meal", 0) or 0),
+        int(body.get("iou", 0) or 0),
+        [{"name": str(c.get("name", "")), "amount": int(c.get("amount", 0) or 0)}
+         for c in body.get("customs", []) if str(c.get("name", "")).strip()],
+    )
+
+
+def _push_dues_bill(uid: str, month: str, total: int) -> None:
+    try:
+        line_api.push_text(uid, f"💰 {month} 社費帳單已產出，本月應繳 NT${total:,}。可於「個人中心 → 我的社費」查看並回報繳款。")
+    except Exception:
+        logger.exception("dues bill push failed for %s", uid)
+
+
 @app.post("/dues/save")
 async def dues_save(request: Request):
-    """Secretary saves a member's fee items (produces the bill)."""
+    """Secretary saves a member's fee items (produces the bill).
+
+    notify=false suppresses the LINE bill notice — 財務看板 edits an existing bill
+    in place (fixing a mistyped 餐費), and re-pushing "帳單已產出" for a correction
+    trains members to ignore the notice that matters."""
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "message": "無社費記帳權限"}
@@ -1604,17 +1627,48 @@ async def dues_save(request: Request):
     uid = str(body.get("uid", "")).strip()
     if not (club and month and uid):
         return {"status": "invalid", "message": "缺少社別 / 月份 / 社友"}
-    meal = int(body.get("meal", 0) or 0)
-    iou = int(body.get("iou", 0) or 0)
-    customs = [{"name": str(c.get("name", "")), "amount": int(c.get("amount", 0) or 0)}
-               for c in body.get("customs", []) if str(c.get("name", "")).strip()]
+    meal, iou, customs = _clean_dues_items(body)
     db.upsert_dues(club, month, uid, meal, iou, customs)
     total = _dues_total(meal, iou, customs)
-    try:
-        line_api.push_text(uid, f"💰 {month} 社費帳單已產出，本月應繳 NT${total:,}。可於「個人中心 → 我的社費」查看並回報繳款。")
-    except Exception:
-        logger.exception("dues bill push failed for %s", uid)
-    return {"status": "ok", "total": total}
+    notify = bool(body.get("notify", True))     # 預設通知，維持 LIFF 既有行為
+    if notify:
+        _push_dues_bill(uid, month, total)
+    return {"status": "ok", "total": total, "notified": notify}
+
+
+@app.post("/dues/bulk_save")
+async def dues_bulk_save(request: Request):
+    """Bill many members the same items at once — 執秘 opening the month for the
+    whole club. Same write as /dues/save repeated, so a 30-member club is one
+    request instead of 30. Members who already have a bill are skipped unless
+    overwrite=true, so a second pass doesn't wipe the ones already itemised."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無社費記帳權限"}
+    body = await request.json()
+    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    month = str(body.get("month", "")).strip()
+    uids = [str(u).strip() for u in body.get("uids", []) if str(u).strip()]
+    if not (club and _valid_month(month) and uids):
+        return {"status": "invalid", "message": "缺少社別 / 月份 / 社友"}
+    meal, iou, customs = _clean_dues_items(body)
+    total = _dues_total(meal, iou, customs)
+    notify = bool(body.get("notify", True))
+    overwrite = bool(body.get("overwrite", False))
+    existing = {r["line_user_id"] for r in db.list_dues(club, month)
+                if r["meal"] or r["iou"] or r["customs"]}
+    saved, skipped = [], 0
+    for uid in uids:
+        if uid in existing and not overwrite:
+            skipped += 1
+            continue
+        db.upsert_dues(club, month, uid, meal, iou, customs)
+        saved.append(uid)
+    if notify:
+        for uid in saved:
+            _push_dues_bill(uid, month, total)
+    return {"status": "ok", "saved": len(saved), "skipped": skipped,
+            "total": total, "notified": notify}
 
 
 @app.get("/dues/me")
@@ -1765,7 +1819,9 @@ async def finance_board(request: Request, month: str = ""):
     expense = _expense_summary(db.get_club_finance(club, month))
     return {"status": "ok", "club": club, "month": month, "members": rows,
             "totals": totals, "expense": expense,
-            "net": totals["confirmed"] - expense["total"]}
+            "net": totals["confirmed"] - expense["total"],
+            # 帳單編輯要顯示固定的兩項，金額由後端給，前端不自己抄一份常數
+            "base": DUES_BASE, "district": DUES_DISTRICT}
 
 
 @app.post("/finance/confirm")
