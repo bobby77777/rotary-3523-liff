@@ -2035,6 +2035,122 @@ async def finance_confirm(request: Request):
     return {"status": "ok", "month": month, "uid": uid, "confirmed": confirmed}
 
 
+@app.post("/finance/bank_digits")
+async def finance_bank_digits(request: Request):
+    """執秘 代填／更正某位社友該月的匯款末 5 碼。
+
+    社友自己回報是常態，但總有人是當面給現金、用紙條寫帳號、或回報時打錯一碼。
+    以前這一欄只有社友本人寫得進去，執秘看著錯的號碼對不了帳也改不動。
+
+    只寫號碼，不動繳款狀態：填了不代表錢進來了，「已繳」仍然要執秘看著對帳單按
+    「標記已收」。空字串是清掉（打錯要能改回空白），這也是它不走 /dues/pay 的原因
+    —— 那支是社友回報用的，空字串會沿用舊值，而且會把人標成已回報。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無財務管理權限"}
+    body = await request.json()
+    month = str(body.get("month", "")).strip()
+    uid = str(body.get("uid", "")).strip()
+    digits = str(body.get("bank_digits", "")).strip()
+    if not (_valid_month(month) and uid):
+        return {"status": "invalid", "message": "缺少月份或社友"}
+    if digits and (len(digits) != 5 or not digits.isdigit()):
+        return {"status": "invalid", "message": "末 5 碼需為 5 位數字"}
+    club = db.get_user_club(admin_uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    db.set_dues_bank_digits(club, month, uid, digits)
+    return {"status": "ok", "month": month, "uid": uid, "bank_digits": digits}
+
+
+# ── 社友名冊（財務看板的「社友名冊」） ─────────────────────────────────────────
+# 名冊以前只能由社友自己填第一次進 LIFF 的那張表長出來，沒有任何地方刪得掉。
+# 結果是退社的人年年出現在應收名單裡，而還沒加官方帳號的新社友則根本不存在，
+# 執秘想幫他記帳也記不了。這三支讓執秘自己維護自己社的名冊。
+
+def _is_line_bound(uid: str) -> bool:
+    """LINE 的 user id 是 U + 32 位十六進位；其餘是手動建立或匯入的佔位 id。"""
+    return len(uid) == 33 and uid.startswith("U")
+
+
+@app.get("/finance/roster")
+async def finance_roster(request: Request):
+    """執秘自己社的名冊，附上刪除前該知道的事：有沒有綁 LINE、有幾個月的帳單。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        raise HTTPException(status_code=403, detail="無社友名冊管理權限")
+    club = db.get_user_club(admin_uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    dues_months = db.dues_month_counts(club)
+    members = []
+    for m in db.club_member_rows(club):
+        uid = m["line_user_id"]
+        members.append({
+            "uid": uid,
+            "name": m.get("full_name") or "",
+            "nickname": m.get("nickname") or "",
+            "diet_type": m.get("diet_type") or "",
+            "line_bound": _is_line_bound(uid),
+            "dues_months": dues_months.get(uid, 0),
+        })
+    return {"status": "ok", "club": club, "members": members,
+            "diet_types": list(_DIET_TYPES)}
+
+
+@app.post("/finance/roster/add")
+async def finance_roster_add(request: Request):
+    """新增一位社友到執秘自己的社。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無社友名冊管理權限"}
+    club = db.get_user_club(admin_uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    body = await request.json()
+    name = str(body.get("full_name", "")).strip()
+    nickname = str(body.get("nickname", "")).strip()
+    diet = str(body.get("diet_type", "")).strip() or _DIET_TYPES[0]
+    if not name:
+        return {"status": "invalid", "message": "請填社友姓名"}
+    if len(name) > 40 or len(nickname) > 40:
+        return {"status": "invalid", "message": "姓名／Nickname 請勿超過 40 字"}
+    if diet not in _DIET_TYPES:
+        return {"status": "invalid", "message": "飲食習慣選擇不正確"}
+    # 同名的人在一個社裡不是不可能，但多半是重複新增。擋下來，真的有同名就
+    # 用 Nickname 區分。
+    if any((m.get("full_name") or "").strip() == name for m in db.club_member_rows(club)):
+        return {"status": "duplicate", "message": f"名冊裡已經有「{name}」了"}
+    # 同名的退社社友：接回原本那一列，而不是給他一個新身分。退社前欠的那幾個月
+    # 本來就掛在舊的 id 上，開新的一列等於把那筆錢留在一個沒有人的名字底下。
+    left = db.find_left_member(club, name)
+    if left:
+        db.restore_club_member(club, left["line_user_id"], nickname, diet)
+        return {"status": "ok", "uid": left["line_user_id"], "name": name, "restored": True}
+    uid = db.create_club_member(club, name, nickname, diet)
+    return {"status": "ok", "uid": uid, "name": name, "restored": False}
+
+
+@app.post("/finance/roster/delete")
+async def finance_roster_delete(request: Request):
+    """把一位社友移出名冊（標記退社）；帳單與報名紀錄留著，欠的錢還是要收。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無社友名冊管理權限"}
+    club = db.get_user_club(admin_uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    body = await request.json()
+    uid = str(body.get("uid", "")).strip()
+    if not uid:
+        return {"status": "invalid", "message": "缺少社友"}
+    if uid == admin_uid:
+        return {"status": "invalid", "message": "不能把自己移出名冊"}
+    if not db.leave_club_member(club, uid):
+        return {"status": "not_found", "message": "名冊裡找不到這位社友"}
+    return {"status": "ok", "uid": uid}
+
+
 @app.get("/finance/trend")
 async def finance_trend(request: Request, months: int = 6, end: str = ""):
     """收入／支出／結餘 for the last N months — the run of numbers a treasurer reads

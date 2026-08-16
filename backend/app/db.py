@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
@@ -49,6 +50,10 @@ def execute(sql: str, params=None) -> None:
 
 def ensure_personal_information_columns() -> None:
     execute("ALTER TABLE personal_information ADD COLUMN IF NOT EXISTS spouse_name TEXT NOT NULL DEFAULT ''")
+    # 退社時間。NULL = 還在社裡，所有名單都只看 NULL 的那些。刻意不真的刪掉那一
+    # 列：帳單是靠 line_user_id 記的，名字要從這裡查，整列刪掉的話他退社前還沒繳
+    # 的那幾個月會變成一筆沒有名字的錢，誰也追不回來。
+    execute("ALTER TABLE personal_information ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ")
 
 
 def upsert_personal_info(
@@ -1334,10 +1339,119 @@ def list_clubs() -> list[str]:
 
 
 def get_club_members(club_name: str) -> list[dict]:
+    """現任社友。退社的（left_at 有值）不出現在任何名單、記帳、報名對象裡。"""
     return query(
         "SELECT line_user_id, full_name, nickname FROM personal_information "
-        "WHERE club_name = %s ORDER BY full_name",
+        "WHERE club_name = %s AND left_at IS NULL ORDER BY full_name",
         (club_name,),
+    )
+
+
+def club_member_rows(club_name: str) -> list[dict]:
+    """名冊管理要看的欄位，比 get_club_members 多飲食；退社的一樣不列。"""
+    return query(
+        "SELECT line_user_id, full_name, nickname, diet_type, created_at "
+        "FROM personal_information WHERE club_name = %s AND left_at IS NULL "
+        "ORDER BY full_name",
+        (club_name,),
+    )
+
+
+def find_left_member(club_name: str, full_name: str) -> dict | None:
+    """同名的退社社友，供「又回來了」時接回原本那一列。"""
+    rows = query(
+        "SELECT line_user_id, full_name FROM personal_information "
+        "WHERE club_name = %s AND full_name = %s AND left_at IS NOT NULL "
+        "ORDER BY left_at DESC LIMIT 1",
+        (club_name, full_name),
+    )
+    return rows[0] if rows else None
+
+
+def create_club_member(club_name: str, full_name: str, nickname: str,
+                       diet_type: str) -> str:
+    """執秘手動加一位社友到名冊，回傳新的 line_user_id。
+
+    名冊是用 LINE 的 user id 當主鍵，但新社友多半還沒加官方帳號（也可能永遠不
+    加），所以先給一個 manual_ 開頭的暫時 id 佔位 —— 記帳、報名、對帳都只要有
+    一個穩定的 key 就能運作。等他自己綁定 LINE、填完個人資料，會是另外一列，
+    到時候執秘把這列刪掉即可；程式不去猜「這兩個是同一個人」，猜錯是把錢記到
+    別人頭上。"""
+    line_user_id = "manual_" + uuid.uuid4().hex[:12]
+    execute(
+        """
+        INSERT INTO personal_information (line_user_id, club_name, full_name, nickname, diet_type)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (line_user_id, club_name, full_name, nickname, diet_type),
+    )
+    return line_user_id
+
+
+def restore_club_member(club_name: str, line_user_id: str, nickname: str,
+                        diet_type: str) -> None:
+    """退社的社友又入社：接回原本那一列，過去的帳單自動跟著回來對得上名字。"""
+    execute(
+        "UPDATE personal_information SET left_at = NULL, nickname = %s, diet_type = %s "
+        "WHERE club_name = %s AND line_user_id = %s",
+        (nickname, diet_type, club_name, line_user_id),
+    )
+
+
+def leave_club_member(club_name: str, line_user_id: str) -> bool:
+    """把一位社友移出名冊；club_name 一起比對，避免動到別社的人。
+
+    標記退社而不是刪除。名單、記帳、報名從此看不到他，但他退社前沒繳完的那幾個
+    月仍然查得到名字 —— 財務看板會把這種人列成「名冊外」，那筆錢還是要收得回來，
+    而一筆沒有名字的欠款等於收不回來。
+
+    自己拿連線是因為 query() 不 commit（它只給 SELECT 用），拿它跑 UPDATE 會
+    回報成功卻什麼也沒改。"""
+    conn = _get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE personal_information SET left_at = NOW() "
+                "WHERE club_name = %s AND line_user_id = %s AND left_at IS NULL",
+                (club_name, line_user_id),
+            )
+            changed = cur.rowcount
+        conn.commit()
+        return changed > 0
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
+def dues_month_counts(club_name: str) -> dict[str, int]:
+    """全社每位社友各有幾個月的帳單 —— 移出名冊前要講清楚會留下什麼。
+    一次撈完，不要為了名冊上的每一列各問一次資料庫。"""
+    rows = query(
+        "SELECT line_user_id, COUNT(*) AS c FROM club_dues "
+        "WHERE club_name = %s GROUP BY line_user_id",
+        (club_name,),
+    )
+    return {r["line_user_id"]: r["c"] for r in rows}
+
+
+def set_dues_bank_digits(club_name: str, month: str, line_user_id: str,
+                         bank_digits: str) -> None:
+    """執秘代填／更正該月帳單的匯款末 5 碼。
+
+    跟 pay_dues 不同的地方有兩個：空字串是「清掉」而不是「沿用舊值」（打錯的
+    數字要能改回空白），而且完全不碰 is_paid／confirmed —— 錢收到哪一步由社友
+    自己回報與執秘按「標記已收」決定，不會因為填了個號碼就偷偷跳狀態。"""
+    execute(
+        """
+        INSERT INTO club_dues (club_name, month, line_user_id, bank_digits, updated_at)
+        VALUES (%s, %s, %s, %s, NOW())
+        ON CONFLICT (club_name, month, line_user_id) DO UPDATE SET
+            bank_digits = EXCLUDED.bank_digits,
+            updated_at = NOW()
+        """,
+        (club_name, month, line_user_id, bank_digits or None),
     )
 
 

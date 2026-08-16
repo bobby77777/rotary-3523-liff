@@ -43,6 +43,9 @@
         <button id="btn-bulk" onclick="openBulkBill()" class="hidden bg-amber-400 hover:bg-amber-300 text-indigo-950 px-4 py-2.5 rounded font-bold text-base flex items-center gap-2 transition-colors shadow-md">
           <i data-lucide="file-plus-2" class="w-4 h-4"></i> <span id="btn-bulk-label">批次記帳</span>
         </button>
+        <button onclick="openRoster()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
+          <i data-lucide="users-round" class="w-4 h-4"></i> 社友名冊
+        </button>
         <button onclick="openRates()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
           <i data-lucide="settings-2" class="w-4 h-4"></i> 月費設定
         </button>
@@ -298,6 +301,44 @@
     </div>
     <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
       <button onclick="closeRates()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 社友名冊 Modal ==================== -->
+<div id="roster-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+    <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between flex-shrink-0">
+      <span class="font-bold" id="roster-title">社友名冊</span>
+      <button onclick="closeRoster()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-4 overflow-y-auto">
+      <div class="border border-slate-200 rounded-lg p-3 space-y-2">
+        <p class="text-[13px] font-bold text-slate-400">新增社友</p>
+        <div class="flex gap-2">
+          <input id="roster-name" placeholder="姓名" maxlength="40"
+            class="flex-1 border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600">
+          <input id="roster-nickname" placeholder="Nickname" maxlength="40"
+            class="flex-1 border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600">
+        </div>
+        <div class="flex gap-2">
+          <select id="roster-diet" class="flex-1 border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600"></select>
+          <button onclick="addMember()" id="roster-add" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">新增</button>
+        </div>
+        <p class="text-[13px] text-slate-500 leading-relaxed">
+          新增後這位社友立刻出現在收繳看板上，可以記帳、對帳。
+          他之後自己加官方帳號、填完基本資料會是另外一筆 ——
+          <b>屆時請把這筆手動建立的刪掉</b>，程式不會自作主張把兩邊當成同一個人。
+        </p>
+      </div>
+
+      <div>
+        <p class="text-[13px] font-bold text-slate-400 mb-1">名冊 <span id="roster-count"></span></p>
+        <div id="roster-list" class="space-y-1.5"></div>
+      </div>
+    </div>
+    <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
+      <button onclick="closeRoster()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">關閉</button>
     </div>
   </div>
 </div>
@@ -582,9 +623,65 @@
           ${pendingFeeTag(r)}</td>
         <td class="px-4 py-2.5 text-center">
           <span class="px-2 py-0.5 rounded text-[13px] font-black border ${s.cls}">${s.label}</span></td>
-        <td class="px-4 py-2.5 text-center text-[14px] tracking-widest text-slate-500">${esc(r.bank_digits) || '—'}</td>
+        <td class="px-4 py-2.5 text-center" id="digits-cell-${esc(r.uid)}">${digitsCell(r)}</td>
         <td class="px-4 py-2.5 text-center">${confirmBtn(r)}</td>
       </tr>`;
+  }
+
+  // 末 5 碼原本只有社友自己回報時寫得進去，執秘看著打錯的號碼對不了帳也改不動。
+  // 這裡就地編輯：點鉛筆變輸入框，Enter 或失焦存檔，清空就是清掉。
+  function digitsCell(r) {
+    const stop = 'event.stopPropagation();';
+    return `<button onclick="${stop} editDigits('${r.uid}')" title="填寫／修改匯款末 5 碼"
+        class="group inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors">
+        <span class="text-[14px] tracking-widest ${r.bank_digits ? 'text-slate-600 font-bold' : 'text-slate-400'}">${esc(r.bank_digits) || '—'}</span>
+        <i data-lucide="pencil" class="w-3 h-3 text-slate-300 group-hover:text-indigo-600"></i>
+      </button>`;
+  }
+
+  function editDigits(uid) {
+    const r = board.members.find(m => m.uid === uid);
+    const cell = document.getElementById('digits-cell-' + uid);
+    if (!r || !cell) return;
+    cell.innerHTML = `
+      <div class="flex items-center gap-1 justify-center" onclick="event.stopPropagation();">
+        <input id="digits-input-${esc(uid)}" type="tel" maxlength="5" inputmode="numeric" placeholder="末5碼"
+          class="w-20 border border-indigo-500 rounded p-1 text-[15px] text-center tracking-widest font-bold outline-none">
+        <button onclick="saveDigits('${uid}')" class="p-1 text-emerald-600 hover:bg-emerald-50 rounded" title="儲存">
+          <i data-lucide="check" class="w-4 h-4"></i></button>
+        <button onclick="renderRows(); lucide.createIcons();" class="p-1 text-slate-400 hover:bg-slate-100 rounded" title="取消">
+          <i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>`;
+    lucide.createIcons();
+    const input = document.getElementById('digits-input-' + uid);
+    input.value = r.bank_digits || '';
+    input.focus();
+    input.select();
+    input.onkeydown = e => {
+      if (e.key === 'Enter') saveDigits(uid);
+      if (e.key === 'Escape') { renderRows(); lucide.createIcons(); }
+    };
+  }
+
+  async function saveDigits(uid) {
+    const input = document.getElementById('digits-input-' + uid);
+    if (!input) return;
+    const digits = input.value.trim();
+    if (digits && !/^\d{5}$/.test(digits)) { alert('末 5 碼請填 5 位數字，或整格清空。'); input.focus(); return; }
+    try {
+      const data = await apiFetch('/finance/bank_digits', {
+        method: 'POST',
+        body: JSON.stringify({ month: activeMonth, uid, bank_digits: digits }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      // 這一欄不影響金額與收繳率，改完就地更新，不必整個看板重載
+      const r = board.members.find(m => m.uid === uid);
+      if (r) r.bank_digits = digits;
+      renderRows();
+      lucide.createIcons();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    }
   }
 
   // 報了地區活動卻還沒記到帳單的人，在明細那一欄就要看得到 —— 否則執秘得逐一
@@ -1016,6 +1113,111 @@
   }
 
   function closeRates() { hideModal('rates-modal'); }
+
+  // ==================== 社友名冊 ====================
+  // 名冊以前只長不消：退社的人年年出現在應收名單裡，還沒加官方帳號的新社友則
+  // 根本進不來。這裡讓執秘自己維護，改完重載看板，應收總額才跟著對。
+  let roster = null;
+
+  async function openRoster() {
+    showModal('roster-modal');
+    document.getElementById('roster-list').innerHTML =
+      `<p class="text-[13px] text-slate-400 italic py-2">載入中…</p>`;
+    try {
+      roster = await apiFetch('/finance/roster');
+    } catch (e) {
+      document.getElementById('roster-list').innerHTML =
+        `<p class="text-[13px] text-rose-600 py-2">載入失敗：${esc(e.message)}</p>`;
+      return;
+    }
+    if (roster.status !== 'ok') {
+      document.getElementById('roster-list').innerHTML =
+        `<p class="text-[13px] text-rose-600 py-2">${esc(roster.message || '載入失敗')}</p>`;
+      return;
+    }
+    document.getElementById('roster-title').textContent = `社友名冊 · ${roster.club}`;
+    const diet = document.getElementById('roster-diet');
+    if (!diet.options.length) {
+      diet.innerHTML = roster.diet_types.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+    }
+    renderRoster();
+  }
+
+  function renderRoster() {
+    document.getElementById('roster-count').textContent = `（${roster.members.length} 位）`;
+    document.getElementById('roster-list').innerHTML = roster.members.map(m => `
+      <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
+        <div class="min-w-0">
+          <p class="text-[15px] font-bold text-slate-800 truncate">${esc(m.name)}
+            ${m.nickname ? `<span class="text-slate-400 font-medium text-[14px]">（${esc(m.nickname)}）</span>` : ''}</p>
+          <p class="text-[13px] text-slate-400 truncate">${[
+            esc(m.diet_type),
+            m.line_bound ? '已綁定 LINE' : '未綁定 LINE',
+            m.dues_months ? `${m.dues_months} 個月帳單` : '',
+          ].filter(Boolean).join(' · ')}</p>
+        </div>
+        <button onclick="deleteMember('${esc(m.uid)}')" title="移出名冊"
+          class="text-slate-300 hover:text-rose-600 p-1 transition-colors flex-shrink-0">
+          <i data-lucide="user-minus" class="w-4 h-4"></i></button>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+
+  async function addMember() {
+    const name = document.getElementById('roster-name').value.trim();
+    if (!name) { alert('請填社友姓名。'); return; }
+    const btn = document.getElementById('roster-add');
+    btn.disabled = true; btn.textContent = '新增中…';
+    try {
+      const data = await apiFetch('/finance/roster/add', {
+        method: 'POST',
+        body: JSON.stringify({
+          full_name: name,
+          nickname: document.getElementById('roster-nickname').value.trim(),
+          diet_type: document.getElementById('roster-diet').value,
+        }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '新增失敗'); return; }
+      document.getElementById('roster-name').value = '';
+      document.getElementById('roster-nickname').value = '';
+      if (data.restored) alert(`「${data.name}」曾經在名冊裡，已接回原本那一筆，`
+        + `過去的帳單與繳款紀錄都還在。`);
+      await openRoster();
+      await loadBoard();     // 新社友要立刻出現在收繳看板上，應收也要跟著加
+      loadTrend();
+    } catch (e) {
+      alert('新增失敗：' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '新增';
+    }
+  }
+
+  async function deleteMember(uid) {
+    const m = roster.members.find(x => x.uid === uid);
+    if (!m) return;
+    // 帳單不會跟著刪，這件事一定要先講：執秘以為刪了就一了百了，結果那個人
+    // 之後以「名冊外」的身分繼續出現在有帳單的月份裡。
+    if (!confirm(`將「${m.name}」移出 ${roster.club} 的名冊？\n\n`
+      + `他不再出現在往後的收繳名單、報名名單裡。\n`
+      + (m.dues_months
+        ? `已經開過的 ${m.dues_months} 個月帳單、報名與繳款紀錄全部保留，那些月份他會標示為「名冊外」，該收的錢照樣收得到。`
+        : `他目前沒有任何帳單紀錄。`)
+      + `\n\n日後再入社時，用同一個姓名新增就會接回這一筆。`)) return;
+    try {
+      const data = await apiFetch('/finance/roster/delete', {
+        method: 'POST',
+        body: JSON.stringify({ uid }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '刪除失敗'); return; }
+      await openRoster();
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('刪除失敗：' + e.message);
+    }
+  }
+
+  function closeRoster() { hideModal('roster-modal'); }
 
   function showModal(id) {
     const m = document.getElementById(id);
