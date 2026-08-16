@@ -275,7 +275,8 @@
                     <label class="block text-xs font-bold text-gray-700">附加來賓 (選填)</label>
                     <button onclick="addGuestInput()" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold"><i class="fa-solid fa-plus"></i> 新增來賓</button>
                 </div>
-                <div id="guest-inputs-container" class="space-y-2 max-h-24 overflow-y-auto no-scrollbar"></div>
+                <!-- 高球的來賓一列有兩行（姓名／方案＋差點），高度要放得下兩位 -->
+                <div id="guest-inputs-container" class="space-y-2 max-h-40 overflow-y-auto no-scrollbar"></div>
             </div>
             <div class="border-t border-gray-200 pt-3">
                 <label class="block text-xs font-bold text-gray-700 mb-1">匯款帳號後 5 碼</label>
@@ -1125,6 +1126,12 @@ function needsGolfInfo(ev) {
 // /events 回來的活動物件本來就含 golf_plans，所以這裡不必再打一支 API。
 function eventGolfPlans(ev) {
     return Array.isArray(ev?.golf_plans) ? ev.golf_plans : [];
+}
+
+// 執秘批次報名的方案下拉（社友一格、來賓一格，同一份選項）。
+function golfPlanOptionsHtml(plans) {
+    return `<option value="">方案</option>` + plans.map(p =>
+        `<option value="${_escAttr(p.code)}">${_escHtml(p.code)}. ${_escHtml(p.label)} ${Number(p.fee).toLocaleString()}</option>`).join('');
 }
 
 function golfPlanText(p) {
@@ -3270,8 +3277,7 @@ async function renderClubMembers() {
     // 高球賽事每人的方案不一定相同（球場會員身分因人而異），所以方案和差點都是
     // 逐人一格，擠不進同一行就換行放。
     const plans = isGolf ? eventGolfPlans(execRegEvent()) : [];
-    const planOptions = `<option value="">方案</option>` + plans.map(p =>
-        `<option value="${p.code}">${p.code}. ${_escHtml(p.label)} ${p.fee.toLocaleString()}</option>`).join('');
+    const planOptions = golfPlanOptionsHtml(plans);
     listEl.innerHTML = members.map(m =>
         `<label class="flex flex-col gap-1 p-2 hover:bg-blue-50 rounded-lg cursor-pointer border border-transparent hover:border-blue-100">
             <span class="flex items-center gap-3">
@@ -3298,13 +3304,21 @@ function execRegEvent() {
 
 function addGuestInput() {
     const div = document.createElement('div');
-    div.className = "flex gap-2 items-center";
-    // 高球賽事的來賓也要有差點，否則分組表上永遠是「未填差點」，而且他沒有報名
-    // 紀錄可以事後補填——只能在建立來賓的當下問。
+    div.className = "guest-row flex flex-col gap-1";
+    // 高球賽事的來賓也要有方案與差點，否則分組表上永遠是「未填差點」、對帳也不知道
+    // 該收多少；而且他沒有報名紀錄可以事後補填——只能在建立來賓的當下問。
     const isGolf = isGolfEvent(execRegEvent());
-    div.innerHTML = `<input type="text" placeholder="來賓姓名" class="guest-name flex-1 min-w-0 bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-xs">`
-        + (isGolf ? `<input type="number" min="0" max="54" step="0.1" placeholder="差點" class="guest-handicap w-14 shrink-0 bg-white border border-gray-200 rounded-lg py-1.5 px-1 text-xs text-center">` : '')
-        + `<button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 p-1 shrink-0"><i class="fa-solid fa-circle-minus"></i></button>`;
+    const plans = isGolf ? eventGolfPlans(execRegEvent()) : [];
+    div.innerHTML = `
+        <span class="flex gap-2 items-center">
+            <input type="text" placeholder="來賓姓名" class="guest-name flex-1 min-w-0 bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-xs">
+            <button onclick="this.closest('.guest-row').remove()" class="text-red-400 hover:text-red-600 p-1 shrink-0"><i class="fa-solid fa-circle-minus"></i></button>
+        </span>
+        ${isGolf ? `<span class="flex items-center gap-1.5 pr-7">
+            ${plans.length ? `<select class="guest-plan flex-1 min-w-0 bg-white border border-gray-200 rounded-lg py-1 px-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-500">${golfPlanOptionsHtml(plans)}</select>` : ''}
+            <input type="number" min="0" max="54" step="0.1" placeholder="差點"
+                class="guest-handicap w-14 shrink-0 bg-white border border-gray-200 rounded-lg py-1 px-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-emerald-500">
+        </span>` : ''}`;
     document.getElementById('guest-inputs-container').appendChild(div);
 }
 
@@ -3322,11 +3336,12 @@ function selectAllMembers() {
 async function submitExecSecRegistration() {
     const clubName = document.getElementById('exec-sec-club').value;
     const uids = [...document.querySelectorAll('.member-checkbox:checked')].map(cb => cb.value);
-    // 來賓連同差點一起送；沒有差點欄（非高球）就只送名字，後端兩種格式都收。
-    const guests = [...document.querySelectorAll('#guest-inputs-container > div')].map(row => {
+    // 來賓連同方案、差點一起送；非高球賽事沒有那兩欄，就只送名字，後端兩種格式都收。
+    const guests = [...document.querySelectorAll('#guest-inputs-container .guest-row')].map(row => {
         const name = row.querySelector('.guest-name').value.trim();
         const hcp = row.querySelector('.guest-handicap')?.value.trim() || '';
-        return name ? { name, handicap: hcp } : null;
+        const plan = row.querySelector('.guest-plan')?.value || '';
+        return name ? { name, handicap: hcp, course_plan: plan } : null;
     }).filter(Boolean);
     const digits = document.getElementById('exec-sec-bank-digits').value.trim();
 

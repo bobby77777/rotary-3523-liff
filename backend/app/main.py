@@ -3009,6 +3009,15 @@ async def admin_bulk_register(request: Request):
         return {"status": "forbidden", "message": "無批次報名權限"}
     body = await request.json()
     uids = [str(u) for u in body.get("uids", []) if u]
+    bank_digits = str(body.get("bank_digits", "")).strip()
+    event_id = body.get("event_id")
+
+    ev = _lookup_event(admin_uid, int(event_id)) if event_id else _current_event(admin_uid)
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+
+    # 來賓的差點與方案只能在建立當下問——他沒有報名紀錄可以事後補填。
+    # 方案要對照本場賽事的設定，所以這段要在查到 ev 之後。
     guests = []
     for g in body.get("guests", []) or []:
         item = g if isinstance(g, dict) else {"name": g}
@@ -3018,13 +3027,11 @@ async def admin_bulk_register(request: Request):
         hcp, err = _parse_handicap(item.get("handicap"))
         if err:
             return {"status": "invalid", "message": f"來賓「{nm}」的{err}"}
-        guests.append({"name": nm, "handicap": hcp})
-    bank_digits = str(body.get("bank_digits", "")).strip()
-    event_id = body.get("event_id")
+        plan, err = _parse_course_plan(ev, item.get("course_plan"))
+        if err:
+            return {"status": "invalid", "message": f"來賓「{nm}」的{err}"}
+        guests.append({"name": nm, "handicap": hcp, "course_plan": plan})
 
-    ev = _lookup_event(admin_uid, int(event_id)) if event_id else _current_event(admin_uid)
-    if ev is None:
-        return {"status": "no_event", "message": "找不到對應活動"}
     if not uids and not guests:
         return {"status": "empty", "message": "未選擇任何社友或來賓"}
 

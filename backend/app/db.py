@@ -1250,13 +1250,15 @@ def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
 
 def add_event_guests(event_id: int, names: list, registered_by: str = "",
                      bank_digits: str = "") -> int:
-    """names 可以是字串，也可以是 {'name': ..., 'handicap': ...}（高球賽事用）。"""
+    """names 可以是字串，也可以是 {'name': ..., 'handicap': ..., 'course_plan': ...}
+    （高球賽事用）。"""
     rows = []
     for g in names:
         item = g if isinstance(g, dict) else {"name": g}
         nm = str(item.get("name", "")).strip()
         if nm:
-            rows.append((event_id, nm, registered_by, bank_digits or None, item.get("handicap")))
+            rows.append((event_id, nm, registered_by, bank_digits or None,
+                         item.get("handicap"), item.get("course_plan")))
     if not rows:
         return 0
     conn = _get_conn()
@@ -1264,8 +1266,8 @@ def add_event_guests(event_id: int, names: list, registered_by: str = "",
         with conn.cursor() as cur:
             psycopg2.extras.execute_batch(
                 cur,
-                "INSERT INTO event_guests (event_id, name, registered_by, bank_digits, handicap) "
-                "VALUES (%s, %s, %s, %s, %s)",
+                "INSERT INTO event_guests (event_id, name, registered_by, bank_digits, handicap, course_plan) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
                 rows,
             )
         conn.commit()
