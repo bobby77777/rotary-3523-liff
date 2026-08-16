@@ -320,15 +320,29 @@ def ensure_club_dues_table() -> None:
             UNIQUE(club_name, month, line_user_id)
         )
     """)
+    # is_paid 是社友自己按「已匯款」回報的，不代表錢真的進來了。confirmed 才是執秘
+    # 拿對帳單核對過的「已收訖」——收繳看板要分得出這兩者，才知道還有誰要追。
+    execute("ALTER TABLE club_dues ADD COLUMN IF NOT EXISTS confirmed BOOLEAN NOT NULL DEFAULT FALSE")
+    execute("ALTER TABLE club_dues ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ")
 
 
 def get_dues(club_name: str, month: str, line_user_id: str) -> dict | None:
     rows = query(
-        "SELECT meal, iou, customs, is_paid, bank_digits FROM club_dues "
+        "SELECT meal, iou, customs, is_paid, bank_digits, confirmed FROM club_dues "
         "WHERE club_name = %s AND month = %s AND line_user_id = %s",
         (club_name, month, line_user_id),
     )
     return rows[0] if rows else None
+
+
+def list_dues(club_name: str, month: str) -> list[dict]:
+    """Every dues row a club has for one month, in one query — the 收繳看板 shows all
+    members at once, and asking per member would be one round trip each."""
+    return query(
+        "SELECT line_user_id, meal, iou, customs, is_paid, bank_digits, confirmed "
+        "FROM club_dues WHERE club_name = %s AND month = %s",
+        (club_name, month),
+    )
 
 
 def upsert_dues(club_name: str, month: str, line_user_id: str,
@@ -359,6 +373,29 @@ def pay_dues(club_name: str, month: str, line_user_id: str, bank_digits: str) ->
             updated_at = NOW()
         """,
         (club_name, month, line_user_id, bank_digits or None),
+    )
+
+
+def confirm_dues(club_name: str, month: str, line_user_id: str, confirmed: bool) -> None:
+    """執秘 marks a member's dues as reconciled against the bank statement.
+
+    Confirming also sets is_paid: a member who paid cash at the meeting never
+    reported anything, and leaving is_paid FALSE would keep nagging them to. The
+    reverse doesn't hold — un-confirming a mistaken tick must not erase the
+    member's own report, so is_paid is left alone on the way back.
+
+    Only updates an existing bill; there is nothing to reconcile before 執秘 has
+    produced one, and inserting here would create a bill with no line items."""
+    execute(
+        """
+        UPDATE club_dues SET
+            confirmed = %s,
+            confirmed_at = CASE WHEN %s THEN NOW() ELSE NULL END,
+            is_paid = CASE WHEN %s THEN TRUE ELSE is_paid END,
+            updated_at = NOW()
+        WHERE club_name = %s AND month = %s AND line_user_id = %s
+        """,
+        (confirmed, confirmed, confirmed, club_name, month, line_user_id),
     )
 
 

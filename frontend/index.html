@@ -1568,6 +1568,14 @@ function openCalendarPage() {
     else window.open(url, '_blank');
 }
 
+// 財務看板的表格很寬（每位社友一列 × 六欄），塞進手機上的 modal 讀不了，
+// 所以跟行事曆、分組表一樣獨立成一頁開出去。
+function openFinanceBoard() {
+    const url = new URL('finance.html', location.href).href;
+    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) liff.openWindow({ url, external: false });
+    else window.open(url, '_blank');
+}
+
 // ============================================================
 //  PAGE ROUTER
 // ============================================================
@@ -3042,6 +3050,7 @@ function renderAdminPage() {
             isClub ? row('openClubRegAdminModal()', 'fa-clipboard-list', 'bg-amber-100 text-amber-600', '報名專區', '發送出席意願調查與跟催') : '',
             isClub ? row('openClubDuesModal()', 'fa-file-invoice', 'bg-rose-100 text-rose-600', '社友社費', '產出帳單並推播') : '',
             isClub ? row('openClubFinanceModal()', 'fa-file-invoice-dollar', 'bg-emerald-100 text-emerald-600', '社務對帳', '固定支出與社友代墊款') : '',
+            isClub ? row('openFinanceBoard()', 'fa-wallet', 'bg-indigo-100 text-indigo-600', '財務看板', '收繳進度、收支結餘與對帳') : '',
         ])}
 
         ${group(`現場作業${ev ? '' : ''}`, onSite)}

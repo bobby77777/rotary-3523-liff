@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>扶輪 3523 社費財務看板</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- LINE 登入：用 LIFF 取得「開啟者本人」身分，網址不必帶 uid（分享連結不會外洩身分）。 -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    /* 收繳明細表：跟議程／分組表同一套做法，用瀏覽器原生列印引擎輸出向量 PDF
+       （文字可選取、可搜尋），理監事會要的紙本直接從這裡印。 */
+    #print-zone { display: none; }
+    @media print {
+      body { background: #fff !important; }
+      body > *:not(#print-zone) { display: none !important; }
+      #print-zone { display: block !important; }
+      @page { size: A4 portrait; margin: 12mm; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+<div class="flex flex-col h-screen w-full overflow-hidden">
+  <!-- ==================== 頁首 ==================== -->
+  <div class="p-5 md:p-6 bg-indigo-950 text-white flex-shrink-0 shadow-md z-10">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-3 min-w-0">
+        <i data-lucide="wallet" class="w-8 h-8 text-amber-400 flex-shrink-0"></i>
+        <div class="min-w-0">
+          <h1 class="text-xl md:text-2xl font-bold tracking-wider truncate">社費財務看板</h1>
+          <p class="text-[11px] text-indigo-200 truncate" id="subtitle">載入中…</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="month-selector" onchange="selectMonth(this.value)"
+          class="bg-indigo-900 border border-indigo-800 text-white text-sm rounded p-2.5 outline-none cursor-pointer shadow-sm min-w-[10rem]"></select>
+        <button onclick="printSheet()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-sm flex items-center gap-2 transition-colors">
+          <i data-lucide="printer" class="w-4 h-4"></i> 下載收繳明細
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 看板 ==================== -->
+  <div class="flex-1 overflow-y-auto p-5 md:p-8">
+    <div class="max-w-6xl mx-auto space-y-5">
+      <p id="notice" class="hidden text-center text-slate-400 text-sm py-16"></p>
+
+      <div id="board" class="hidden space-y-5">
+        <!-- 收繳四格 + 收繳率 -->
+        <div>
+          <div id="cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+          <div class="mt-3 bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[12px] font-bold text-slate-500">收繳進度（以已收訖計）</span>
+              <span class="text-[12px] font-black text-slate-800" id="rate-label">—</span>
+            </div>
+            <!-- 三段長條：已收訖 / 待對帳 / 未繳，一眼看出錢卡在哪一段 -->
+            <div class="h-3 w-full rounded-full bg-slate-100 overflow-hidden flex">
+              <div id="bar-confirmed" class="h-full bg-emerald-500" style="width:0%"></div>
+              <div id="bar-reported"  class="h-full bg-amber-400"   style="width:0%"></div>
+            </div>
+            <div class="flex flex-wrap gap-4 mt-2 text-[11px] text-slate-500">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>已收訖</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>待對帳</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-slate-200"></span>未繳／未開帳單</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 收支結餘 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-4 py-2.5 bg-slate-800 text-white flex items-center gap-2">
+              <i data-lucide="scale" class="w-4 h-4"></i><span class="font-black tracking-wide text-sm">本月收支</span>
+            </div>
+            <div id="balance" class="p-4 space-y-2 text-sm"></div>
+          </div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-4 py-2.5 bg-slate-800 text-white flex items-center justify-between">
+              <span class="flex items-center gap-2"><i data-lucide="trending-up" class="w-4 h-4"></i>
+                <span class="font-black tracking-wide text-sm">近 6 個月</span></span>
+              <span class="text-[11px] text-slate-300">收 / 支</span>
+            </div>
+            <div id="trend" class="p-4"></div>
+          </div>
+        </div>
+
+        <!-- 社友收繳明細 -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-4 py-2.5 bg-indigo-950 text-white flex items-center justify-between gap-3 flex-wrap">
+            <span class="flex items-center gap-2"><i data-lucide="users" class="w-4 h-4"></i>
+              <span class="font-black tracking-wide text-sm">社友收繳明細</span></span>
+            <div id="filters" class="flex flex-wrap gap-1.5"></div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm min-w-[46rem]">
+              <thead>
+                <tr class="bg-slate-100 text-slate-500 text-[11px]">
+                  <th class="text-left  px-4 py-2 font-bold">社友</th>
+                  <th class="text-right px-4 py-2 font-bold">應繳</th>
+                  <th class="text-left  px-4 py-2 font-bold">明細</th>
+                  <th class="text-center px-4 py-2 font-bold">狀態</th>
+                  <th class="text-center px-4 py-2 font-bold">末 5 碼</th>
+                  <th class="text-center px-4 py-2 font-bold">對帳</th>
+                </tr>
+              </thead>
+              <tbody id="rows" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+          <p id="rows-empty" class="hidden text-center text-slate-400 text-sm py-10"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 列印用（螢幕上永遠隱藏，只有列印時出現） -->
+<div id="print-zone"></div>
+
+<script>
+  // ==================== 後端連線 ====================
+  const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+  const LIFF_ID = '2010535285-kh8rJmpS';
+  // 身分優先用 LINE 登入（見 ensureLineLogin）；網址的 ?uid= 僅作為登入不可用時的退路。
+  let UID = new URLSearchParams(location.search).get('uid') || '';
+
+  async function ensureLineLogin() {
+    try {
+      await Promise.race([
+        liff.init({ liffId: LIFF_ID }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('liff init timeout')), 5000)),
+      ]);
+      if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+      const p = await liff.getProfile();
+      if (p && p.userId) UID = p.userId;
+    } catch (e) {
+      console.warn('LINE 登入略過（逾時或失敗），改用網址 uid（若有）', e);
+    }
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const res = await fetch(API_BASE + path, {
+        headers: { 'Content-Type': 'application/json', 'X-Line-UserId': UID, 'ngrok-skip-browser-warning': '1' },
+        signal: ctrl.signal,
+        ...opts,
+      });
+      if (!res.ok) {
+        const detail = await res.json().then(d => d && d.detail).catch(() => null);
+        throw new Error(detail || ('API ' + path + ' → ' + res.status));
+      }
+      return res.json();
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // ==================== 狀態 ====================
+  let me = { is_admin: false, club: '' };
+  let board = null;            // /finance/board 回來的整包
+  let activeMonth = '';
+  let filter = 'all';          // 明細表的篩選：all / unpaid / reported / confirmed / no_bill
+
+  const STATUS = {
+    confirmed: { label: '已收訖', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    reported:  { label: '待對帳', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+    unpaid:    { label: '未繳',   cls: 'bg-rose-100 text-rose-700 border-rose-200' },
+    no_bill:   { label: '未開帳單', cls: 'bg-slate-100 text-slate-500 border-slate-200' },
+  };
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"]/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+  function money(n) { return 'NT$ ' + Number(n || 0).toLocaleString(); }
+  function monthLabel(m) {
+    const p = String(m || '').split('-');
+    return p.length === 2 ? `${p[0]}年 ${parseInt(p[1])}月` : m;
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  async function init() {
+    lucide.createIcons();
+    await ensureLineLogin();
+    try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '' }; }
+    if (!me.is_admin) {
+      // 後端也擋（/finance/* 一律 403），這裡只是不要讓人對著錯誤訊息猜原因。
+      showNotice('此頁僅供執秘／財務使用。社友請在 LINE 官方帳號打「社費」查看自己的帳單。');
+      document.getElementById('subtitle').textContent = '權限不足';
+      return;
+    }
+    const sel = document.getElementById('month-selector');
+    sel.innerHTML = recentMonths(12).map((m, i) =>
+      `<option value="${m}" ${i === 0 ? 'selected' : ''}>${monthLabel(m)}</option>`).join('');
+    const fromUrl = new URLSearchParams(location.search).get('month');
+    activeMonth = /^\d{4}-\d{2}$/.test(fromUrl || '') ? fromUrl : sel.value;
+    sel.value = activeMonth;
+    await loadBoard();
+    loadTrend();               // 趨勢慢一點沒關係，不擋住當月的數字先出來
+  }
+
+  function recentMonths(n) {
+    const out = [], d = new Date();
+    for (let i = 0; i < n; i++) {
+      const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      out.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`);
+    }
+    return out;
+  }
+
+  function showNotice(msg) {
+    document.getElementById('board').classList.add('hidden');
+    const el = document.getElementById('notice');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+
+  async function selectMonth(m) {
+    activeMonth = m;
+    await loadBoard();
+    loadTrend();
+  }
+
+  async function loadBoard() {
+    showNotice('載入中…');
+    let data;
+    try {
+      data = await apiFetch('/finance/board?month=' + encodeURIComponent(activeMonth));
+    } catch (e) {
+      showNotice('載入失敗：' + e.message);
+      return;
+    }
+    if (data.status !== 'ok') { showNotice(data.message || '載入失敗。'); return; }
+    board = data;
+    document.getElementById('notice').classList.add('hidden');
+    document.getElementById('board').classList.remove('hidden');
+    document.getElementById('subtitle').textContent =
+      [data.club, monthLabel(data.month)].filter(Boolean).join(' · ');
+    renderCards();
+    renderBalance();
+    renderFilters();
+    renderRows();
+    lucide.createIcons();
+  }
+
+  // ==================== 上半部：金額 ====================
+  function renderCards() {
+    const t = board.totals;
+    const card = (label, value, sub, cls) => `
+      <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <p class="text-[11px] text-slate-400 font-bold">${label}</p>
+        <p class="text-xl font-black ${cls} mt-0.5">${money(value)}</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">${sub}</p>
+      </div>`;
+    document.getElementById('cards').innerHTML = [
+      card('應收（已開帳單）', t.expected, `${t.billed} / ${t.members} 位社友已開帳單`, 'text-slate-800'),
+      card('已收訖', t.confirmed, `${t.confirmed_count} 位已對帳`, 'text-emerald-700'),
+      card('待對帳', t.reported, `${t.reported_count} 位已回報匯款`, 'text-amber-600'),
+      card('未繳', t.outstanding, `${t.unpaid_count} 位未回報`
+        + (t.no_bill ? `，另有 ${t.no_bill} 位未開帳單` : ''), 'text-rose-600'),
+    ].join('');
+
+    const pct = v => t.expected ? (v / t.expected * 100).toFixed(1) + '%' : '0%';
+    document.getElementById('bar-confirmed').style.width = pct(t.confirmed);
+    document.getElementById('bar-reported').style.width = pct(t.reported);
+    document.getElementById('rate-label').textContent =
+      `${t.rate}%　${money(t.confirmed)} / ${money(t.expected)}`;
+  }
+
+  function renderBalance() {
+    const e = board.expense, t = board.totals;
+    const line = (label, amt, cls = 'text-slate-600', bold = false) => `
+      <div class="flex justify-between items-center ${cls}">
+        <span class="${bold ? 'font-bold' : ''}">${esc(label)}</span>
+        <span class="font-bold tabular-nums">${money(amt)}</span>
+      </div>`;
+    const net = board.net;
+    document.getElementById('balance').innerHTML = `
+      ${line('社費收入（已收訖）', t.confirmed, 'text-emerald-700', true)}
+      <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
+      ${line('場地租金', e.rent)}
+      ${line('人事薪資', e.salary)}
+      ${e.fixed.map(f => line(f.name || '固定支出', f.amount)).join('')}
+      ${e.advances.length ? line(`社友代墊款（${e.advances.length} 筆）`, e.advance_total, 'text-amber-700') : ''}
+      ${line('支出小計', e.total, 'text-rose-600', true)}
+      <div class="border-t-2 border-slate-800 pt-2 mt-2"></div>
+      <div class="flex justify-between items-center">
+        <span class="font-black">本月結餘</span>
+        <span class="font-black text-lg tabular-nums ${net >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${money(net)}</span>
+      </div>
+      ${e.total === 0 ? `<p class="text-[11px] text-slate-400 pt-1">本月尚未填社務對帳表（支出以 0 計）。可在 LIFF 的「社務對帳」填寫。</p>` : ''}
+      ${t.reported > 0 ? `<p class="text-[11px] text-amber-600 pt-1">另有 ${money(t.reported)} 已回報但未對帳，尚未計入收入。</p>` : ''}`;
+  }
+
+  // 趨勢圖獨立載入：一次要算 6 個月，比當月看板慢，不該讓它擋住主要數字。
+  async function loadTrend() {
+    const el = document.getElementById('trend');
+    el.innerHTML = `<p class="text-[12px] text-slate-400 text-center py-6">載入中…</p>`;
+    let data;
+    try {
+      data = await apiFetch('/finance/trend?months=6&end=' + encodeURIComponent(activeMonth));
+    } catch (e) {
+      el.innerHTML = `<p class="text-[12px] text-slate-400 text-center py-6">趨勢載入失敗：${esc(e.message)}</p>`;
+      return;
+    }
+    if (data.status !== 'ok' || !(data.months || []).length) {
+      el.innerHTML = `<p class="text-[12px] text-slate-400 text-center py-6">沒有可比較的月份。</p>`;
+      return;
+    }
+    // 收與支共用同一個高度基準，兩根柱子才比得出大小。
+    const max = Math.max(1, ...data.months.flatMap(m => [m.received, m.expense]));
+    el.innerHTML = `<div class="flex items-end justify-between gap-2 h-32">
+      ${data.months.map(m => {
+        const cur = m.month === activeMonth;
+        return `
+        <div class="flex-1 flex flex-col items-center gap-1 min-w-0" title="${esc(monthLabel(m.month))}　收 ${money(m.received)}　支 ${money(m.expense)}　結餘 ${money(m.net)}">
+          <div class="flex-1 w-full flex items-end justify-center gap-0.5">
+            <div class="w-1/3 bg-emerald-500 rounded-t" style="height:${(m.received / max * 100).toFixed(1)}%"></div>
+            <div class="w-1/3 bg-rose-400 rounded-t"    style="height:${(m.expense  / max * 100).toFixed(1)}%"></div>
+          </div>
+          <span class="text-[10px] ${cur ? 'font-black text-indigo-700' : 'text-slate-400'} truncate">${parseInt(m.month.slice(5))}月</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // ==================== 下半部：社友明細 ====================
+  function renderFilters() {
+    const t = board.totals;
+    const chips = [
+      ['all', '全部', t.members],
+      ['unpaid', '未繳', t.unpaid_count],
+      ['reported', '待對帳', t.reported_count],
+      ['confirmed', '已收訖', t.confirmed_count],
+      ['no_bill', '未開帳單', t.no_bill],
+    ];
+    document.getElementById('filters').innerHTML = chips.map(([key, label, n]) => `
+      <button onclick="setFilter('${key}')"
+        class="px-2.5 py-1 rounded text-[11px] font-bold border transition-colors ${
+          filter === key ? 'bg-amber-400 text-indigo-950 border-amber-400'
+                         : 'bg-white/10 text-indigo-100 border-white/20 hover:bg-white/20'}">
+        ${label} ${n}</button>`).join('');
+  }
+
+  function setFilter(key) {
+    filter = key;
+    renderFilters();
+    renderRows();
+    lucide.createIcons();
+  }
+
+  function renderRows() {
+    const rows = board.members.filter(r => filter === 'all' || r.status === filter);
+    const empty = document.getElementById('rows-empty');
+    document.getElementById('rows').innerHTML = rows.map(rowHtml).join('');
+    empty.classList.toggle('hidden', rows.length > 0);
+    if (!rows.length) empty.textContent = '這個篩選條件下沒有社友。';
+  }
+
+  function rowHtml(r) {
+    const s = STATUS[r.status];
+    // 帳單明細只列常年月費／分攤金以外的變動項目，那才是社友會問「這筆是什麼」的部分。
+    const items = [
+      r.meal ? `餐費 ${r.meal.toLocaleString()}` : '',
+      r.iou ? `IOU ${r.iou.toLocaleString()}` : '',
+      ...(r.customs || []).map(c => `${c.name} ${Number(c.amount || 0).toLocaleString()}`),
+    ].filter(Boolean);
+    return `
+      <tr class="hover:bg-slate-50">
+        <td class="px-4 py-2.5">
+          <span class="font-bold text-slate-800">${esc(r.name)}</span>
+          ${r.nickname ? `<span class="text-slate-400 text-[12px]">（${esc(r.nickname)}）</span>` : ''}
+          ${r.orphan ? `<span class="ml-1 text-[10px] text-amber-600" title="有帳單，但社友名冊查不到這個人">名冊外</span>` : ''}
+        </td>
+        <td class="px-4 py-2.5 text-right font-bold tabular-nums ${r.has_bill ? 'text-slate-800' : 'text-slate-300'}">
+          ${r.has_bill ? money(r.total) : '—'}</td>
+        <td class="px-4 py-2.5 text-[11px] text-slate-500">${items.length ? esc(items.join('、')) : '—'}</td>
+        <td class="px-4 py-2.5 text-center">
+          <span class="px-2 py-0.5 rounded text-[11px] font-black border ${s.cls}">${s.label}</span></td>
+        <td class="px-4 py-2.5 text-center text-[12px] tracking-widest text-slate-500">${esc(r.bank_digits) || '—'}</td>
+        <td class="px-4 py-2.5 text-center">${confirmBtn(r)}</td>
+      </tr>`;
+  }
+
+  function confirmBtn(r) {
+    if (!r.has_bill) return `<span class="text-[11px] text-slate-300">—</span>`;
+    return r.confirmed
+      ? `<button onclick="setConfirmed('${r.uid}', false)" title="取消對帳（社友自己回報的繳款紀錄會保留）"
+           class="px-2 py-1 rounded text-[11px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">取消對帳</button>`
+      : `<button onclick="setConfirmed('${r.uid}', true)"
+           class="px-2.5 py-1 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm">標記已收</button>`;
+  }
+
+  async function setConfirmed(uid, confirmed) {
+    const r = board.members.find(m => m.uid === uid);
+    if (!r) return;
+    if (confirmed && !confirm(`確定將「${r.name}」${monthLabel(activeMonth)}的 ${money(r.total)} 標記為已收訖？\n本人會收到 LINE 對帳完成通知。`)) return;
+    try {
+      const data = await apiFetch('/finance/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ month: activeMonth, uid, confirmed }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '對帳失敗'); return; }
+      await loadBoard();       // 以後端為準重載，總額與收繳率才不會跟明細對不上
+      loadTrend();
+    } catch (e) {
+      alert('對帳失敗：' + e.message);
+    }
+  }
+
+  // ==================== 收繳明細 PDF ====================
+  function printSheet() {
+    if (!board) { alert('目前沒有資料可以列印。'); return; }
+    const t = board.totals, e = board.expense;
+    const cell = 'padding:4pt 8pt; border:0.5pt solid #cbd5e1;';
+    document.getElementById('print-zone').innerHTML = `
+      <div style="font-family: 'Noto Sans TC', sans-serif; color:#0f172a;">
+        <h1 style="font-size:20pt; font-weight:800; margin:0 0 4pt;">${esc(board.club)}　社費收繳明細</h1>
+        <p style="font-size:10pt; color:#475569; margin:0 0 12pt;">${esc(monthLabel(board.month))}</p>
+
+        <table style="width:100%; border-collapse:collapse; margin-bottom:12pt; font-size:10pt;">
+          <tr style="background:#f1f5f9;">
+            <th style="${cell} text-align:left;">應收</th><th style="${cell} text-align:left;">已收訖</th>
+            <th style="${cell} text-align:left;">待對帳</th><th style="${cell} text-align:left;">未繳</th>
+            <th style="${cell} text-align:left;">收繳率</th>
+          </tr>
+          <tr>
+            <td style="${cell}">${money(t.expected)}</td><td style="${cell}">${money(t.confirmed)}</td>
+            <td style="${cell}">${money(t.reported)}</td><td style="${cell}">${money(t.outstanding)}</td>
+            <td style="${cell}">${t.rate}%</td>
+          </tr>
+        </table>
+
+        <table style="width:100%; border-collapse:collapse; font-size:10pt;">
+          <thead>
+            <tr style="background:#1e1b4b; color:#fff;">
+              <th colspan="5" style="text-align:left; padding:5pt 8pt; font-size:11pt;">社友收繳明細</th>
+            </tr>
+            <tr style="background:#f1f5f9; font-size:9pt; color:#475569;">
+              <th style="${cell} width:28%; text-align:left;">社友</th>
+              <th style="${cell} width:16%; text-align:right;">應繳</th>
+              <th style="${cell} width:28%; text-align:left;">明細</th>
+              <th style="${cell} width:16%; text-align:center;">狀態</th>
+              <th style="${cell} width:12%; text-align:center;">末 5 碼</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${board.members.map(r => {
+              const items = [
+                r.meal ? `餐費 ${r.meal.toLocaleString()}` : '',
+                r.iou ? `IOU ${r.iou.toLocaleString()}` : '',
+                ...(r.customs || []).map(c => `${c.name} ${Number(c.amount || 0).toLocaleString()}`),
+              ].filter(Boolean);
+              return `
+                <tr>
+                  <td style="${cell}">${esc(r.name)}${r.nickname ? '（' + esc(r.nickname) + '）' : ''}</td>
+                  <td style="${cell} text-align:right;">${r.has_bill ? money(r.total) : ''}</td>
+                  <td style="${cell} font-size:9pt;">${esc(items.join('、'))}</td>
+                  <td style="${cell} text-align:center;">${STATUS[r.status].label}</td>
+                  <td style="${cell} text-align:center;">${esc(r.bank_digits)}</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+
+        <p style="font-size:9pt; color:#475569; margin-top:12pt;">
+          本月支出合計 ${money(e.total)}（場地租金 ${money(e.rent)}、人事薪資 ${money(e.salary)}、
+          固定支出 ${money(e.fixed_total)}、社友代墊款 ${money(e.advance_total)}）；
+          本月結餘 ${money(board.net)}。
+        </p>
+      </div>`;
+    window.print();
+  }
+</script>
+</body>
+</html>

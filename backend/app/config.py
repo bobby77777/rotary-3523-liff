@@ -30,3 +30,7 @@ CALENDAR_BASE_URL = os.environ.get(
 # 高球分組表（golf.html）。聊天室打「高爾夫」會回這個連結。
 GOLF_BASE_URL = os.environ.get(
     "GOLF_BASE_URL", "https://bobby77777.github.io/rotary-3523-liff/golf.html")
+
+# 社費財務看板（finance.html）。聊天室打「財務」會回這個連結；表格寬，建議用電腦開。
+FINANCE_BASE_URL = os.environ.get(
+    "FINANCE_BASE_URL", "https://bobby77777.github.io/rotary-3523-liff/finance.html")

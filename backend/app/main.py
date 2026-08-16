@@ -18,7 +18,8 @@ from fastapi.templating import Jinja2Templates
 
 from . import agenda_pdf, db, event_pdfs, line_api, notices
 from urllib.parse import quote
-from .config import APP_BASE_URL, CALENDAR_BASE_URL, GOLF_BASE_URL, LINE_CHANNEL_SECRET, LIFF_URL
+from .config import (APP_BASE_URL, CALENDAR_BASE_URL, FINANCE_BASE_URL, GOLF_BASE_URL,
+                     LINE_CHANNEL_SECRET, LIFF_URL)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1260,6 +1261,23 @@ def _reply_golf_link(reply_token: str, user_id: str) -> None:
     line_api.reply_text_with_quick_reply(reply_token, text, items)
 
 
+def _reply_finance_link(reply_token: str, user_id: str) -> None:
+    """Reply with a link to the treasury board (finance.html) — 執秘／財務 only. A
+    member asking about money wants their own bill, so they get 我的社費 instead."""
+    if not db.is_admin(user_id):
+        items = [{"type": "action", "action": {
+            "type": "uri", "label": "🧾 我的社費", "uri": f"{LIFF_URL}?tab=profile&action=my_dues"}}]
+        line_api.reply_text_with_quick_reply(
+            reply_token, "🧾 社費查詢\n點下面可以看自己這個月的帳單並回報繳款。", items)
+        return
+    text = ("💰 社費財務看板\n這個月該收多少、收了多少、還有誰沒繳，扣掉社務支出剩多少，"
+            "都在同一頁。表格較寬，建議用電腦瀏覽器打開（會請您用 LINE 登入）。\n\n"
+            + FINANCE_BASE_URL)
+    items = [{"type": "action", "action": {
+        "type": "uri", "label": "💰 開啟財務看板", "uri": FINANCE_BASE_URL}}]
+    line_api.reply_text_with_quick_reply(reply_token, text, items)
+
+
 def _handle_text(reply_token: str, user_id: str, text: str) -> None:
     stripped = text.strip()
     if stripped in ("得獎查詢", "得獎", "查獎", "獎項", "查詢得獎"):
@@ -1270,6 +1288,9 @@ def _handle_text(reply_token: str, user_id: str, text: str) -> None:
         return
     if stripped in ("高爾夫", "高球", "分組", "分組表", "高球分組", "高爾夫分組"):
         _reply_golf_link(reply_token, user_id)
+        return
+    if stripped in ("財務", "財務看板", "社費", "社費收繳", "收繳", "對帳"):
+        _reply_finance_link(reply_token, user_id)
         return
 
     state = db.get_user_state(user_id)
@@ -1552,6 +1573,7 @@ def _dues_payload(row: dict | None) -> dict:
     return {
         "meal": meal, "iou": iou, "customs": customs,
         "is_paid": bool(row["is_paid"]) if row else False,
+        "confirmed": bool(row.get("confirmed")) if row else False,
         "base": DUES_BASE, "district": DUES_DISTRICT,
         "total": _dues_total(meal, iou, customs),
         "has_bill": bool(row and (meal or iou or customs)),
@@ -1623,6 +1645,172 @@ async def dues_pay(request: Request):
     _push_receipt(uid, f"💰 已回報 {month} 社費繳款" + (f"，末 5 碼：{digits}" if digits else "")
                   + "\n執秘對帳後狀態會更新為「已收繳費」。")
     return {"status": "ok", "month": month}
+
+
+# ── 財務管理看板 (finance.html) ────────────────────────────────────────────────
+# 錢的兩邊本來各自關在一個 modal 裡：社費收入在 club_dues（逐位社友一張帳單），
+# 社務支出在 club_finance（每月一張表）。兩邊都看得到單筆，卻沒有人看得到
+# 「這個月該收多少、收了多少、還差誰、扣掉支出剩多少」。以下端點把兩張表合成
+# 財務長要的那一張，finance.html 只負責畫。
+
+def _this_month() -> str:
+    return date.today().strftime("%Y-%m")
+
+
+def _valid_month(m: str) -> bool:
+    """A "YYYY-MM" string naming a real month — everything below keys on it."""
+    parts = (m or "").split("-")
+    return (len(parts) == 2 and len(parts[0]) == 4 and len(parts[1]) == 2
+            and parts[0].isdigit() and parts[1].isdigit() and 1 <= int(parts[1]) <= 12)
+
+
+def _month_list(n: int, end: str = "") -> list[str]:
+    """The n months ending at `end` (default this month), oldest first."""
+    last = end if _valid_month(end) else _this_month()
+    y, m = int(last[:4]), int(last[5:7])
+    out = []
+    for back in range(n - 1, -1, -1):
+        total = y * 12 + (m - 1) - back
+        out.append(f"{total // 12:04d}-{total % 12 + 1:02d}")
+    return out
+
+
+def _dues_rows(club: str, month: str, members: list[dict]) -> list[dict]:
+    """One row per member: what they were billed and how far the money got.
+
+    Members with no bill are listed too — "執秘 hasn't billed 王大明 yet" is a hole
+    in the month's takings just as much as "王大明 hasn't paid", and only this view
+    can show it."""
+    by_uid = {r["line_user_id"]: r for r in db.list_dues(club, month)}
+    rows = []
+    for m in members:
+        rows.append(_dues_row(m["line_user_id"], m.get("full_name") or "",
+                              m.get("nickname") or "", by_uid.pop(m["line_user_id"], None)))
+    # 有帳單、但 personal_information 裡查不到的人（已退社、資料未建）不能就這樣消失，
+    # 否則看板的應收總額會對不上帳。
+    for uid, row in by_uid.items():
+        rows.append(_dues_row(uid, _member_name(uid), "", row, orphan=True))
+    return rows
+
+
+def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
+              orphan: bool = False) -> dict:
+    d = _dues_payload(row)
+    if not d["has_bill"]:
+        status = "no_bill"
+    elif d["confirmed"]:
+        status = "confirmed"
+    elif d["is_paid"]:
+        status = "reported"
+    else:
+        status = "unpaid"
+    return {
+        "uid": uid, "name": name or "（未建資料）", "nickname": nickname,
+        "has_bill": d["has_bill"], "total": d["total"] if d["has_bill"] else 0,
+        "meal": d["meal"], "iou": d["iou"], "customs": d["customs"],
+        "is_paid": d["is_paid"], "confirmed": d["confirmed"],
+        "bank_digits": (row or {}).get("bank_digits") or "",
+        "status": status, "orphan": orphan,
+    }
+
+
+def _dues_totals(rows: list[dict]) -> dict:
+    """應收 = 已開帳單的總額。收繳率看的是「已收訖」，社友自己回報的還沒進帳。"""
+    billed = [r for r in rows if r["has_bill"]]
+    expected = sum(r["total"] for r in billed)
+    confirmed = sum(r["total"] for r in billed if r["confirmed"])
+    reported = sum(r["total"] for r in billed if r["is_paid"] and not r["confirmed"])
+    return {
+        "members": len(rows), "billed": len(billed),
+        "no_bill": len(rows) - len(billed),
+        "expected": expected, "confirmed": confirmed, "reported": reported,
+        "outstanding": expected - confirmed - reported,
+        "confirmed_count": sum(1 for r in billed if r["confirmed"]),
+        "reported_count": sum(1 for r in billed if r["is_paid"] and not r["confirmed"]),
+        "unpaid_count": sum(1 for r in billed if not r["is_paid"]),
+        "rate": round(confirmed / expected * 100) if expected else 0,
+    }
+
+
+def _expense_summary(data: dict | None) -> dict:
+    """社務對帳表 → 支出面總計。欄位與 /club/finance 存進去的那份一致。"""
+    d = data or {}
+    fixed = [f for f in d.get("fixed", []) if isinstance(f, dict)]
+    advances = [a for a in d.get("advances", []) if isinstance(a, dict)]
+    rent, salary = int(d.get("rent") or 0), int(d.get("salary") or 0)
+    return {
+        "rent": rent, "salary": salary, "fixed": fixed, "advances": advances,
+        "fixed_total": sum(int(f.get("amount") or 0) for f in fixed),
+        "advance_total": sum(int(a.get("amount") or 0) for a in advances),
+        "total": (rent + salary
+                  + sum(int(f.get("amount") or 0) for f in fixed)
+                  + sum(int(a.get("amount") or 0) for a in advances)),
+    }
+
+
+@app.get("/finance/board")
+async def finance_board(request: Request, month: str = ""):
+    """One month of club money: per-member dues collection + the expense sheet."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="無財務管理權限")
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    month = month if _valid_month(month) else _this_month()
+    rows = _dues_rows(club, month, db.get_club_members(club))
+    rows.sort(key=lambda r: (["unpaid", "reported", "no_bill", "confirmed"].index(r["status"]),
+                             r["name"]))
+    totals = _dues_totals(rows)
+    expense = _expense_summary(db.get_club_finance(club, month))
+    return {"status": "ok", "club": club, "month": month, "members": rows,
+            "totals": totals, "expense": expense,
+            "net": totals["confirmed"] - expense["total"]}
+
+
+@app.post("/finance/confirm")
+async def finance_confirm(request: Request):
+    """執秘 ticks a member's dues off against the bank statement (or unticks it)."""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無財務管理權限"}
+    body = await request.json()
+    month = str(body.get("month", "")).strip()
+    uid = str(body.get("uid", "")).strip()
+    if not (_valid_month(month) and uid):
+        return {"status": "invalid", "message": "缺少月份或社友"}
+    confirmed = bool(body.get("confirmed", True))
+    club = db.get_user_club(admin_uid)
+    if not db.get_dues(club, month, uid):
+        return {"status": "invalid", "message": "該社友本月尚無帳單，請先產出帳單"}
+    db.confirm_dues(club, month, uid, confirmed)
+    if confirmed:
+        try:
+            line_api.push_text(uid, f"✅ 您的 {month} 社費已對帳完成，感謝繳納！")
+        except Exception:
+            logger.exception("dues confirm push failed for %s", uid)
+    return {"status": "ok", "month": month, "uid": uid, "confirmed": confirmed}
+
+
+@app.get("/finance/trend")
+async def finance_trend(request: Request, months: int = 6, end: str = ""):
+    """收入／支出／結餘 for the last N months — the run of numbers a treasurer reads
+    to spot the month collection slipped, which a single month can never show."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="無財務管理權限")
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    members = db.get_club_members(club)     # 社友名單每個月都一樣，撈一次就好
+    out = []
+    for m in _month_list(max(1, min(int(months or 6), 24)), end):
+        totals = _dues_totals(_dues_rows(club, m, members))
+        expense = _expense_summary(db.get_club_finance(club, m))
+        out.append({"month": m, "expected": totals["expected"],
+                    "received": totals["confirmed"], "expense": expense["total"],
+                    "net": totals["confirmed"] - expense["total"]})
+    return {"status": "ok", "club": club, "months": out}
 
 
 @app.get("/events")
