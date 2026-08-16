@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import random
+import re
 import threading
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -1603,13 +1604,25 @@ async def dues_member(request: Request, club: str = "", month: str = "", uid: st
 def _clean_dues_items(body: dict) -> tuple[int, int, list]:
     """例會餐費 / IOU / 臨時項目 out of a save request. Unnamed custom rows are
     dropped — the member sees the name on their bill, so a nameless charge is
-    something 執秘 started typing and abandoned, not a fee."""
-    return (
-        int(body.get("meal", 0) or 0),
-        int(body.get("iou", 0) or 0),
-        [{"name": str(c.get("name", "")), "amount": int(c.get("amount", 0) or 0)}
-         for c in body.get("customs", []) if str(c.get("name", "")).strip()],
-    )
+    something 執秘 started typing and abandoned, not a fee.
+
+    帶著 event_id 的項目是從地區活動報名帶進來的報名費。那個 id 是「這場已經記過
+    帳」的唯一憑據，所以原封不動留著 —— 洗掉的話，同一場下個月又會被列出來等著
+    再記一次。"""
+    customs = []
+    for c in body.get("customs", []):
+        name = str(c.get("name", ""))
+        if not name.strip():
+            continue
+        item = {"name": name, "amount": int(c.get("amount", 0) or 0)}
+        try:
+            event_id = int(c.get("event_id") or 0)
+        except (TypeError, ValueError):
+            event_id = 0
+        if event_id > 0:
+            item["event_id"] = event_id
+        customs.append(item)
+    return int(body.get("meal", 0) or 0), int(body.get("iou", 0) or 0), customs
 
 
 def _push_dues_bill(uid: str, month: str, total: int) -> None:
@@ -1660,6 +1673,9 @@ async def dues_bulk_save(request: Request):
     if not (club and _valid_month(month) and uids):
         return {"status": "invalid", "message": "缺少社別 / 月份 / 社友"}
     meal, iou, customs = _clean_dues_items(body)
+    # 報名費是逐人逐場的，批次記帳裡不該出現 event_id：留著的話這一場會被標記成
+    # 全社每個人都繳過了，真正報名的人反而再也不會被列出來。
+    customs = [{k: v for k, v in c.items() if k != "event_id"} for c in customs]
     total = _dues_total(meal, iou, customs, *_dues_rates(club, month))
     notify = bool(body.get("notify", True))
     overwrite = bool(body.get("overwrite", False))
@@ -1737,6 +1753,88 @@ def _month_list(n: int, end: str = "") -> list[str]:
     return out
 
 
+# ── 地區活動報名費 → 社費帳單 ─────────────────────────────────────────────────
+# 報名跟收錢本來是兩個系統：報名在 registrations，欠社裡的錢在 club_dues，中間
+# 靠執秘自己記得「這個月誰報了年會」。這裡把報名撈進帳單編輯視窗，金額自動抓，
+# 但要不要記、記多少仍然是執秘按了才算 —— 費用文字是寫給人看的，程式看不懂的
+# 情況（每隊、多種方案、計畫金額）遠比想像的多，不能自作主張扣人家錢。
+
+# 這幾個字一出現，那個數字就不是「每人報名費」：每隊 NT$1,500 是一整隊的錢，
+# 記到一個人頭上會多收四倍。
+_FEE_NOT_PER_PERSON = re.compile(r"每隊|每社|每組|每桌|團體|保證金|贊助|捐款")
+
+# 明講不用錢的活動：連列都不要列出來，帳單編輯視窗只該擺真的要收的錢。
+_FEE_FREE = re.compile(r"免費|免收|不收費|無須繳費|無需繳費")
+
+
+def _guess_fee_amount(text: str) -> int:
+    """從活動的費用文字猜每人報名費；猜不出來回 0，由執秘自己填。
+
+    刻意保守。文字裡有兩個以上不同金額的是多種方案，只有人知道該收哪一個；
+    六位數以上不是報名費，是計畫金額或捐款目標（惜食行動計畫 NT$100,000）。"""
+    t = str(text or "")
+    if not t.strip() or _FEE_NOT_PER_PERSON.search(t):
+        return 0
+    amounts = {int(n.replace(",", "")) for n in re.findall(r"\d[\d,]*", t)}
+    amounts = {n for n in amounts if 0 < n < 100000}
+    return amounts.pop() if len(amounts) == 1 else 0
+
+
+def _registration_fee(reg: dict) -> tuple[int, str]:
+    """(金額, 來源) for one registration. 高球以社友自己選的球場方案為準 ——
+    下場含餐與僅餐會不同價，一個「每人多少錢」表達不出來。"""
+    if reg.get("course_plan"):
+        try:
+            plans = json.loads(reg.get("golf_plans") or "[]")
+        except (ValueError, TypeError):
+            plans = []
+        plan = next((p for p in plans if isinstance(p, dict)
+                     and p.get("code") == reg["course_plan"]), None)
+        if plan:
+            return int(plan.get("fee") or 0), f"球場方案：{plan.get('label', '')}"
+    return _guess_fee_amount(reg.get("fee")), str(reg.get("fee") or "")
+
+
+def _charged_events(club: str) -> set[tuple[str, int]]:
+    """(社友, 活動) 已經記過報名費的組合，橫跨所有月份。"""
+    done = set()
+    for row in db.list_dues_event_items(club):
+        for c in (row.get("customs") or []):
+            if isinstance(c, dict) and c.get("event_id"):
+                try:
+                    done.add((row["line_user_id"], int(c["event_id"])))
+                except (TypeError, ValueError):
+                    continue
+    return done
+
+
+def _event_fees_by_uid(club: str, month: str) -> dict[str, list[dict]]:
+    """每位社友這個月還沒記帳的地區活動報名費，供帳單編輯視窗列出來。"""
+    charged = _charged_events(club)
+    out: dict[str, list[dict]] = {}
+    for reg in db.list_club_event_registrations(club, month):
+        uid, event_id = reg["line_user_id"], int(reg["event_id"])
+        if (uid, event_id) in charged:
+            continue
+        amount, note = _registration_fee(reg)
+        fee_text = str(reg.get("fee") or "")
+        # 沒有費用、或公文寫明免費的，不是「執秘忘了填金額」，是真的不用收
+        if not amount and (not fee_text.strip() or _FEE_FREE.search(fee_text)):
+            continue
+        title = str(reg.get("title") or "").strip() or f"活動 {event_id}"
+        out.setdefault(uid, []).append({
+            "event_id": event_id,
+            "title": title,
+            "name": f"{title} 報名費",
+            "date": reg["date"].isoformat() if reg.get("date") else "",
+            "amount": amount,
+            "note": note,
+            # 這個月報的名，還是這個月舉行的活動 —— 執秘要看得出這筆為什麼在這裡
+            "registered_this_month": reg.get("reg_month") == month,
+        })
+    return out
+
+
 def _dues_rows(club: str, month: str, members: list[dict]) -> list[dict]:
     """One row per member: what they were billed and how far the money got.
 
@@ -1745,20 +1843,24 @@ def _dues_rows(club: str, month: str, members: list[dict]) -> list[dict]:
     can show it."""
     by_uid = {r["line_user_id"]: r for r in db.list_dues(club, month)}
     rates = _dues_rates(club, month)     # 全社同一組費率，每個月查一次就好
+    fees = _event_fees_by_uid(club, month)
     rows = []
     for m in members:
-        rows.append(_dues_row(m["line_user_id"], m.get("full_name") or "",
-                              m.get("nickname") or "", by_uid.pop(m["line_user_id"], None),
-                              rates=rates))
+        uid = m["line_user_id"]
+        rows.append(_dues_row(uid, m.get("full_name") or "", m.get("nickname") or "",
+                              by_uid.pop(uid, None), rates=rates,
+                              event_fees=fees.get(uid, [])))
     # 有帳單、但 personal_information 裡查不到的人（已退社、資料未建）不能就這樣消失，
     # 否則看板的應收總額會對不上帳。
     for uid, row in by_uid.items():
-        rows.append(_dues_row(uid, _member_name(uid), "", row, orphan=True, rates=rates))
+        rows.append(_dues_row(uid, _member_name(uid), "", row, orphan=True, rates=rates,
+                              event_fees=fees.get(uid, [])))
     return rows
 
 
 def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
-              orphan: bool = False, rates: tuple[int, int] = (DUES_BASE, DUES_DISTRICT)) -> dict:
+              orphan: bool = False, rates: tuple[int, int] = (DUES_BASE, DUES_DISTRICT),
+              event_fees: list[dict] | None = None) -> dict:
     """狀態只看錢收到哪一步：未繳 → 待對帳 → 已繳。
 
     沒有費用明細的社友一樣是「未繳」，金額算固定月費 —— 常年月費與地區分攤金
@@ -1773,6 +1875,8 @@ def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
         "is_paid": d["is_paid"], "confirmed": d["confirmed"],
         "bank_digits": (row or {}).get("bank_digits") or "",
         "status": status, "orphan": orphan,
+        # 這個月報名的地區活動裡，還沒記進任何一張帳單的那些
+        "event_fees": event_fees or [],
     }
 
 

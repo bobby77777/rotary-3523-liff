@@ -171,6 +171,23 @@
         <div id="bill-customs" class="space-y-2"></div>
       </div>
 
+      <!-- 地區活動報名費：報名在 registrations、收錢在 club_dues，中間本來只靠執秘
+           自己記得。金額自動從活動的費用欄抓，但按了「帶入」才會變成上面的臨時
+           費用 —— 費用文字是寫給人看的，猜錯就是多收人家錢。 -->
+      <div id="bill-events" class="hidden border border-indigo-200 bg-indigo-50/60 rounded-lg p-3">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[13px] font-bold text-indigo-900">
+            <i data-lucide="ticket" class="w-3.5 h-3.5 inline-block -mt-0.5"></i>
+            地區活動報名費 · 尚未記帳</span>
+          <button onclick="addAllEventFees()" class="text-[13px] font-bold text-indigo-600 hover:text-indigo-800">全部帶入</button>
+        </div>
+        <div id="bill-event-list" class="space-y-1.5"></div>
+        <p class="text-[12px] text-indigo-700/80 mt-2 leading-relaxed">
+          金額自動從活動的費用欄抓，抓不出來（每隊計價、多種方案）會留空白，請自行填。
+          帶入後成為上面的臨時費用，<b>儲存才會真的記到帳單</b>；記過的活動不會再出現在這裡。
+        </p>
+      </div>
+
       <label class="flex items-start gap-2 pt-1">
         <input id="bill-notify" type="checkbox" class="mt-0.5 accent-indigo-600">
         <span class="text-[13px] text-slate-500 leading-relaxed">
@@ -561,12 +578,22 @@
         </td>
         <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800">${money(r.total)}</td>
         <td class="px-4 py-2.5 text-[13px] text-slate-500">
-          ${items.length ? esc(items.join('、')) : '<span class="text-slate-400">僅固定月費</span>'}</td>
+          ${items.length ? esc(items.join('、')) : '<span class="text-slate-400">僅固定月費</span>'}
+          ${pendingFeeTag(r)}</td>
         <td class="px-4 py-2.5 text-center">
           <span class="px-2 py-0.5 rounded text-[13px] font-black border ${s.cls}">${s.label}</span></td>
         <td class="px-4 py-2.5 text-center text-[14px] tracking-widest text-slate-500">${esc(r.bank_digits) || '—'}</td>
         <td class="px-4 py-2.5 text-center">${confirmBtn(r)}</td>
       </tr>`;
+  }
+
+  // 報了地區活動卻還沒記到帳單的人，在明細那一欄就要看得到 —— 否則執秘得逐一
+  // 點開三十張帳單才知道誰有報名費要收。
+  function pendingFeeTag(r) {
+    const n = (r.event_fees || []).length;
+    if (!n) return '';
+    return `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200"
+      title="${esc((r.event_fees || []).map(f => f.title).join('、'))}">地區活動 ${n} 場未記帳</span>`;
   }
 
   // 每位社友都可以標記已收 —— 只有固定月費的人也會繳錢，後端會在對帳時
@@ -602,6 +629,7 @@
   // billTargets 為 null 代表單筆（editingUid），否則是這批要一起開帳單的社友。
   let editingUid = null;
   let billTargets = null;
+  let billEventFees = [];      // 這位社友還沒記帳的地區活動報名費（帶入後從這裡移除）
 
   function openBill(uid) {
     const r = board.members.find(m => m.uid === uid);
@@ -615,6 +643,7 @@
     // 已經開過帳單的人，預設不再推播；新開的帳單社友需要知道。
     document.getElementById('bill-notify').checked = !r.has_bill;
     fillBillForm(r.meal, r.iou, r.customs || []);
+    renderEventFees(r.event_fees);
     showModal('bill-modal');
   }
 
@@ -629,6 +658,8 @@
       + `<br><span class="text-slate-400">已經登過的社友不受影響。個別差異開完之後再逐筆調整。</span>`;
     document.getElementById('bill-notify').checked = true;
     fillBillForm(0, 0, []);
+    // 報名費逐人逐場不同，批次記帳一律不碰
+    renderEventFees([]);
     showModal('bill-modal');
   }
 
@@ -638,7 +669,7 @@
     document.getElementById('bill-meal').value = meal ? meal : '';
     document.getElementById('bill-iou').value = iou ? iou : '';
     document.getElementById('bill-customs').innerHTML = '';
-    customs.forEach(c => addCustomRow(c.name, c.amount));
+    customs.forEach(c => addCustomRow(c.name, c.amount, c.event_id));
     if (!customs.length) renderCustomEmpty();
     renderBillTotal();
     lucide.createIcons();
@@ -649,11 +680,15 @@
       `<p class="text-[13px] text-slate-400 italic text-center py-2" id="custom-empty">本月無臨時費用</p>`;
   }
 
-  function addCustomRow(name = '', amount = 0) {
+  // eventId：這筆是從地區活動報名帶進來的報名費。它要跟著存回後端，那是
+  // 「這場已經記過帳」的唯一憑據 —— 掉了的話同一場下個月會再被列出來一次。
+  function addCustomRow(name = '', amount = 0, eventId = 0) {
     document.getElementById('custom-empty')?.remove();
     const div = document.createElement('div');
     div.className = 'flex gap-2 items-center custom-row';
+    if (eventId) div.dataset.eventId = eventId;
     div.innerHTML = `
+      ${eventId ? `<i data-lucide="ticket" class="w-4 h-4 text-indigo-500 shrink-0" title="地區活動報名費"></i>` : ''}
       <input type="text" placeholder="名目（如：總監之夜）" class="custom-name w-1/2 border border-slate-300 rounded p-2 text-[15px] outline-none focus:border-indigo-600">
       <input type="number" placeholder="0" onfocus="this.select()" oninput="renderBillTotal()"
         class="custom-amount w-1/2 border border-slate-300 rounded p-2 text-[15px] text-right font-bold outline-none focus:border-indigo-600">
@@ -673,9 +708,61 @@
       customs: [...document.querySelectorAll('.custom-row')].map(row => ({
         name: row.querySelector('.custom-name').value.trim(),
         amount: parseInt(row.querySelector('.custom-amount').value) || 0,
+        event_id: parseInt(row.dataset.eventId) || 0,
       })).filter(c => c.name),
       notify: document.getElementById('bill-notify').checked,
     };
+  }
+
+  // ==================== 地區活動報名費 ====================
+  function renderEventFees(list) {
+    billEventFees = (list || []).slice();
+    const box = document.getElementById('bill-events');
+    box.classList.toggle('hidden', billEventFees.length === 0);
+    if (!billEventFees.length) return;
+    document.getElementById('bill-event-list').innerHTML = billEventFees.map((f, i) => `
+      <div class="flex gap-2 items-center bg-white border border-indigo-200 rounded p-2">
+        <div class="flex-1 min-w-0">
+          <p class="text-[14px] font-bold text-slate-800 truncate">${esc(f.title)}</p>
+          <p class="text-[12px] text-slate-400 truncate">${[
+            f.date || '日期未定',
+            f.registered_this_month ? '本月報名' : '本月舉行',
+            f.note,
+          ].filter(Boolean).map(esc).join(' · ')}</p>
+        </div>
+        <input type="number" class="event-fee-amount w-24 border border-slate-300 rounded p-1.5 text-[15px] text-right font-bold outline-none focus:border-indigo-600"
+          placeholder="金額" onfocus="this.select()" value="${f.amount || ''}">
+        <button onclick="addEventFee(${i})" class="shrink-0 px-2.5 py-1.5 rounded text-[13px] font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">帶入</button>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+
+  // 帶入一筆就要重畫（索引會變），執秘在其他列改過的金額不能被重畫洗掉。
+  function syncEventFeeAmounts() {
+    document.querySelectorAll('#bill-event-list .event-fee-amount').forEach((el, i) => {
+      if (billEventFees[i]) billEventFees[i].amount = parseInt(el.value) || 0;
+    });
+  }
+
+  function addEventFee(i) {
+    syncEventFeeAmounts();
+    const f = billEventFees[i];
+    if (!f) return;
+    if (!f.amount) { alert(`「${f.title}」抓不到每人金額，請先填要收多少。`); return; }
+    addCustomRow(f.name, f.amount, f.event_id);
+    billEventFees.splice(i, 1);
+    renderEventFees(billEventFees);
+    renderBillTotal();
+  }
+
+  function addAllEventFees() {
+    syncEventFeeAmounts();
+    const blank = billEventFees.filter(f => !f.amount);
+    billEventFees.filter(f => f.amount).forEach(f => addCustomRow(f.name, f.amount, f.event_id));
+    renderEventFees(blank);
+    renderBillTotal();
+    if (blank.length) alert(`${blank.length} 場抓不到每人金額，請填了金額再單獨帶入：\n`
+      + blank.map(f => '· ' + f.title).join('\n'));
   }
 
   function renderBillTotal() {
@@ -711,7 +798,10 @@
     }
   }
 
-  function closeBill() { editingUid = null; billTargets = null; hideModal('bill-modal'); }
+  function closeBill() {
+    editingUid = null; billTargets = null; billEventFees = [];
+    hideModal('bill-modal');
+  }
 
   // ==================== 社務支出編輯 ====================
   function openExpense() {

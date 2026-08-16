@@ -2883,7 +2883,7 @@ async function loadDuesData() {
     if (!d.customs || d.customs.length === 0) {
         container.innerHTML = `<div class="text-xs text-gray-400 italic text-center py-2" id="no-custom-msg">本月尚無臨時變動費用</div>`;
     } else {
-        d.customs.forEach(c => appendCustomDuesRow(c.name, c.amount));
+        d.customs.forEach(c => appendCustomDuesRow(c.name, c.amount, c.event_id));
     }
     calculateTotalDues();
 }
@@ -2895,9 +2895,12 @@ function addCustomDuesField() {
     calculateTotalDues();
 }
 
-function appendCustomDuesRow(name, amount) {
+// eventId：從地區活動報名帶進來的報名費（在財務看板帶入的）。這裡只是原封不動
+// 帶著走 —— 存檔時掉了的話，那場活動會被當成還沒記帳，下個月再被列出來一次。
+function appendCustomDuesRow(name, amount, eventId = 0) {
     const div = document.createElement('div');
     div.className = 'flex gap-2 items-center custom-dues-row';
+    if (eventId) div.dataset.eventId = eventId;
     div.innerHTML = `
         <input type="text" placeholder="名目 (如:總監之夜)" value="${name}" class="custom-name w-1/2 bg-white border border-gray-300 rounded-lg py-1.5 px-2 text-xs font-semibold focus:ring-2 focus:ring-pink-500">
         <div class="relative w-1/2"><span class="absolute left-2 top-1.5 text-xs text-gray-400">$</span>
@@ -2922,7 +2925,8 @@ async function saveClubDues() {
     const iou = parseInt(document.getElementById('dues-iou').value) || 0;
     const customs = [...document.querySelectorAll('.custom-dues-row')].map(row => ({
         name: row.querySelector('.custom-name').value.trim(),
-        amount: parseInt(row.querySelector('.custom-amount').value) || 0
+        amount: parseInt(row.querySelector('.custom-amount').value) || 0,
+        event_id: parseInt(row.dataset.eventId) || 0
     })).filter(c => c.name);
     try {
         const data = await apiFetch('/dues/save', {

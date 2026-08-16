@@ -345,6 +345,47 @@ def list_dues(club_name: str, month: str) -> list[dict]:
     )
 
 
+def list_club_event_registrations(club_name: str, month: str) -> list[dict]:
+    """該社社友在地區活動上的報名，供財務看板把報名費帶進社費帳單。
+
+    一個月撈兩種：那個月報的名，以及那個月舉行的活動。一場六月的年會三月就報名
+    了，執秘三月結帳看得到，六月結帳時若還沒記過帳也還看得到 —— 只綁其中一邊的
+    話，挑錯月份那筆錢就整個消失，沒有人會再想起它。已經記過帳的排除掉是上層的
+    事（看 customs 裡的 event_id），這裡只負責「誰報了哪一場」。
+
+    報名時間換算成台北時間再取月份：伺服器時區不見得是台灣，月底那幾筆會落到
+    隔壁月去。"""
+    return query(
+        """
+        SELECT r.line_user_id, r.event_id, r.course_plan,
+               to_char(r.created_at AT TIME ZONE 'Asia/Taipei', 'YYYY-MM') AS reg_month,
+               e.title, e.date, e.fee, e.golf_plans, e.type
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        JOIN personal_information p ON p.line_user_id = r.line_user_id
+        WHERE p.club_name = %s
+          AND e.scope = 'district'
+          AND (to_char(r.created_at AT TIME ZONE 'Asia/Taipei', 'YYYY-MM') = %s
+               OR to_char(e.date, 'YYYY-MM') = %s)
+        ORDER BY e.date, e.title
+        """,
+        (club_name, month, month),
+    )
+
+
+def list_dues_event_items(club_name: str) -> list[dict]:
+    """全社所有帳單裡的活動報名費項目，不分月份 —— 用來判斷某場活動是否已經記過。
+
+    範圍是整個社的歷史而不是當月：三月記過的年會報名費，六月不能再被帶入一次。
+    customs 是 JSONB，這裡先用文字篩掉沒有 event_id 的帳單，剩下的由呼叫端解析；
+    資料量是社友數 × 月份數，篩完通常只剩個位數列。"""
+    return query(
+        "SELECT line_user_id, month, customs FROM club_dues "
+        "WHERE club_name = %s AND customs::text LIKE %s",
+        (club_name, '%"event_id"%'),
+    )
+
+
 def upsert_dues(club_name: str, month: str, line_user_id: str,
                 meal: int, iou: int, customs: list) -> None:
     """Secretary sets the fee items; existing is_paid / bank_digits are preserved."""
