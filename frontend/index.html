@@ -1472,12 +1472,12 @@ function renderHomePage() {
             </div>
             <div class="p-3 flex gap-2">
                 ${!myRegisteredEvents.includes(ev.id)
-                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-pen-to-square"></i>我要報名</button>`
+                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-w-0 min-h-[44px] rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-pen-to-square"></i>我要報名</button>`
                     : needsGolfInfo(ev)
                     // 從 LINE 泡泡或執秘代報名進來的球友還沒差點，給他一個補填入口，
                     // 不然「已完成報名」之後就再也點不進報名表了。
-                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-h-[44px] rounded-lg bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-golf-ball-tee"></i>補填高球資料</button>`
-                    : `<div class="flex-1 min-h-[44px] rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[14px] flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i>已完成報名</div>`}
+                    ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-w-0 min-h-[44px] rounded-lg bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-golf-ball-tee"></i>補填高球資料</button>`
+                    : `<div class="flex-1 min-w-0 min-h-[44px] rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[14px] flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i>已完成報名</div>`}
                 ${eventPdfButtonHTML(ev)}
             </div>
         </div>`
@@ -1554,7 +1554,7 @@ function renderHomeEvents() {
             <h3 class="font-bold text-slate-900 text-[15px] leading-snug mt-1.5">${_escHtml(ev.title)}</h3>
             <p class="text-slate-500 text-[13px] mt-0.5"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${_escHtml(ev.location || '地點未定')}</p>
             <div class="flex gap-2 mt-2.5">
-                <button onclick="selectEvent(${ev.id})" class="flex-1 min-h-[44px] rounded-lg ${isCurrent ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-700'} font-bold text-[13px] flex items-center justify-center gap-1.5">
+                <button onclick="selectEvent(${ev.id})" class="flex-1 min-w-0 min-h-[44px] rounded-lg ${isCurrent ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-700'} font-bold text-[13px] flex items-center justify-center gap-1.5">
                     <i class="fa-solid fa-hand-pointer"></i>${isCurrent ? '目前選取中' : '查看與報名'}</button>
                 ${eventPdfButtonHTML(ev)}
             </div>
@@ -3567,8 +3567,8 @@ async function clickEbook(name) {
 
 // 行事曆活動卡的 PDF 鈕路由：
 //  ・例會   → 開啟本社最新社刊（openBulletinPdf）。
-//  ・其他活動 → 開啟該活動上傳到 Google Drive 的 PDF（事件的 pdf_url 欄位）。
-//  ・非例會且尚未附上 pdf_url → 顯示停用的「PDF準備中」。
+//  ・其他活動 → 公文本文、流程表各一顆，有哪份就出哪顆。
+//  ・兩份都還沒有 → 顯示停用的「流程表準備中」。
 function isRegularMeeting(ev) {
     // 只有「本社例會」連到社刊；活動內容或類型含「例會」即算（快速新增的活動可能沒填 type）。
     // 地區活動一律走各自上傳到 Drive 的 PDF。
@@ -3576,20 +3576,39 @@ function isRegularMeeting(ev) {
         && !!(ev && (((ev.type || '').includes('例會')) || ((ev.title || '').includes('例會'))));
 }
 
+// 舊後端只送一個 pdf_url，看網址就分得出是哪一份：/events/{id}/pdf 是後端產生的
+// 流程表，其他（Drive 連結）就是公文本文。後端重啟前也不會少一顆鈕。
+function eventPdfUrls(ev) {
+    const legacy = (ev && ev.pdf_url) || '';
+    const isAgendaUrl = /\/events\/\d+\/pdf$/.test(legacy);
+    return {
+        notice: (ev && ev.notice_pdf_url) || (isAgendaUrl ? '' : legacy),
+        agenda: (ev && ev.agenda_pdf_url) || (isAgendaUrl ? legacy : ''),
+    };
+}
+
 function eventPdfButtonHTML(ev) {
-    const base = 'font-bold py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center gap-1';
+    const base = 'font-bold py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1 shrink-0';
     if (isRegularMeeting(ev)) {
         return `<button onclick="event.stopPropagation(); openBulletinPdf(${ev.id})" class="bg-red-600 text-white ${base} btn-3d btn-3d-danger">
                     <i class="fa-solid fa-file-pdf"></i> PDF
                 </button>`;
     }
-    if (ev && ev.pdf_url) {
-        return `<button onclick="event.stopPropagation(); openEventPdf(${ev.id})" class="bg-red-600 text-white ${base} btn-3d btn-3d-danger">
-                    <i class="fa-solid fa-file-pdf"></i> PDF
-                </button>`;
+    const { notice, agenda } = eventPdfUrls(ev);
+    const buttons = [];
+    if (notice) {
+        buttons.push(`<button onclick="event.stopPropagation(); openNoticePdf(${ev.id})" class="bg-red-600 text-white ${base} btn-3d btn-3d-danger">
+                    <i class="fa-solid fa-file-pdf"></i> 公文
+                </button>`);
     }
+    if (agenda) {
+        buttons.push(`<button onclick="event.stopPropagation(); openEventPdf(${ev.id})" class="bg-indigo-600 text-white ${base} btn-3d btn-3d-primary">
+                    <i class="fa-solid fa-list-ol"></i> 流程表
+                </button>`);
+    }
+    if (buttons.length) return buttons.join('');
     return `<button disabled class="bg-gray-300 text-gray-400 ${base} cursor-not-allowed">
-                <i class="fa-solid fa-file-pdf"></i> PDF準備中
+                <i class="fa-solid fa-file-pdf"></i> 流程表準備中
             </button>`;
 }
 
@@ -3604,16 +3623,24 @@ function openBulletinPdf(eventId) {
     else window.open(url, '_blank');
 }
 
-// 其他活動的 PDF：以事件 id 查回 pdf_url（Google Drive 分享連結）後開啟。用 id 查表而非把
-// 網址塞進 onclick 字串，避免連結內含引號時破壞屬性。
-function openEventPdf(id) {
+// 其他活動的 PDF：以事件 id 查回網址後開啟。用 id 查表而非把網址塞進 onclick 字串，
+// 避免連結內含引號時破壞屬性。
+function openEventFile(id, which, missingMsg) {
     // 涵蓋即時資料與桌機/離線的預設樣本，兩處都找一遍才不會漏。
     const pool = [...getActiveEventsData(), ...getAllCombinedEvents()];
     const ev = pool.find(e => e.id === id);
-    const url = ev && ev.pdf_url;
-    if (!url) { showAlert('尚無 PDF', '此活動的 PDF 尚未上傳。'); return; }
+    const url = ev && eventPdfUrls(ev)[which];
+    if (!url) { showAlert('尚無檔案', missingMsg); return; }
     if (liff.isInClient()) liff.openWindow({ url, external: true });
     else window.open(url, '_blank');
+}
+
+function openEventPdf(id) {      // 流程表（議程產生的向量 PDF，或執秘上傳的檔）
+    openEventFile(id, 'agenda', '此活動的流程表尚未建立。');
+}
+
+function openNoticePdf(id) {     // 公文本文（地區網站那份 PDF）
+    openEventFile(id, 'notice', '此活動沒有附上公文。');
 }
 
 // ============================================================

@@ -1639,10 +1639,20 @@ async def events(request: Request, scope: str = ""):
     pmap = await run_in_threadpool(event_pdfs.event_pdf_map)
     stored = db.event_pdf_ids()
     can_render = agenda_pdf.font_path() is not None
-    evs = [{**e, "pdf_url": f"{APP_BASE_URL}/events/{e['id']}/pdf"}
-           if ((can_render and e.get("agenda")) or e.get("id") in stored or e.get("id") in pmap)
-           else e
-           for e in evs]
+
+    def _with_pdfs(e: dict) -> dict:
+        has_agenda_pdf = ((can_render and e.get("agenda"))
+                          or e.get("id") in stored or e.get("id") in pmap)
+        agenda_url = f"{APP_BASE_URL}/events/{e['id']}/pdf" if has_agenda_pdf else ""
+        # 兩份文件是不同的東西，活動卡要能各開各的：公文本文是地區網站那份 PDF
+        # （notices 同步時存進 pdf_url），流程表是議程產生的。以前只有一個 pdf_url，
+        # 有議程就把公文連結蓋掉，公文本文就再也點不到了。
+        return {**e,
+                "notice_pdf_url": e.get("pdf_url") or "",
+                "agenda_pdf_url": agenda_url,
+                "pdf_url": agenda_url or e.get("pdf_url") or ""}   # 舊前端只認得這個
+
+    evs = [_with_pdfs(e) for e in evs]
     # is_golf 由後端算：報名表、行事曆管理、議程編輯三處都要判斷，規則各寫一份遲早會歪。
     evs = [{**e, "is_golf": _is_golf_event(e)} for e in evs]
     return {"status": "ok", "scope": scope, "events": evs}
