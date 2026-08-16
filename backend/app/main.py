@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
     db.ensure_event_guests_table()
     db.ensure_golf_scores_table()
     db.ensure_club_dues_table()
+    db.ensure_club_dues_settings_table()
     db.ensure_event_surveys_table()
     db.ensure_event_vips_table()
     db.ensure_golf_groups_table()
@@ -1558,15 +1559,22 @@ async def golf_draw_holes(request: Request):
 
 
 # ── Club dues (社友社費) ───────────────────────────────────────────────────────
+# 沒設定過費率的社沿用這兩個數字；設定後以 club_dues_settings 的生效段落為準。
 DUES_BASE = 2100      # 常年月費
 DUES_DISTRICT = 125   # 地區分攤金
 
 
-def _dues_total(meal: int, iou: int, customs: list) -> int:
-    return DUES_BASE + DUES_DISTRICT + (meal or 0) + (iou or 0) + sum(int(c.get("amount", 0) or 0) for c in customs)
+def _dues_rates(club: str, month: str) -> tuple[int, int]:
+    """(常年月費, 地區分攤金) in force for that club that month."""
+    s = db.get_dues_settings(club, month) if club and month else None
+    return (int(s["base"]), int(s["district"])) if s else (DUES_BASE, DUES_DISTRICT)
 
 
-def _dues_payload(row: dict | None) -> dict:
+def _dues_total(meal: int, iou: int, customs: list, base: int, district: int) -> int:
+    return base + district + (meal or 0) + (iou or 0) + sum(int(c.get("amount", 0) or 0) for c in customs)
+
+
+def _dues_payload(row: dict | None, base: int = DUES_BASE, district: int = DUES_DISTRICT) -> dict:
     meal = row["meal"] if row else 0
     iou = row["iou"] if row else 0
     customs = row["customs"] if row and isinstance(row.get("customs"), list) else []
@@ -1574,8 +1582,8 @@ def _dues_payload(row: dict | None) -> dict:
         "meal": meal, "iou": iou, "customs": customs,
         "is_paid": bool(row["is_paid"]) if row else False,
         "confirmed": bool(row.get("confirmed")) if row else False,
-        "base": DUES_BASE, "district": DUES_DISTRICT,
-        "total": _dues_total(meal, iou, customs),
+        "base": base, "district": district,
+        "total": _dues_total(meal, iou, customs, base, district),
         "has_bill": bool(row and (meal or iou or customs)),
     }
 
@@ -1589,7 +1597,7 @@ async def dues_member(request: Request, club: str = "", month: str = "", uid: st
     if not club:
         club = db.get_user_club(admin_uid)
     row = db.get_dues(club, month, uid) if (month and uid) else None
-    return {"status": "ok", **_dues_payload(row)}
+    return {"status": "ok", **_dues_payload(row, *_dues_rates(club, month))}
 
 
 def _clean_dues_items(body: dict) -> tuple[int, int, list]:
@@ -1629,7 +1637,7 @@ async def dues_save(request: Request):
         return {"status": "invalid", "message": "缺少社別 / 月份 / 社友"}
     meal, iou, customs = _clean_dues_items(body)
     db.upsert_dues(club, month, uid, meal, iou, customs)
-    total = _dues_total(meal, iou, customs)
+    total = _dues_total(meal, iou, customs, *_dues_rates(club, month))
     notify = bool(body.get("notify", True))     # 預設通知，維持 LIFF 既有行為
     if notify:
         _push_dues_bill(uid, month, total)
@@ -1652,7 +1660,7 @@ async def dues_bulk_save(request: Request):
     if not (club and _valid_month(month) and uids):
         return {"status": "invalid", "message": "缺少社別 / 月份 / 社友"}
     meal, iou, customs = _clean_dues_items(body)
-    total = _dues_total(meal, iou, customs)
+    total = _dues_total(meal, iou, customs, *_dues_rates(club, month))
     notify = bool(body.get("notify", True))
     overwrite = bool(body.get("overwrite", False))
     existing = {r["line_user_id"] for r in db.list_dues(club, month)
@@ -1680,7 +1688,7 @@ async def dues_me(request: Request, month: str = ""):
     month = month or date.today().strftime("%Y-%m")
     club = db.get_user_club(uid)
     row = db.get_dues(club, month, uid)
-    return {"status": "ok", "month": month, **_dues_payload(row)}
+    return {"status": "ok", "month": month, **_dues_payload(row, *_dues_rates(club, month))}
 
 
 @app.post("/dues/pay")
@@ -1736,20 +1744,22 @@ def _dues_rows(club: str, month: str, members: list[dict]) -> list[dict]:
     in the month's takings just as much as "王大明 hasn't paid", and only this view
     can show it."""
     by_uid = {r["line_user_id"]: r for r in db.list_dues(club, month)}
+    rates = _dues_rates(club, month)     # 全社同一組費率，每個月查一次就好
     rows = []
     for m in members:
         rows.append(_dues_row(m["line_user_id"], m.get("full_name") or "",
-                              m.get("nickname") or "", by_uid.pop(m["line_user_id"], None)))
+                              m.get("nickname") or "", by_uid.pop(m["line_user_id"], None),
+                              rates=rates))
     # 有帳單、但 personal_information 裡查不到的人（已退社、資料未建）不能就這樣消失，
     # 否則看板的應收總額會對不上帳。
     for uid, row in by_uid.items():
-        rows.append(_dues_row(uid, _member_name(uid), "", row, orphan=True))
+        rows.append(_dues_row(uid, _member_name(uid), "", row, orphan=True, rates=rates))
     return rows
 
 
 def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
-              orphan: bool = False) -> dict:
-    d = _dues_payload(row)
+              orphan: bool = False, rates: tuple[int, int] = (DUES_BASE, DUES_DISTRICT)) -> dict:
+    d = _dues_payload(row, *rates)
     if not d["has_bill"]:
         status = "no_bill"
     elif d["confirmed"]:
@@ -1821,7 +1831,80 @@ async def finance_board(request: Request, month: str = ""):
             "totals": totals, "expense": expense,
             "net": totals["confirmed"] - expense["total"],
             # 帳單編輯要顯示固定的兩項，金額由後端給，前端不自己抄一份常數
-            "base": DUES_BASE, "district": DUES_DISTRICT}
+            **_rates_payload(club, month)}
+
+
+def _rates_payload(club: str, month: str) -> dict:
+    """該月適用的費率，外加它是社自訂的還是系統預設 —— 看板要講得出「這個數字
+    是哪裡來的」，否則沒人敢改。"""
+    s = db.get_dues_settings(club, month)
+    base, district = _dues_rates(club, month)
+    return {"base": base, "district": district,
+            "rates_from": s["effective_month"] if s else "",
+            "rates_default": s is None}
+
+
+@app.get("/dues/settings")
+async def dues_settings_get(request: Request, month: str = ""):
+    """月費費率設定：這個月適用哪一段，以及全部的生效歷程。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="無社費設定權限")
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    month = month if _valid_month(month) else _this_month()
+    return {"status": "ok", "club": club, "month": month,
+            "default_base": DUES_BASE, "default_district": DUES_DISTRICT,
+            "history": db.list_dues_settings(club),
+            **_rates_payload(club, month)}
+
+
+@app.post("/dues/settings")
+async def dues_settings_save(request: Request):
+    """Set the rates that apply from `effective_month` onwards.
+
+    Only forward-looking on purpose: bills already issued and paid were issued at
+    the old rate, and silently restating them would break every reconciliation
+    done to date. Correcting an earlier段 means saving that段's own month."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        return {"status": "forbidden", "message": "無社費設定權限"}
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    body = await request.json()
+    month = str(body.get("effective_month", "")).strip()
+    if not _valid_month(month):
+        return {"status": "invalid", "message": "生效月份格式需為 YYYY-MM"}
+    try:
+        base = int(body.get("base", 0) or 0)
+        district = int(body.get("district", 0) or 0)
+    except (TypeError, ValueError):
+        return {"status": "invalid", "message": "金額需為數字"}
+    if base < 0 or district < 0:
+        return {"status": "invalid", "message": "金額不可為負數"}
+    db.save_dues_settings(club, month, base, district)
+    return {"status": "ok", "effective_month": month, "base": base, "district": district,
+            "total": base + district}
+
+
+@app.post("/dues/settings/delete")
+async def dues_settings_delete(request: Request):
+    """Drop one段. The months it covered fall back to the previous段, or to the
+    system defaults when it was the only one."""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        return {"status": "forbidden", "message": "無社費設定權限"}
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    body = await request.json()
+    month = str(body.get("effective_month", "")).strip()
+    if not _valid_month(month):
+        return {"status": "invalid", "message": "生效月份格式需為 YYYY-MM"}
+    db.delete_dues_settings(club, month)
+    return {"status": "ok", "effective_month": month}
 
 
 @app.post("/finance/confirm")

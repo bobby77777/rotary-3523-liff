@@ -43,6 +43,9 @@
         <button id="btn-bulk" onclick="openBulkBill()" class="hidden bg-amber-400 hover:bg-amber-300 text-indigo-950 px-4 py-2.5 rounded font-bold text-base flex items-center gap-2 transition-colors shadow-md">
           <i data-lucide="file-plus-2" class="w-4 h-4"></i> <span id="btn-bulk-label">批次開帳單</span>
         </button>
+        <button onclick="openRates()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
+          <i data-lucide="settings-2" class="w-4 h-4"></i> 月費設定
+        </button>
         <button onclick="printSheet()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
           <i data-lucide="printer" class="w-4 h-4"></i> 下載收繳明細
         </button>
@@ -139,10 +142,12 @@
     <div class="p-5 space-y-3 overflow-y-auto">
       <p id="bill-target" class="text-[14px] text-slate-500"></p>
 
-      <!-- 固定兩項不可改：金額是地區與社章程訂的，不該在對帳時被個別調整 -->
+      <!-- 固定兩項不在這裡改：全社一致，改了要整批生效，走「月費設定」那條路 -->
       <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5 text-[15px]">
         <div class="flex justify-between text-slate-600"><span>常年月費</span><span class="font-bold tabular-nums" id="bill-base">—</span></div>
         <div class="flex justify-between text-slate-600"><span>地區分攤金</span><span class="font-bold tabular-nums" id="bill-district">—</span></div>
+        <button onclick="closeBill(); openRates();" class="text-[13px] font-bold text-indigo-600 hover:text-indigo-800">
+          這兩項全社一致 · 前往月費設定 →</button>
       </div>
 
       <div class="space-y-2">
@@ -227,6 +232,55 @@
         <button onclick="closeExpense()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">取消</button>
         <button onclick="saveExpense()" id="exp-save" class="px-4 py-2 rounded text-base font-bold bg-slate-800 hover:bg-slate-700 text-white transition-colors">儲存</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 月費設定 Modal ==================== -->
+<div id="rates-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+    <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between flex-shrink-0">
+      <span class="font-bold">月費設定</span>
+      <button onclick="closeRates()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-4 overflow-y-auto">
+      <div id="rates-current" class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[15px]"></div>
+
+      <div class="border border-slate-200 rounded-lg p-3 space-y-2">
+        <p class="text-[13px] font-bold text-slate-400">新增／修改生效段落</p>
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-[15px] font-semibold text-slate-700">生效年月起</span>
+          <input id="rate-month" type="month" onchange="renderRatesTotal()"
+            class="w-1/2 border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600">
+        </label>
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-[15px] font-semibold text-slate-700">常年月費</span>
+          <input id="rate-base" type="number" min="0" placeholder="0" onfocus="this.select()" oninput="renderRatesTotal()"
+            class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-indigo-600">
+        </label>
+        <label class="flex items-center justify-between gap-3">
+          <span class="text-[15px] font-semibold text-slate-700">地區分攤金</span>
+          <input id="rate-district" type="number" min="0" placeholder="0" onfocus="this.select()" oninput="renderRatesTotal()"
+            class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-indigo-600">
+        </label>
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-[14px] text-slate-500">每月固定合計
+            <span class="font-black text-slate-900 text-lg ml-1 tabular-nums" id="rate-total">—</span></span>
+          <button onclick="saveRates()" id="rate-save" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">儲存</button>
+        </div>
+        <p class="text-[13px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
+          <b>只影響生效月份（含）之後的帳單。</b>已經開出、社友也繳過的舊帳單金額不會被改寫 ——
+          否則過去對過的帳全部會對不回去。
+        </p>
+      </div>
+
+      <div>
+        <p class="text-[13px] font-bold text-slate-400 mb-1">生效歷程</p>
+        <div id="rates-history" class="space-y-1.5"></div>
+      </div>
+    </div>
+    <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
+      <button onclick="closeRates()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">關閉</button>
     </div>
   </div>
 </div>
@@ -354,8 +408,12 @@
     board = data;
     document.getElementById('notice').classList.add('hidden');
     document.getElementById('board').classList.remove('hidden');
+    // 副標帶上這個月適用的固定費率：金額突然變了，看板要講得出是哪一段生效。
     document.getElementById('subtitle').textContent =
-      [data.club, monthLabel(data.month)].filter(Boolean).join(' · ');
+      [data.club, monthLabel(data.month),
+       `月費固定 ${money(data.base + data.district)}`
+       + (data.rates_default ? '（預設）' : `（${monthLabel(data.rates_from)} 起）`)]
+      .filter(Boolean).join(' · ');
     renderCards();
     renderBalance();
     renderFilters();
@@ -748,6 +806,125 @@
   }
 
   function closeExpense() { hideModal('expense-modal'); }
+
+  // ==================== 月費設定 ====================
+  // 常年月費／地區分攤金全社一致，改動一定是「從某月起」，所以編輯的單位是
+  // 生效段落而不是單一數字 —— 直接改一個全域值會把過去開過的帳單金額也一起改掉。
+  let rates = null;
+
+  async function openRates() {
+    document.getElementById('rates-current').innerHTML =
+      `<p class="text-[14px] text-slate-400">載入中…</p>`;
+    document.getElementById('rates-history').innerHTML = '';
+    showModal('rates-modal');
+    try {
+      rates = await apiFetch('/dues/settings?month=' + encodeURIComponent(activeMonth));
+    } catch (e) {
+      document.getElementById('rates-current').innerHTML =
+        `<p class="text-[14px] text-rose-500">載入失敗：${esc(e.message)}</p>`;
+      return;
+    }
+    if (rates.status !== 'ok') {
+      document.getElementById('rates-current').innerHTML =
+        `<p class="text-[14px] text-rose-500">${esc(rates.message || '載入失敗')}</p>`;
+      return;
+    }
+    // 表單預填目前適用的金額，改一個數字就能開新段落，不必重打
+    document.getElementById('rate-month').value = activeMonth;
+    document.getElementById('rate-base').value = rates.base;
+    document.getElementById('rate-district').value = rates.district;
+    renderRatesCurrent();
+    renderRatesHistory();
+    renderRatesTotal();
+    lucide.createIcons();
+  }
+
+  function renderRatesCurrent() {
+    const src = rates.rates_default
+      ? `<span class="text-slate-400">系統預設（本社尚未設定過）</span>`
+      : `自 <b>${esc(monthLabel(rates.rates_from))}</b> 起生效`;
+    document.getElementById('rates-current').innerHTML = `
+      <p class="text-[13px] font-bold text-slate-400 mb-1">${esc(monthLabel(rates.month))}適用</p>
+      <div class="flex justify-between text-slate-600"><span>常年月費</span><span class="font-bold tabular-nums">${money(rates.base)}</span></div>
+      <div class="flex justify-between text-slate-600"><span>地區分攤金</span><span class="font-bold tabular-nums">${money(rates.district)}</span></div>
+      <div class="flex justify-between text-slate-900 border-t border-slate-200 mt-1.5 pt-1.5">
+        <span class="font-bold">每月固定合計</span><span class="font-black tabular-nums">${money(rates.base + rates.district)}</span></div>
+      <p class="text-[13px] text-slate-500 mt-1.5">${src}</p>`;
+  }
+
+  function renderRatesHistory() {
+    const el = document.getElementById('rates-history');
+    if (!rates.history.length) {
+      el.innerHTML = `<p class="text-[13px] text-slate-400 italic py-2">尚未設定過，目前使用系統預設
+        ${money(rates.default_base)} + ${money(rates.default_district)}。</p>`;
+      return;
+    }
+    el.innerHTML = rates.history.map(h => {
+      const active = h.effective_month === rates.rates_from;
+      return `
+      <div class="flex items-center justify-between gap-2 border rounded-lg px-3 py-2 ${active ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200'}">
+        <div class="min-w-0">
+          <p class="text-[14px] font-bold text-slate-800">${esc(monthLabel(h.effective_month))} 起
+            ${active ? '<span class="text-[12px] font-black text-indigo-600 ml-1">適用中</span>' : ''}</p>
+          <p class="text-[13px] text-slate-500">${money(h.base)} ＋ ${money(h.district)} ＝ <b>${money(h.base + h.district)}</b></p>
+        </div>
+        <button onclick="deleteRate('${esc(h.effective_month)}')" title="刪除這一段"
+          class="text-slate-300 hover:text-rose-600 p-1 transition-colors flex-shrink-0">
+          <i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      </div>`;
+    }).join('');
+  }
+
+  function renderRatesTotal() {
+    const base = parseInt(document.getElementById('rate-base').value) || 0;
+    const district = parseInt(document.getElementById('rate-district').value) || 0;
+    document.getElementById('rate-total').textContent = money(base + district);
+  }
+
+  async function saveRates() {
+    const month = document.getElementById('rate-month').value;
+    const base = parseInt(document.getElementById('rate-base').value) || 0;
+    const district = parseInt(document.getElementById('rate-district').value) || 0;
+    if (!/^\d{4}-\d{2}$/.test(month)) { alert('請選擇生效年月。'); return; }
+    if (!confirm(`自 ${monthLabel(month)} 起，每月固定收 ${money(base + district)}`
+      + `（常年月費 ${money(base)} ＋ 地區分攤金 ${money(district)}）。\n\n`
+      + `${monthLabel(month)} 之前的帳單不受影響。確定儲存？`)) return;
+    const btn = document.getElementById('rate-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const data = await apiFetch('/dues/settings', {
+        method: 'POST',
+        body: JSON.stringify({ effective_month: month, base, district }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      await openRates();       // 重讀，歷程與「適用中」才會跟著更新
+      await loadBoard();       // 應收總額會跟著費率變
+      loadTrend();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '儲存';
+    }
+  }
+
+  async function deleteRate(month) {
+    if (!confirm(`刪除「${monthLabel(month)} 起」這一段？\n\n`
+      + `這段涵蓋的月份會改用前一段的費率，若沒有前一段則回到系統預設。`)) return;
+    try {
+      const data = await apiFetch('/dues/settings/delete', {
+        method: 'POST',
+        body: JSON.stringify({ effective_month: month }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '刪除失敗'); return; }
+      await openRates();
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('刪除失敗：' + e.message);
+    }
+  }
+
+  function closeRates() { hideModal('rates-modal'); }
 
   function showModal(id) {
     const m = document.getElementById(id);

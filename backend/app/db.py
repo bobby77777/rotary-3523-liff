@@ -399,6 +399,66 @@ def confirm_dues(club_name: str, month: str, line_user_id: str, confirmed: bool)
     )
 
 
+# ── 月費費率（常年月費 / 地區分攤金） ──────────────────────────────────────────
+# 這兩筆由社章程與地區訂，全社一致，所以不存在每張帳單裡。但它們會變（換年度、
+# 地區調整分攤金），而且必須「從某個月起」才變：直接改一個全域數字的話，過去
+# 每一張已開立、社友也繳過的帳單金額都會跟著改，帳就對不回去了。因此存成一段
+# 段生效期間，某個月適用的就是「生效月份 <= 該月」之中最新的那一段。
+
+def ensure_club_dues_settings_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS club_dues_settings (
+            club_name       TEXT NOT NULL,
+            effective_month TEXT NOT NULL,
+            base            INTEGER NOT NULL DEFAULT 0,
+            district        INTEGER NOT NULL DEFAULT 0,
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (club_name, effective_month)
+        )
+    """)
+
+
+def get_dues_settings(club_name: str, month: str) -> dict | None:
+    """The rates in force for `month` — None means no社 setting, use the defaults.
+
+    "YYYY-MM" sorts the same as chronological order, so a plain string compare
+    picks the right段 without any date parsing."""
+    rows = query(
+        "SELECT effective_month, base, district FROM club_dues_settings "
+        "WHERE club_name = %s AND effective_month <= %s "
+        "ORDER BY effective_month DESC LIMIT 1",
+        (club_name, month),
+    )
+    return rows[0] if rows else None
+
+
+def list_dues_settings(club_name: str) -> list[dict]:
+    return query(
+        "SELECT effective_month, base, district, updated_at FROM club_dues_settings "
+        "WHERE club_name = %s ORDER BY effective_month DESC",
+        (club_name,),
+    )
+
+
+def save_dues_settings(club_name: str, effective_month: str, base: int, district: int) -> None:
+    execute(
+        """
+        INSERT INTO club_dues_settings (club_name, effective_month, base, district, updated_at)
+        VALUES (%s, %s, %s, %s, NOW())
+        ON CONFLICT (club_name, effective_month) DO UPDATE SET
+            base = EXCLUDED.base,
+            district = EXCLUDED.district,
+            updated_at = NOW()
+        """,
+        (club_name, effective_month, base, district),
+    )
+
+
+def delete_dues_settings(club_name: str, effective_month: str) -> None:
+    execute("DELETE FROM club_dues_settings WHERE club_name = %s AND effective_month = %s",
+            (club_name, effective_month))
+
+
 def ensure_golf_scores_table() -> None:
     execute("""
         CREATE TABLE IF NOT EXISTS golf_scores (
