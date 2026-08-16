@@ -2933,7 +2933,7 @@ async function openMyDuesModal() {
     let html = `<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-4">
         <div class="px-4 py-2 bg-gray-100 border-b border-gray-200"><span class="font-bold text-gray-700 text-xs">${ym[0]}年 ${parseInt(ym[1])}月 應繳明細</span></div>
         <div class="p-3 space-y-2 text-xs">
-            ${line('長年月費', d.base, 'text-gray-600')}
+            ${line('常年月費', d.base, 'text-gray-600')}
             ${line('地區分攤金', d.district, 'text-gray-600')}
             ${d.meal > 0 ? line('例會餐費', d.meal, 'text-pink-700') : ''}
             ${d.iou > 0 ? line('例會 IOU', d.iou, 'text-pink-700') : ''}
