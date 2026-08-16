@@ -1,7 +1,8 @@
 """Sync 【公文】 (official-notice) posts from the district website into the calendar.
 
-The district publishes every notice as a WordPress post under the 地區活動
-(/category/events/) section; the ones whose title starts with 【公文】 are the
+The district publishes every notice as a WordPress post under the 最新消息
+(/category/news/) section — 公文 is a child category of it; the ones whose title
+starts with 【公文】 are the
 official letters (聯席會、研習會、就職典禮、年會…). This module pulls those posts
 through the WordPress REST API, reads the real event date/location/fee out of the
 PDF each post links to on Google Drive, and files them into the district calendar
@@ -34,7 +35,9 @@ from .config import OPENAI_API_KEY
 logger = logging.getLogger(__name__)
 
 WP_BASE = "https://ri3523.org/wp-json/wp/v2"
-_EVENTS_CATEGORY_SLUG = "events"     # 地區活動 archive shown at /category/events/
+# 公文貼在 最新消息（/category/news/）底下的「公文」子分類。地區活動
+# （/category/events/）那邊只剩兩篇舊文，抓那裡等於抓不到新公文。
+_NOTICE_CATEGORY_SLUG = "news"       # 最新消息 archive shown at /category/news/
 _UA = {"User-Agent": "rotary-3523-liff notices sync"}
 # Drive serves the folder page (and its embedded file list) only to browser-ish
 # clients, so the anonymous PDF route needs a browser UA.
@@ -54,10 +57,10 @@ def _get(path: str, params: dict) -> list | dict | None:
         return None
 
 
-def _events_category_ids() -> list[int]:
-    """The 地區活動 archive aggregates its child categories (研習會、聯席會…), so we
-    collect the parent plus every child — that mirrors what /category/events/ shows."""
-    cats = _get("categories", {"slug": _EVENTS_CATEGORY_SLUG, "_fields": "id"})
+def _notice_category_ids() -> list[int]:
+    """The 最新消息 archive aggregates its child categories (公文、其他消息), so we
+    collect the parent plus every child — that mirrors what /category/news/ shows."""
+    cats = _get("categories", {"slug": _NOTICE_CATEGORY_SLUG, "_fields": "id"})
     if not isinstance(cats, list) or not cats:
         return []
     parent = cats[0]["id"]
@@ -82,8 +85,8 @@ def _drive_url(content_html: str) -> str:
 
 
 def fetch_notice_posts() -> list[dict]:
-    """Every 【公文】 post in the events archive, newest first."""
-    cat_ids = _events_category_ids()
+    """Every 【公文】 post in the 最新消息 archive, newest first."""
+    cat_ids = _notice_category_ids()
     if not cat_ids:
         return []
     posts: list[dict] = []
