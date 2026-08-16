@@ -1760,7 +1760,7 @@ async def admin_sync_notices(request: Request):
 
 # 個人基本資料：社別、中文名、Nickname、葷素。少了這些，報名名單、桌次、頒獎查詢
 # 都對不到人，所以第一次進 LIFF 就要填。
-_DIET_TYPES = ("葷食", "素食")
+_DIET_TYPES = ("葷食", "素食", "海鮮素")
 _PROFILE_KEYS = ("club", "full_name", "nickname", "diet_type")
 
 

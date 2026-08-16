@@ -86,11 +86,12 @@
       <label for="nickname">Nickname <span style="color:#e53e3e">*</span></label>
       <input id="nickname" name="nickname" type="text" placeholder="PP Kevin" required value="{{ values.nickname }}" />
 
-      <label for="diet_type">葷食/素食 <span style="color:#e53e3e">*</span></label>
+      <label for="diet_type">飲食習慣 <span style="color:#e53e3e">*</span></label>
       <select id="diet_type" name="diet_type" required>
         <option value="" disabled {% if not values.diet_type %}selected{% endif %}>請選擇</option>
         <option value="葷食" {% if values.diet_type == '葷食' %}selected{% endif %}>葷食</option>
         <option value="素食" {% if values.diet_type == '素食' %}selected{% endif %}>素食</option>
+        <option value="海鮮素" {% if values.diet_type == '海鮮素' %}selected{% endif %}>海鮮素</option>
       </select>
 
       <button type="submit">送出</button>
