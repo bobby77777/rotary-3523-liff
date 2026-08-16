@@ -3857,13 +3857,40 @@ async function saveEventForm() {
         showAlert('座標格式錯誤', '會場座標請填「緯度,經度」，例如 25.0785,121.5262。'); return;
     }
     try {
-        if (id) await apiFetch('/admin/events/' + id, { method: 'PUT', body: JSON.stringify(payload) });
-        else await apiFetch('/admin/events', { method: 'POST', body: JSON.stringify(payload) });
+        let saved;
+        if (id) saved = await apiFetch('/admin/events/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+        else saved = await apiFetch('/admin/events', { method: 'POST', body: JSON.stringify(payload) });
         await loadEvents(payload.scope);    // refresh the app's calendar cache
         closeEventForm();
         loadEventAdminList();
+        await offerDuesBackfill(saved?.event, payload);
     } catch (e) {
         showAlert('儲存失敗', e.message);
+    }
+}
+
+// 剛設好每人報名費的活動，多半早就有人報名了——那些人是在這個欄位存在之前報的，
+// 報名當下沒有東西可以收，不補一次就永遠收不到。存檔後直接問，因為這是執秘唯一
+// 會想起這件事的時機。
+async function offerDuesBackfill(ev, payload) {
+    const amount = parseInt(payload.fee_amount, 10);
+    if (payload.scope !== 'district' || !Number.isFinite(amount) || amount <= 0) return;
+    const eid = ev?.id || document.getElementById('event-form-id').value;
+    if (!eid) return;
+    if (!confirm(`已儲存。\n\n要把這場活動的報名費補記到「已經報名」的社友本月社費嗎？\n`
+        + `之後才報名的人會自動記帳，不需要再補。\n\n`
+        + `已經記過帳的人會自動略過，不會重複收。`)) return;
+    try {
+        const r = await apiFetch(`/admin/events/${eid}/link_dues`, {
+            method: 'POST', body: JSON.stringify({ notify: true }),
+        });
+        if (r.status !== 'ok') { showAlert('補記失敗', r.message || '請稍後再試。'); return; }
+        showAlert('補記完成',
+            `${r.event_title}\n\n補記 ${r.charged} 位，共 NT$ ${Number(r.total).toLocaleString()}`
+            + (r.skipped ? `\n略過 ${r.skipped} 位（已記過帳或無社別）` : '')
+            + (r.charged ? '\n\n已用 LINE 通知這些社友。' : ''));
+    } catch (e) {
+        showAlert('補記失敗', e.message);
     }
 }
 
