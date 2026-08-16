@@ -2358,7 +2358,7 @@ async def payment_report(request: Request):
     else:
         note = f"✅ 報名成功：{ev['title']}\n{ev['date']}（{ev['weekday']}）{ev['time']}　{ev['location']}"
         note += (f"\n匯款末 5 碼：{digits}（待對帳）" if digits
-                 else "\n完成匯款後請至「個人中心 → 回報匯款」補填末 5 碼。")
+                 else "\n完成匯款後請至「個人中心 → 提供匯款帳號」補填末 5 碼。")
     if plan is not None:
         note += f"\n⛳️ 球場方案：{_plan_summary(ev, plan)}"
     if handicap is not None:
@@ -2522,7 +2522,7 @@ async def admin_unpaid_remind(request: Request):
     if not targets:
         return {"status": "none_unpaid", "reminded": 0}
     text = (f"🔔 繳費提醒\n\n【{ev['title']}】\n{ev['date']}（{ev['weekday']}）　{ev['location']}\n"
-            f"費用：{ev['fee']}\n\n完成匯款後請至 LIFF「個人中心 → 回報匯款」填寫帳號末 5 碼，"
+            f"費用：{ev['fee']}\n\n完成匯款後請至 LIFF「個人中心 → 提供匯款帳號」填寫帳號末 5 碼，"
             "秘書處才能完成對帳。")
     sent = 0
     for r in targets:

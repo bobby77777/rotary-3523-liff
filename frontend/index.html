@@ -297,7 +297,7 @@
 <div id="modal-payment-info" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
         <div class="px-6 py-4 bg-gradient-to-r from-teal-800 to-emerald-700 flex justify-between items-center">
-            <div class="flex items-center gap-2 text-white"><i class="fa-solid fa-money-check-dollar text-yellow-300"></i><h3 class="font-bold text-base">回報匯款資訊</h3></div>
+            <div class="flex items-center gap-2 text-white"><i class="fa-solid fa-money-check-dollar text-yellow-300"></i><h3 class="font-bold text-base">提供匯款帳號</h3></div>
             <button onclick="closeModal('modal-payment-info')" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
         </div>
         <div class="p-6 flex flex-col space-y-4 bg-slate-50">
@@ -1753,7 +1753,7 @@ function renderProfilePage() {
         <div>
             <p class="section-title">繳費與出席</p>
             <div class="card divide-y divide-slate-100 overflow-hidden">
-                ${row("openModal('modal-payment-info')", 'fa-money-check-dollar', 'bg-teal-100 text-teal-600', '回報匯款', '填寫帳號末 5 碼供秘書處對帳')}
+                ${row("openModal('modal-payment-info')", 'fa-money-check-dollar', 'bg-teal-100 text-teal-600', '提供匯款帳號', '填寫帳號末 5 碼供秘書處對帳')}
                 ${systemScope === 'club' ? row('openMyDuesModal()', 'fa-file-invoice-dollar', 'bg-rose-100 text-rose-600', '本月社費', '查看帳單與回報繳款') : ''}
                 ${systemScope === 'club' ? row("openAttendanceModal('me')", 'fa-id-card-clip', 'bg-emerald-100 text-emerald-600', '我的出席累計', '') : ''}
             </div>
@@ -3232,7 +3232,7 @@ async function confirmRegistration() {
         if (data.course_plan_label) msg += `\n球場方案：${data.course_plan_label}`;
         if (data.handicap != null) msg += `\n您的差點 HDCP：${data.handicap}`;
         msg += digits ? `\n轉出末 5 碼：${digits}（待秘書處對帳）`
-                      : '\n\n尚未提供帳號末 5 碼，完成匯款後請至「個人 → 回報匯款」補填。';
+                      : '\n\n尚未提供帳號末 5 碼，完成匯款後請至「個人 → 提供匯款帳號」補填。';
         showAlert(data.was_registered ? '✅ 報名資料已更新' : '🎉 報名成功', msg);
         renderPage(activeTab);
         // 不用 liff.sendMessages 回報名結果：那會用「社友本人」的身分在聊天室發話，
