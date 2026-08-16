@@ -41,7 +41,7 @@
         <select id="month-selector" onchange="selectMonth(this.value)"
           class="bg-indigo-900 border border-indigo-800 text-white text-base rounded p-2.5 outline-none cursor-pointer shadow-sm min-w-[10rem]"></select>
         <button id="btn-bulk" onclick="openBulkBill()" class="hidden bg-amber-400 hover:bg-amber-300 text-indigo-950 px-4 py-2.5 rounded font-bold text-base flex items-center gap-2 transition-colors shadow-md">
-          <i data-lucide="file-plus-2" class="w-4 h-4"></i> <span id="btn-bulk-label">批次開帳單</span>
+          <i data-lucide="file-plus-2" class="w-4 h-4"></i> <span id="btn-bulk-label">批次記帳</span>
         </button>
         <button onclick="openRates()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
           <i data-lucide="settings-2" class="w-4 h-4"></i> 月費設定
@@ -64,18 +64,18 @@
           <div id="cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
           <div class="mt-3 bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-[14px] font-bold text-slate-500">收繳進度（以已收訖計）</span>
+              <span class="text-[14px] font-bold text-slate-500">收繳進度（以已繳計）</span>
               <span class="text-[14px] font-black text-slate-800" id="rate-label">—</span>
             </div>
-            <!-- 三段長條：已收訖 / 待對帳 / 未繳，一眼看出錢卡在哪一段 -->
+            <!-- 三段長條：已繳 / 待對帳 / 未繳，一眼看出錢卡在哪一段 -->
             <div class="h-3 w-full rounded-full bg-slate-100 overflow-hidden flex">
               <div id="bar-confirmed" class="h-full bg-emerald-500" style="width:0%"></div>
               <div id="bar-reported"  class="h-full bg-amber-400"   style="width:0%"></div>
             </div>
             <div class="flex flex-wrap gap-4 mt-2 text-[13px] text-slate-500">
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>已收訖</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>已繳</span>
               <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>待對帳</span>
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-slate-200"></span>未繳／未開帳單</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-slate-200"></span>未繳</span>
             </div>
           </div>
         </div>
@@ -332,13 +332,14 @@
   let me = { is_admin: false, club: '' };
   let board = null;            // /finance/board 回來的整包
   let activeMonth = '';
-  let filter = 'all';          // 明細表的篩選：all / unpaid / reported / confirmed / no_bill
+  let filter = 'all';          // 明細表的篩選：all / unpaid / reported / confirmed
 
+  // 錢收到哪一步就三種：未繳 → 待對帳 → 已繳。「還沒登餐費」不是狀態，
+  // 那種人一樣要繳固定月費，就是未繳。
   const STATUS = {
-    confirmed: { label: '已收訖', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    confirmed: { label: '已繳',   cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
     reported:  { label: '待對帳', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
     unpaid:    { label: '未繳',   cls: 'bg-rose-100 text-rose-700 border-rose-200' },
-    no_bill:   { label: '未開帳單', cls: 'bg-slate-100 text-slate-500 border-slate-200' },
   };
 
   function esc(v) {
@@ -431,11 +432,11 @@
         <p class="text-[13px] text-slate-400 mt-0.5">${sub}</p>
       </div>`;
     document.getElementById('cards').innerHTML = [
-      card('應收（已開帳單）', t.expected, `${t.billed} / ${t.members} 位社友已開帳單`, 'text-slate-800'),
-      card('已收訖', t.confirmed, `${t.confirmed_count} 位已對帳`, 'text-emerald-700'),
+      card('應收', t.expected, `${t.members} 位社友`
+        + (t.no_bill ? `（${t.no_bill} 位僅固定月費）` : ''), 'text-slate-800'),
+      card('已繳', t.confirmed, `${t.confirmed_count} 位已對帳`, 'text-emerald-700'),
       card('待對帳', t.reported, `${t.reported_count} 位已回報匯款`, 'text-amber-600'),
-      card('未繳', t.outstanding, `${t.unpaid_count} 位未回報`
-        + (t.no_bill ? `，另有 ${t.no_bill} 位未開帳單` : ''), 'text-rose-600'),
+      card('未繳', t.outstanding, `${t.unpaid_count} 位尚未回報`, 'text-rose-600'),
     ].join('');
 
     const pct = v => t.expected ? (v / t.expected * 100).toFixed(1) + '%' : '0%';
@@ -446,7 +447,7 @@
 
     // 還沒開帳單的人才是這個月最該處理的事，按鈕就只在有人沒開時出現。
     document.getElementById('btn-bulk').classList.toggle('hidden', t.no_bill === 0);
-    document.getElementById('btn-bulk-label').textContent = `批次開帳單（${t.no_bill}）`;
+    document.getElementById('btn-bulk-label').textContent = `批次記帳（${t.no_bill}）`;
   }
 
   function renderBalance() {
@@ -458,7 +459,7 @@
       </div>`;
     const net = board.net;
     document.getElementById('balance').innerHTML = `
-      ${line('社費收入（已收訖）', t.confirmed, 'text-emerald-700', true)}
+      ${line('社費收入（已繳）', t.confirmed, 'text-emerald-700', true)}
       <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
       ${line('場地租金', e.rent)}
       ${line('人事薪資', e.salary)}
@@ -513,8 +514,7 @@
       ['all', '全部', t.members],
       ['unpaid', '未繳', t.unpaid_count],
       ['reported', '待對帳', t.reported_count],
-      ['confirmed', '已收訖', t.confirmed_count],
-      ['no_bill', '未開帳單', t.no_bill],
+      ['confirmed', '已繳', t.confirmed_count],
     ];
     document.getElementById('filters').innerHTML = chips.map(([key, label, n]) => `
       <button onclick="setFilter('${key}')"
@@ -559,9 +559,9 @@
           ${r.nickname ? `<span class="text-slate-400 text-[14px]">（${esc(r.nickname)}）</span>` : ''}
           ${r.orphan ? `<span class="ml-1 text-[12px] text-amber-600" title="有帳單，但社友名冊查不到這個人">名冊外</span>` : ''}
         </td>
-        <td class="px-4 py-2.5 text-right font-bold tabular-nums ${r.has_bill ? 'text-slate-800' : 'text-slate-300'}">
-          ${r.has_bill ? money(r.total) : '—'}</td>
-        <td class="px-4 py-2.5 text-[13px] text-slate-500">${items.length ? esc(items.join('、')) : '—'}</td>
+        <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800">${money(r.total)}</td>
+        <td class="px-4 py-2.5 text-[13px] text-slate-500">
+          ${items.length ? esc(items.join('、')) : '<span class="text-slate-400">僅固定月費</span>'}</td>
         <td class="px-4 py-2.5 text-center">
           <span class="px-2 py-0.5 rounded text-[13px] font-black border ${s.cls}">${s.label}</span></td>
         <td class="px-4 py-2.5 text-center text-[14px] tracking-widest text-slate-500">${esc(r.bank_digits) || '—'}</td>
@@ -569,8 +569,9 @@
       </tr>`;
   }
 
+  // 每位社友都可以標記已收 —— 只有固定月費的人也會繳錢，後端會在對帳時
+  // 幫他補一列空明細。
   function confirmBtn(r) {
-    if (!r.has_bill) return `<span class="text-[13px] text-slate-300">—</span>`;
     const stop = 'event.stopPropagation();';   // 不要順手把帳單編輯也打開
     return r.confirmed
       ? `<button onclick="${stop} setConfirmed('${r.uid}', false)" title="取消對帳（社友自己回報的繳款紀錄會保留）"
@@ -582,7 +583,7 @@
   async function setConfirmed(uid, confirmed) {
     const r = board.members.find(m => m.uid === uid);
     if (!r) return;
-    if (confirmed && !confirm(`確定將「${r.name}」${monthLabel(activeMonth)}的 ${money(r.total)} 標記為已收訖？\n本人會收到 LINE 對帳完成通知。`)) return;
+    if (confirmed && !confirm(`確定將「${r.name}」${monthLabel(activeMonth)}的 ${money(r.total)} 標記為已繳？\n本人會收到 LINE 對帳完成通知。`)) return;
     try {
       const data = await apiFetch('/finance/confirm', {
         method: 'POST',
@@ -607,7 +608,7 @@
     if (!r) return;
     editingUid = uid;
     billTargets = null;
-    document.getElementById('bill-title').textContent = r.has_bill ? '編輯帳單' : '產出帳單';
+    document.getElementById('bill-title').textContent = r.has_bill ? '編輯帳單' : '新增費用明細';
     document.getElementById('bill-target').innerHTML =
       `<b>${esc(r.name)}</b>${r.nickname ? '（' + esc(r.nickname) + '）' : ''}　${esc(monthLabel(activeMonth))}`
       + (r.confirmed ? `<span class="text-emerald-600 font-bold">　· 已對帳，改金額請記得重新確認</span>` : '');
@@ -618,14 +619,14 @@
   }
 
   function openBulkBill() {
-    const pending = board.members.filter(m => m.status === 'no_bill');
-    if (!pending.length) { alert('這個月每位社友都已經開過帳單了。'); return; }
+    const pending = board.members.filter(m => !m.has_bill);
+    if (!pending.length) { alert('這個月每位社友都已經登過費用明細了。'); return; }
     editingUid = null;
     billTargets = pending.map(m => m.uid);
-    document.getElementById('bill-title').textContent = '批次開帳單';
+    document.getElementById('bill-title').textContent = '批次記帳';
     document.getElementById('bill-target').innerHTML =
-      `將替 <b>${pending.length} 位尚未開帳單</b>的社友建立 ${esc(monthLabel(activeMonth))} 的帳單，金額相同。`
-      + `<br><span class="text-slate-400">已經開過帳單的社友不受影響。個別差異（餐費、IOU）開完之後再逐筆調整。</span>`;
+      `將替 <b>${pending.length} 位還沒登過費用明細</b>的社友一次記上 ${esc(monthLabel(activeMonth))} 的餐費／IOU，金額相同。`
+      + `<br><span class="text-slate-400">已經登過的社友不受影響。個別差異開完之後再逐筆調整。</span>`;
     document.getElementById('bill-notify').checked = true;
     fillBillForm(0, 0, []);
     showModal('bill-modal');
@@ -700,7 +701,7 @@
       closeBill();
       await loadBoard();
       loadTrend();
-      if (bulk) alert(`已開出 ${data.saved} 張帳單，每張 ${money(data.total)}。`
+      if (bulk) alert(`已替 ${data.saved} 位社友記帳，每位 ${money(data.total)}。`
         + (data.skipped ? `\n（${data.skipped} 位已有帳單，未更動）` : '')
         + (data.notified ? '\n已用 LINE 通知這些社友。' : ''));
     } catch (e) {
@@ -947,7 +948,7 @@
 
         <table style="width:100%; border-collapse:collapse; margin-bottom:12pt; font-size:10pt;">
           <tr style="background:#f1f5f9;">
-            <th style="${cell} text-align:left;">應收</th><th style="${cell} text-align:left;">已收訖</th>
+            <th style="${cell} text-align:left;">應收</th><th style="${cell} text-align:left;">已繳</th>
             <th style="${cell} text-align:left;">待對帳</th><th style="${cell} text-align:left;">未繳</th>
             <th style="${cell} text-align:left;">收繳率</th>
           </tr>

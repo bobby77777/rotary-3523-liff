@@ -1759,18 +1759,16 @@ def _dues_rows(club: str, month: str, members: list[dict]) -> list[dict]:
 
 def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
               orphan: bool = False, rates: tuple[int, int] = (DUES_BASE, DUES_DISTRICT)) -> dict:
+    """狀態只看錢收到哪一步：未繳 → 待對帳 → 已繳。
+
+    沒有費用明細的社友一樣是「未繳」，金額算固定月費 —— 常年月費與地區分攤金
+    每個月都要收，執秘還沒記到餐費／IOU 不代表這個人這個月不用繳。has_bill 留
+    著只是給「批次記帳」找出誰還沒登過變動費用，不再是一種狀態。"""
     d = _dues_payload(row, *rates)
-    if not d["has_bill"]:
-        status = "no_bill"
-    elif d["confirmed"]:
-        status = "confirmed"
-    elif d["is_paid"]:
-        status = "reported"
-    else:
-        status = "unpaid"
+    status = "confirmed" if d["confirmed"] else ("reported" if d["is_paid"] else "unpaid")
     return {
         "uid": uid, "name": name or "（未建資料）", "nickname": nickname,
-        "has_bill": d["has_bill"], "total": d["total"] if d["has_bill"] else 0,
+        "has_bill": d["has_bill"], "total": d["total"],
         "meal": d["meal"], "iou": d["iou"], "customs": d["customs"],
         "is_paid": d["is_paid"], "confirmed": d["confirmed"],
         "bank_digits": (row or {}).get("bank_digits") or "",
@@ -1779,19 +1777,20 @@ def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
 
 
 def _dues_totals(rows: list[dict]) -> dict:
-    """應收 = 已開帳單的總額。收繳率看的是「已收訖」，社友自己回報的還沒進帳。"""
-    billed = [r for r in rows if r["has_bill"]]
-    expected = sum(r["total"] for r in billed)
-    confirmed = sum(r["total"] for r in billed if r["confirmed"])
-    reported = sum(r["total"] for r in billed if r["is_paid"] and not r["confirmed"])
+    """應收 = 全社每個人的應繳，含只有固定月費的人。收繳率看的是「已繳」，
+    社友自己回報但執秘還沒對到的錢還沒真的進帳。"""
+    expected = sum(r["total"] for r in rows)
+    confirmed = sum(r["total"] for r in rows if r["confirmed"])
+    reported = sum(r["total"] for r in rows if r["is_paid"] and not r["confirmed"])
     return {
-        "members": len(rows), "billed": len(billed),
-        "no_bill": len(rows) - len(billed),
+        "members": len(rows),
+        # 還沒登過餐費／IOU 的人數：不是狀態，是「批次記帳」的對象
+        "no_bill": sum(1 for r in rows if not r["has_bill"]),
         "expected": expected, "confirmed": confirmed, "reported": reported,
         "outstanding": expected - confirmed - reported,
-        "confirmed_count": sum(1 for r in billed if r["confirmed"]),
-        "reported_count": sum(1 for r in billed if r["is_paid"] and not r["confirmed"]),
-        "unpaid_count": sum(1 for r in billed if not r["is_paid"]),
+        "confirmed_count": sum(1 for r in rows if r["confirmed"]),
+        "reported_count": sum(1 for r in rows if r["is_paid"] and not r["confirmed"]),
+        "unpaid_count": sum(1 for r in rows if not r["is_paid"]),
         "rate": round(confirmed / expected * 100) if expected else 0,
     }
 
@@ -1823,8 +1822,7 @@ async def finance_board(request: Request, month: str = ""):
         return {"status": "no_club", "message": "找不到您的社別"}
     month = month if _valid_month(month) else _this_month()
     rows = _dues_rows(club, month, db.get_club_members(club))
-    rows.sort(key=lambda r: (["unpaid", "reported", "no_bill", "confirmed"].index(r["status"]),
-                             r["name"]))
+    rows.sort(key=lambda r: (["unpaid", "reported", "confirmed"].index(r["status"]), r["name"]))
     totals = _dues_totals(rows)
     expense = _expense_summary(db.get_club_finance(club, month))
     return {"status": "ok", "club": club, "month": month, "members": rows,
@@ -1920,8 +1918,10 @@ async def finance_confirm(request: Request):
         return {"status": "invalid", "message": "缺少月份或社友"}
     confirmed = bool(body.get("confirmed", True))
     club = db.get_user_club(admin_uid)
+    # 只有固定月費、還沒登過餐費／IOU 的社友也會繳錢，看板上他就是「未繳」。
+    # 這種人還沒有 club_dues 那一列，先補一列空的明細，才有東西可以標記已收。
     if not db.get_dues(club, month, uid):
-        return {"status": "invalid", "message": "該社友本月尚無帳單，請先產出帳單"}
+        db.upsert_dues(club, month, uid, 0, 0, [])
     db.confirm_dues(club, month, uid, confirmed)
     if confirmed:
         try:
