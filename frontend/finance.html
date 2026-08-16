@@ -113,13 +113,16 @@
             <div id="filters" class="flex flex-wrap gap-1.5"></div>
           </div>
           <div class="overflow-x-auto">
-            <!-- 字放大後六欄需要更多寬度，min-w 一起放大，手機上照樣橫向捲動 -->
-            <table class="w-full text-base min-w-[54rem]">
+            <!-- 字放大後六欄需要更多寬度，min-w 一起放大，手機上照樣橫向捲動。
+                 除了「明細」以外每一欄都 whitespace-nowrap：中文可以逐字斷行，
+                 欄寬一不夠瀏覽器就把「標記已收」排成直的，看起來像壞掉。寧可
+                 整張表橫向捲動，也不要把欄位擠成直書。 -->
+            <table class="w-full text-base min-w-[60rem]">
               <thead>
-                <tr class="bg-slate-100 text-slate-500 text-[13px]">
+                <tr class="bg-slate-100 text-slate-500 text-[13px] whitespace-nowrap">
                   <th class="text-left  px-4 py-2 font-bold">社友</th>
                   <th class="text-right px-4 py-2 font-bold">應繳</th>
-                  <th class="text-left  px-4 py-2 font-bold">明細</th>
+                  <th class="text-left  px-4 py-2 font-bold w-full">明細</th>
                   <th class="text-center px-4 py-2 font-bold">狀態</th>
                   <th class="text-center px-4 py-2 font-bold">末 5 碼</th>
                   <th class="text-center px-4 py-2 font-bold">對帳</th>
@@ -328,7 +331,7 @@
         <p class="text-[13px] text-slate-500 leading-relaxed">
           新增後這位社友立刻出現在收繳看板上，可以記帳、對帳。
           他之後自己加官方帳號、填完基本資料會是另外一筆 ——
-          <b>屆時請把這筆手動建立的刪掉</b>，程式不會自作主張把兩邊當成同一個人。
+          <b>屆時請把這筆手動建立的移出名冊</b>，程式不會自作主張把兩邊當成同一個人。
         </p>
       </div>
 
@@ -612,19 +615,19 @@
     // 整列可點進帳單編輯；對帳那一欄的按鈕自己 stopPropagation，兩者不會互相誤觸。
     return `
       <tr class="hover:bg-indigo-50/60 cursor-pointer" onclick="openBill('${r.uid}')" title="點一下編輯這位社友的帳單">
-        <td class="px-4 py-2.5">
+        <td class="px-4 py-2.5 whitespace-nowrap">
           <span class="font-bold text-slate-800">${esc(r.name)}</span>
           ${r.nickname ? `<span class="text-slate-400 text-[14px]">（${esc(r.nickname)}）</span>` : ''}
           ${r.orphan ? `<span class="ml-1 text-[12px] text-amber-600" title="有帳單，但社友名冊查不到這個人">名冊外</span>` : ''}
         </td>
-        <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800">${money(r.total)}</td>
+        <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800 whitespace-nowrap">${money(r.total)}</td>
         <td class="px-4 py-2.5 text-[13px] text-slate-500">
           ${items.length ? esc(items.join('、')) : '<span class="text-slate-400">僅固定月費</span>'}
           ${pendingFeeTag(r)}</td>
-        <td class="px-4 py-2.5 text-center">
+        <td class="px-4 py-2.5 text-center whitespace-nowrap">
           <span class="px-2 py-0.5 rounded text-[13px] font-black border ${s.cls}">${s.label}</span></td>
-        <td class="px-4 py-2.5 text-center" id="digits-cell-${esc(r.uid)}">${digitsCell(r)}</td>
-        <td class="px-4 py-2.5 text-center">${confirmBtn(r)}</td>
+        <td class="px-4 py-2.5 text-center whitespace-nowrap" id="digits-cell-${esc(r.uid)}">${digitsCell(r)}</td>
+        <td class="px-4 py-2.5 text-center whitespace-nowrap">${confirmBtn(r)}</td>
       </tr>`;
   }
 
@@ -689,7 +692,7 @@
   function pendingFeeTag(r) {
     const n = (r.event_fees || []).length;
     if (!n) return '';
-    return `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200"
+    return `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 whitespace-nowrap inline-block"
       title="${esc((r.event_fees || []).map(f => f.title).join('、'))}">地區活動 ${n} 場未記帳</span>`;
   }
 
