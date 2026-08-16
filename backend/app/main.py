@@ -1537,7 +1537,7 @@ async def golf_draw_holes(request: Request):
 
 
 # ── Club dues (社友社費) ───────────────────────────────────────────────────────
-DUES_BASE = 2100      # 長年月費
+DUES_BASE = 2100      # 常年月費
 DUES_DISTRICT = 125   # 地區分攤金
 
 
