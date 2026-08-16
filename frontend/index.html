@@ -1523,22 +1523,25 @@ function renderHomePage() {
     renderHomeEvents();
 }
 
+// 首頁「近期活動」看多遠。以前是「未來 10 筆」，筆數會被公文洗掉，改成看時間。
+const HOME_EVENTS_MONTHS = 6;
+
 // 近期活動：原本要點「行事曆」才會吐一坨聊天泡泡，現在開首頁就在。
 function renderHomeEvents() {
     const box = document.getElementById('home-events-list');
     if (!box) return;
-    // 辦完的活動不列（當天的還算沒結束，所以基準是今天 00:00）。要回顧看
-    // 「個人 → 我的報名紀錄」，那邊才是歷史。
+    // 今天到六個月內的活動。辦完的不列（當天的還算沒結束，所以基準是今天 00:00），
+    // 要回顧看「個人 → 我的報名紀錄」；更遠的看「年度行事曆」。
     const today = new Date(); today.setHours(0, 0, 0, 0);
+    const until = new Date(today); until.setMonth(until.getMonth() + HOME_EVENTS_MONTHS);
     const list = getActiveEventsData()
-        .filter(e => e.date && new Date(e.date) >= today)
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
-        .slice(0, 10);
+        .filter(e => e.date && new Date(e.date) >= today && new Date(e.date) <= until)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (!list.length) {
         box.innerHTML = eventsLoading
             ? `<div class="card p-5 text-center text-[13px] text-slate-400"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i>載入中…</div>`
-            : `<div class="card p-5 text-center text-[13px] text-slate-400">目前沒有排定中的活動。</div>`;
+            : `<div class="card p-5 text-center text-[13px] text-slate-400">未來 ${HOME_EVENTS_MONTHS} 個月沒有排定中的活動。</div>`;
         return;
     }
     box.innerHTML = list.map(ev => {
