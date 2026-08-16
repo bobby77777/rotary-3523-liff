@@ -171,6 +171,7 @@
     lucide.createIcons();
     await ensureLineLogin();
     try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '', scope: 'district' }; }
+    if (me.district && me.district.short_name) document.title = `扶輪${me.district.short_name} 高球分組表`;
     document.getElementById('role-badge').classList.toggle('hidden', canEdit());
     document.getElementById('btn-auto').classList.toggle('hidden', !canEdit());
     document.getElementById('btn-balance').classList.toggle('hidden', !canEdit());

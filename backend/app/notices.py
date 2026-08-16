@@ -46,9 +46,9 @@ _HTTP_TIMEOUT = 20
 
 
 # ── WordPress REST ────────────────────────────────────────────────────────────
-def _get(path: str, params: dict) -> list | dict | None:
+def _get(path: str, params: dict, api_base: str = "") -> list | dict | None:
     try:
-        r = requests.get(f"{WP_BASE}/{path}", params=params,
+        r = requests.get(f"{api_base or WP_BASE}/{path}", params=params,
                          headers=_UA, timeout=_HTTP_TIMEOUT)
         r.raise_for_status()
         return r.json()
@@ -57,15 +57,15 @@ def _get(path: str, params: dict) -> list | dict | None:
         return None
 
 
-def _notice_category_ids() -> list[int]:
+def _notice_category_ids(api_base: str = "") -> list[int]:
     """The 最新消息 archive aggregates its child categories (公文、其他消息), so we
     collect the parent plus every child — that mirrors what /category/news/ shows."""
-    cats = _get("categories", {"slug": _NOTICE_CATEGORY_SLUG, "_fields": "id"})
+    cats = _get("categories", {"slug": _NOTICE_CATEGORY_SLUG, "_fields": "id"}, api_base)
     if not isinstance(cats, list) or not cats:
         return []
     parent = cats[0]["id"]
     ids = [parent]
-    children = _get("categories", {"parent": parent, "per_page": 100, "_fields": "id"})
+    children = _get("categories", {"parent": parent, "per_page": 100, "_fields": "id"}, api_base)
     if isinstance(children, list):
         ids += [c["id"] for c in children]
     return ids
@@ -84,9 +84,9 @@ def _drive_url(content_html: str) -> str:
     return ""
 
 
-def fetch_notice_posts() -> list[dict]:
+def fetch_notice_posts(api_base: str = "") -> list[dict]:
     """Every 【公文】 post in the 最新消息 archive, newest first."""
-    cat_ids = _notice_category_ids()
+    cat_ids = _notice_category_ids(api_base)
     if not cat_ids:
         return []
     posts: list[dict] = []
@@ -96,7 +96,7 @@ def fetch_notice_posts() -> list[dict]:
             "categories": ",".join(map(str, cat_ids)),
             "per_page": 100, "page": page,
             "_fields": "id,date,link,title,content",
-        })
+        }, api_base)
         if not isinstance(batch, list) or not batch:
             break
         for p in batch:
@@ -329,7 +329,7 @@ def _read_notice_details(title: str, drive_url: str, fallback_date: str) -> dict
     return {k: details[k] for k in ("date", "location", "time", "fee")}
 
 
-def _build_event(post: dict) -> dict:
+def _build_event(post: dict, district: str = "") -> dict:
     """Map a notice post (+ whatever we could read from its PDF) to an event row."""
     details = _read_notice_details(
         post["title"], post.get("drive_url", ""), post["publish_date"])
@@ -337,6 +337,7 @@ def _build_event(post: dict) -> dict:
     # so the notice still lands on the calendar rather than vanishing.
     return {
         "scope": "district",
+        "district": district or db.DEFAULT_DISTRICT,
         "type": "公文",
         "title": post["title"],
         "date": details.get("date") or post["publish_date"] or None,
@@ -372,11 +373,9 @@ def refresh_notice_details() -> dict:
     return report
 
 
-def sync_notices(refresh: bool = False) -> dict:
-    """Pull 【公文】 posts and add any not already synced. With refresh=True, also
-    re-read the PDFs of previously synced notices whose details came out empty.
-    Returns a summary report."""
-    posts = fetch_notice_posts()
+def sync_district_notices(district: str, api_base: str) -> dict:
+    """One district's 公文 → its own calendar. 抓來的活動都蓋上這個地區的章。"""
+    posts = fetch_notice_posts(api_base)
     if not posts:
         return {"found": 0, "added": 0, "skipped": 0, "errors": 0}
     known = db.event_source_urls()
@@ -386,13 +385,33 @@ def sync_notices(refresh: bool = False) -> dict:
             skipped += 1
             continue
         try:
-            db.create_event(_build_event(post))
+            db.create_event(_build_event(post, district))
             added += 1
         except Exception as e:
             errors += 1
             logger.warning("notices: failed to add %r: %s", post.get("title"), e)
-    report = {"found": len(posts), "added": added,
-              "skipped": skipped, "errors": errors}
+    return {"found": len(posts), "added": added, "skipped": skipped, "errors": errors}
+
+
+def sync_notices(refresh: bool = False) -> dict:
+    """Pull 【公文】 posts for every district that has a source configured, and add
+    any not already synced. With refresh=True, also re-read the PDFs of previously
+    synced notices whose details came out empty. Returns a summary report.
+
+    沒設定 notices_api 的地區直接跳過 —— 不是每個地區的網站都是 WordPress，也不是
+    每個地區都要自動同步；沒有來源就靠人工在行事曆建立活動，不該因此讓整批同步失敗。
+    去重看的是貼文網址（全域唯一），所以兩個地區的公文不會互相蓋掉。"""
+    districts = [d for d in db.list_districts() if (d.get("notices_api") or "").strip()]
+    totals = {"found": 0, "added": 0, "skipped": 0, "errors": 0}
+    per_district = {}
+    for d in districts:
+        rep = sync_district_notices(d["code"], d["notices_api"])
+        per_district[d["code"]] = rep
+        for k in totals:
+            totals[k] += rep[k]
+    report = {**totals, "districts": per_district,
+              "districts_without_source": [d["code"] for d in db.list_districts()
+                                           if not (d.get("notices_api") or "").strip()]}
     if refresh:
         report["refreshed"] = refresh_notice_details()
     logger.info("notices: sync done %s", report)

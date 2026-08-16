@@ -231,6 +231,7 @@
 
     // ==================== 狀態 ====================
     let me = { is_admin: false, club: '', scope: 'district' };
+    let districtName = '地區';   // 由 /me.district 帶入，見 init()
     let currentScope = 'district';        // 'district' | 'club'
     let events = [];                      // 目前檢視範圍的活動（含 agenda）
     let activeEvent = null;               // 議程編輯中的活動（本地副本，儲存才寫回後端）
@@ -245,6 +246,8 @@
       setupGlobalAgendaListeners();
       await ensureLineLogin();   // 取得開啟者本人身分（決定是否為管理員）
       try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '', scope: 'district' }; }
+      districtName = (me.district && me.district.short_name) || '地區';
+      document.title = `扶輪${districtName} 行事曆與議程系統`;
       currentScope = me.club ? 'club' : 'district';
       buildViewSelector();
       await loadEvents();
@@ -252,7 +255,7 @@
 
     function buildViewSelector() {
       const sel = document.getElementById('view-selector');
-      let html = '<option value="district">🌐 3523 地區總表</option>';
+      let html = `<option value="district">🌐 ${districtName}總表</option>`;
       if (me.club) html += `<option value="club">🏠 ${me.club}（本社）</option>`;
       sel.innerHTML = html;
       sel.value = currentScope;
@@ -273,7 +276,7 @@
         alert('載入活動失敗：' + e.message);
       }
       document.getElementById('main-title').innerText =
-        (currentScope === 'club' ? (me.club || '本社') : '3523 地區') + ' 年度活動總表';
+        (currentScope === 'club' ? (me.club || '本社') : districtName) + ' 年度活動總表';
       const editable = canEdit();
       document.getElementById('add-event-section').classList.toggle('hidden', !editable);
       document.getElementById('readonly-notice').classList.toggle('hidden', editable);
@@ -671,7 +674,7 @@
     function openLineModal() {
       const modal = document.getElementById('line-modal');
       modal.classList.remove('hidden'); modal.classList.add('flex');
-      const name = currentScope === 'club' ? (me.club || '本社') : '3523 地區';
+      const name = currentScope === 'club' ? (me.club || '本社') : districtName;
       document.getElementById('line-header-title').innerText = name;
       renderLineCards();
       lucide.createIcons();

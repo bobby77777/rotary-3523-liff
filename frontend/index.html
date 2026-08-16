@@ -58,7 +58,7 @@
         <i class="fa-solid fa-circle-nodes text-yellow-400 text-4xl"></i>
     </div>
     <div class="text-center">
-        <h1 class="text-white font-black text-xl tracking-wide">國際扶輪 3523 地區</h1>
+        <h1 class="text-white font-black text-xl tracking-wide" id="brand-district">國際扶輪 3523 地區</h1>
         <p class="text-blue-300 text-sm mt-1">正在驗證您的 LINE 身份...</p>
     </div>
     <div class="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden mt-2">
@@ -87,7 +87,7 @@
         <!-- 視角切換：分段控制，看得出目前在哪一邊 -->
         <div id="scope-switch" class="px-4 pb-3 flex gap-1.5">
             <button onclick="setScope('district')" data-scope="district" class="scope-seg flex-1 min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
-                <i class="fa-solid fa-globe mr-1"></i>地區
+                <i class="fa-solid fa-globe mr-1"></i><span id="ui-district-label">地區</span>
             </button>
             <button onclick="setScope('club')" data-scope="club" class="scope-seg flex-1 min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
                 <i class="fa-solid fa-house-flag mr-1"></i><span id="ui-current-scope">本社</span>
@@ -131,6 +131,46 @@
 <!-- ===================== MODALS ===================== -->
 
 <!-- 基本資料（第一次進來一定要填，所以沒有關閉鈕，也不能點外面關掉） -->
+<!-- ==================== 地區管理（僅最高管理員） ==================== -->
+<div id="modal-district" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[140] flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
+        <div class="px-6 py-4 bg-gradient-to-r from-cyan-800 to-sky-900 flex items-center justify-between text-white">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-earth-asia text-yellow-400"></i><h3 class="font-bold text-base">地區管理</h3>
+            </div>
+            <button onclick="closeModal('modal-district')" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 space-y-4 bg-slate-50 overflow-y-auto">
+            <p class="text-xs text-cyan-900 bg-cyan-50 border border-cyan-100 p-3 rounded-xl leading-relaxed">
+                <i class="fa-solid fa-circle-info mr-1"></i>
+                社友看得到哪些活動、名冊與帳單，一律以他的社所屬的地區為準。
+                改一個社的地區，那個社的所有社友、活動與帳單會一起換邊。
+            </p>
+            <div id="district-list" class="space-y-3"></div>
+
+            <div class="bg-white border border-slate-200 rounded-2xl p-3 space-y-2">
+                <p class="text-[11px] font-bold text-slate-400">新增／修改地區</p>
+                <div class="flex gap-2">
+                    <input id="district-code" placeholder="代碼 3481" maxlength="5" inputmode="numeric"
+                        class="w-24 bg-white border border-gray-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    <input id="district-name" placeholder="國際扶輪 3481 地區"
+                        class="flex-1 bg-white border border-gray-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                </div>
+                <input id="district-website" placeholder="地區網站（選填）"
+                    class="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                <input id="district-notices" placeholder="公文來源 WordPress API（選填）"
+                    class="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                <p class="text-[10px] text-slate-400 leading-relaxed">
+                    公文來源填該地區網站的 WordPress REST 根目錄（例：https://ri3523.org/wp-json/wp/v2）。
+                    留空表示不自動抓公文，該地區的活動由執秘手動建立。
+                </p>
+                <button onclick="saveDistrict()" id="district-save"
+                    class="w-full py-2 bg-cyan-700 text-white font-bold rounded-xl text-sm btn-3d">儲存地區</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="modal-profile-gate" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[150] flex items-center justify-center hidden p-4">
     <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
         <div class="px-6 py-4 bg-gradient-to-r from-blue-900 to-indigo-800 flex items-center gap-2 text-white">
@@ -319,7 +359,7 @@
     <div class="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-6 py-5 text-white flex justify-between items-center shrink-0">
             <div class="flex items-center gap-3">
-                <div class="w-9 h-9 bg-yellow-500 text-blue-950 rounded-full flex items-center justify-center text-sm font-black">3523</div>
+                <div class="w-9 h-9 bg-yellow-500 text-blue-950 rounded-full flex items-center justify-center text-sm font-black" id="district-badge">3523</div>
                 <div><h3 class="font-extrabold text-base">報名與繳費即時看板</h3><p class="text-[10px] text-gray-300">依分區及創社先後排序</p></div>
             </div>
             <button onclick="closeModal('modal-statistics')" class="text-white hover:text-gray-200"><i class="fa-solid fa-xmark text-xl"></i></button>
@@ -1100,8 +1140,29 @@
 const LIFF_ID = '2010535285-kh8rJmpS';
 // 必須與 bot 後端 (app) 的 APP_BASE_URL 相同。保留網址 → run.py 的 port 80。
 const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
-const DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
+// 地區名稱與網站由後端 /me 給（見 applyDistrict）。這裡的值只是還沒拿到之前的
+// 佔位字樣：使用者屬於哪個地區是資料，不是部署時的設定。
+let DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
+let districtInfo = { code: '3523', name: '國際扶輪 3523 地區', short_name: '3523 地區' };
 // ============================================================
+
+// 全畫面的地區字樣一次換掉。以前每個標題各自寫死 3523，多了一個地區之後
+// 3481 的社友會看到自己不屬於的地區名稱。
+function applyDistrict(d) {
+    if (!d || !d.code) return;
+    districtInfo = {
+        code: d.code,
+        name: d.name || `國際扶輪 ${d.code} 地區`,
+        short_name: d.short_name || `${d.code} 地區`,
+    };
+    if (d.website) DISTRICT_WEBSITE = d.website;
+    document.title = districtInfo.name;
+    const brand = document.getElementById('brand-district');
+    if (brand) brand.textContent = districtInfo.name;
+    const badge = document.getElementById('district-badge');
+    if (badge) badge.textContent = districtInfo.code;
+    renderHeader();
+}
 
 const golfPars = [4,3,5,4,4,3,4,5,4,4,4,3,5,4,4,3,5,4];
 
@@ -1154,6 +1215,9 @@ function syncHandicapRequirement() {
 // ---- STATE ----
 let lineProfile = null;       // from liff.getProfile()
 let userRole = 'member';      // 'member' | 'chairperson'
+// 後端那一套細分角色（admin_all / chair_club_admin / …）。userRole 會被 setRole
+// 壓成粗略的兩種，但「地區管理」這種只給最高管理員的功能得看原本的角色。
+let systemRole = 'member';
 let myClubName = '';          // set from backend /me
 // 常年月費／地區分攤金：本社該月生效的費率，由 /dues/member 帶回來。這裡不放
 // 預設數字——寫死一份就會跟後端的費率設定各走各的，帳單總計算出來會對不上。
@@ -1190,6 +1254,8 @@ async function initLiff() {
             if (me && me.status === 'ok') {
                 if (me.scope === 'club' || me.scope === 'district') systemScope = me.scope;
                 if (me.club) myClubName = me.club;
+                applyDistrict(me.district);
+                systemRole = me.role || 'member';
                 userRole = me.is_admin ? (me.role && me.role !== 'member' ? me.role : 'chairperson') : 'member';
                 setRole(userRole !== 'member' ? 'chairperson' : 'member');
                 needsProfile = !!me.needs_profile;
@@ -1230,6 +1296,106 @@ function hideLiffLoadingScreen() {
     s.style.opacity = '0';
     setTimeout(() => s.classList.add('hidden'), 400);
     document.getElementById('app').classList.remove('hidden');
+}
+
+// ============================================================
+//  地區管理（僅 admin_all）
+// ============================================================
+// 地區以前是寫死的字串，沒有地方可以維護。第二個地區進來之後，「這個社屬於哪一區」
+// 就是每天都可能要調整的資料，不能每次都請人進資料庫下 SQL。
+let districtData = null;
+
+async function openDistrictModal() {
+    openModal('modal-district');
+    document.getElementById('district-list').innerHTML =
+        `<p class="text-xs text-slate-400 italic text-center py-3">載入中…</p>`;
+    try {
+        districtData = await apiFetch('/admin/districts');
+    } catch (e) {
+        document.getElementById('district-list').innerHTML =
+            `<p class="text-xs text-red-600 py-2">載入失敗：${_escHtml(e.message)}</p>`;
+        return;
+    }
+    renderDistrictList();
+}
+
+function renderDistrictList() {
+    const all = districtData.districts || [];
+    const codes = all.map(d => d.code);
+    document.getElementById('district-list').innerHTML = all.map(d => `
+        <div class="bg-white border ${d.code === districtData.my_district ? 'border-cyan-300' : 'border-slate-200'} rounded-2xl p-3">
+            <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <p class="font-bold text-sm text-slate-800 truncate">${_escHtml(d.name)}
+                        ${d.code === districtData.my_district ? '<span class="text-[10px] text-cyan-700 font-black ml-1">您所屬</span>' : ''}</p>
+                    <p class="text-[11px] text-slate-400 truncate">
+                        ${d.clubs.length} 個社 · ${d.notices_api ? '公文自動同步' : '公文未設定來源'}</p>
+                </div>
+                <button onclick="editDistrict('${_escHtml(d.code)}')"
+                    class="shrink-0 text-[11px] font-bold text-cyan-700 border border-cyan-200 rounded-lg px-2 py-1">編輯</button>
+            </div>
+            <div class="mt-2 space-y-1">
+                ${d.clubs.length ? d.clubs.map(club => `
+                    <div class="flex items-center justify-between gap-2 text-[12px] bg-slate-50 rounded-lg px-2 py-1">
+                        <span class="truncate text-slate-700">${_escHtml(club)}</span>
+                        <select onchange="moveClub('${_escHtml(club)}', this.value)"
+                            class="text-[11px] border border-slate-200 rounded-md py-0.5 px-1 bg-white">
+                            ${codes.map(c => `<option value="${_escHtml(c)}" ${c === d.code ? 'selected' : ''}>${_escHtml(c)}</option>`).join('')}
+                        </select>
+                    </div>`).join('')
+                  : `<p class="text-[11px] text-slate-400 italic px-1">還沒有社屬於這個地區。</p>`}
+            </div>
+        </div>`).join('');
+}
+
+function editDistrict(code) {
+    const d = (districtData.districts || []).find(x => x.code === code);
+    if (!d) return;
+    document.getElementById('district-code').value = d.code;
+    document.getElementById('district-name').value = d.name;
+    document.getElementById('district-website').value = d.website || '';
+    document.getElementById('district-notices').value = d.notices_api || '';
+}
+
+async function saveDistrict() {
+    const code = document.getElementById('district-code').value.trim();
+    if (!/^\d{3,5}$/.test(code)) { showAlert('代碼格式', '地區代碼請填 3-5 位數字，例如 3481。'); return; }
+    const btn = document.getElementById('district-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+        const data = await apiFetch('/admin/districts', {
+            method: 'POST',
+            body: JSON.stringify({
+                code,
+                name: document.getElementById('district-name').value.trim(),
+                website: document.getElementById('district-website').value.trim(),
+                notices_api: document.getElementById('district-notices').value.trim(),
+            }),
+        });
+        if (data.status !== 'ok') { showAlert('儲存失敗', data.message || '請稍後再試。'); return; }
+        await openDistrictModal();
+    } catch (e) {
+        showAlert('儲存失敗', e.message);
+    } finally {
+        btn.disabled = false; btn.textContent = '儲存地區';
+    }
+}
+
+async function moveClub(club, district) {
+    // 換地區牽動那個社的全部資料，問一次再送
+    if (!confirm(`將「${club}」改列到 ${district} 地區？\n\n該社所有社友看到的活動、名冊與帳單都會跟著換到 ${district}。`)) {
+        renderDistrictList();     // 把下拉選單拉回原值
+        return;
+    }
+    try {
+        const data = await apiFetch('/admin/districts/club', {
+            method: 'POST', body: JSON.stringify({ club, district }),
+        });
+        if (data.status !== 'ok') { showAlert('調整失敗', data.message || '請稍後再試。'); return; }
+        await openDistrictModal();
+    } catch (e) {
+        showAlert('調整失敗', e.message);
+    }
 }
 
 // ============================================================
@@ -1360,11 +1526,14 @@ function renderHeader() {
     const clubLabel = myClubName || '本社';
     updateAdminTabLabel();
     document.getElementById('ui-current-scope').textContent = clubLabel;
+    // 切換鈕上寫的是自己那一個地區，不是泛稱的「地區」
+    const dLabel = document.getElementById('ui-district-label');
+    if (dLabel) dLabel.textContent = districtInfo.short_name || '地區';
     document.querySelectorAll('#scope-switch .scope-seg').forEach(seg => {
         seg.classList.toggle('scope-active', seg.dataset.scope === systemScope);
     });
     if (systemScope === 'district') {
-        document.getElementById('header-title').innerHTML = '國際扶輪 3523 地區 <i class="fa-solid fa-circle-check text-yellow-400 text-xs"></i>';
+        document.getElementById('header-title').innerHTML = _escHtml(districtInfo.name) + ' <i class="fa-solid fa-circle-check text-yellow-400 text-xs"></i>';
         document.getElementById('header-subtitle').textContent = '全年度活動系統';
     } else {
         document.getElementById('header-title').innerHTML = `${_escHtml(clubLabel)} <i class="fa-solid fa-star text-yellow-400 text-xs"></i>`;
@@ -3072,6 +3241,12 @@ function renderAdminPage() {
             isClub ? row('openBoardModal()', 'fa-user-tie', 'bg-slate-200 text-slate-700', '理監事專區', '議案線上表決') : '',
         ])}
 
+        ${group('系統', [
+            // 地區維護只給最高管理員：改一個社的地區，那個社的活動、名冊、帳單一起換邊。
+            systemRole === 'admin_all'
+                ? row('openDistrictModal()', 'fa-earth-asia', 'bg-cyan-100 text-cyan-700', '地區管理', '新增地區、指派各社所屬地區') : '',
+        ])}
+
         <div id="admin-registrants"></div>`;
 }
 
@@ -3435,7 +3610,7 @@ async function clickCheckRegistration(e) {
     if (data.status === 'forbidden') { paint('<p class="text-[13px] text-rose-500">您沒有查詢名單的權限。</p>'); return; }
 
     const list = data.registrants || [];
-    const scopeLabel = clubFilter || '3523 地區';
+    const scopeLabel = clubFilter || districtInfo.short_name;
     const head = `<div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-100">
             <p class="font-bold text-slate-800 text-[14px] min-w-0 truncate">${_escHtml(data.event_title || currentActiveEvent?.title || '活動')}</p>
             <span class="text-[12px] bg-blue-50 text-blue-700 font-bold px-2 py-1 rounded shrink-0">${_escHtml(scopeLabel)} ${data.count} 人</span>

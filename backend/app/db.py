@@ -795,7 +795,7 @@ _WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "�
 # Simple scalar text/date fields (agenda is handled separately as a JSON string).
 _EVENT_FIELDS = ("scope", "club_name", "date", "title", "location",
                  "chair", "time", "type", "fee", "pdf_url", "start_time", "mc", "geo",
-                 "source_url")
+                 "source_url", "district")
 
 
 def ensure_events_table() -> None:
@@ -830,6 +830,127 @@ def ensure_events_table() -> None:
     # 公文自動同步（notices.py）：來源貼文網址，當作去重鍵——已同步過的公文不再重覆新增。
     # 空字串 = 人工在行事曆建立的活動，跟自動抓來的公文區分開。
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS source_url TEXT NOT NULL DEFAULT ''")
+    # 活動屬於哪一個地區。預設 3523 是因為這張表在只有一個地區的年代就存在了，
+    # 既有的每一筆都是 3523 的活動；社內活動也帶著地區，社友看得到什麼一律以此為準。
+    execute(f"ALTER TABLE events ADD COLUMN IF NOT EXISTS district TEXT NOT NULL DEFAULT '{DEFAULT_DISTRICT}'")
+
+
+# ── 地區（多地區支援） ────────────────────────────────────────────────────────
+# 這套系統本來只服務 3523 一個地區，「地區」是寫死在標題與 scope='district' 裡的
+# 一個概念，不是一筆資料。要同時服務第二個地區，地區就得變成實體：活動屬於某個
+# 地區、社屬於某個地區、管理員的權限也只到自己的地區為止，否則 3481 的執秘一登入
+# 就會看到 3523 的名冊與帳單。
+#
+# 每個既有資料列都補成 3523：欄位預設值與 backfill 都指向它，任何一處漏掉都會讓
+# 現有社友突然看不到自己的活動。
+DEFAULT_DISTRICT = "3523"
+
+
+def ensure_districts_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS districts (
+            code        TEXT PRIMARY KEY,
+            name        TEXT NOT NULL DEFAULT '',
+            short_name  TEXT NOT NULL DEFAULT '',
+            website     TEXT NOT NULL DEFAULT '',
+            notices_api TEXT NOT NULL DEFAULT '',
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def seed_district(code: str, name: str, short_name: str,
+                  website: str = "", notices_api: str = "") -> None:
+    """建立地區；已存在就不動它 —— 這是開機時跑的，不能蓋掉管理員後來改的設定。"""
+    execute(
+        """
+        INSERT INTO districts (code, name, short_name, website, notices_api)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (code) DO NOTHING
+        """,
+        (code, name, short_name, website, notices_api),
+    )
+
+
+def list_districts() -> list[dict]:
+    return query("SELECT code, name, short_name, website, notices_api FROM districts ORDER BY code")
+
+
+def get_district(code: str) -> dict | None:
+    rows = query(
+        "SELECT code, name, short_name, website, notices_api FROM districts WHERE code = %s",
+        (code,),
+    )
+    return rows[0] if rows else None
+
+
+def update_district(code: str, name: str, short_name: str,
+                    website: str, notices_api: str) -> None:
+    execute(
+        "UPDATE districts SET name = %s, short_name = %s, website = %s, notices_api = %s "
+        "WHERE code = %s",
+        (name, short_name, website, notices_api, code),
+    )
+
+
+# ── 社 → 地區 ─────────────────────────────────────────────────────────────────
+# 社友只填社名，社屬於哪個地區記在這裡。不放進 personal_information 是因為那樣
+# 同一個社的每位社友都各存一份，改地區得逐列改，遲早會有人對不起來。
+
+def ensure_clubs_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS clubs (
+            club_name  TEXT PRIMARY KEY,
+            district   TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def backfill_clubs(default_district: str = DEFAULT_DISTRICT) -> int:
+    """名冊裡出現過、但 clubs 還沒登記的社，一律歸到預設地區。
+
+    這條在每次開機都會跑：既有的社是在只有 3523 的年代建的，而新地區的社在被
+    指定之前也得先有個歸屬，否則它的社友會落到「沒有地區」而什麼都看不到。
+
+    用 execute（會 commit）跑寫入，再比對前後筆數當回傳值；query() 不 commit，
+    拿它跑 INSERT ... RETURNING 會回報成功卻什麼都沒寫進去。"""
+    before = query("SELECT COUNT(*) AS c FROM clubs")[0]["c"]
+    execute(
+        """
+        INSERT INTO clubs (club_name, district)
+        SELECT DISTINCT pi.club_name, %s FROM personal_information pi
+        WHERE pi.club_name <> '' AND pi.club_name IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM clubs c WHERE c.club_name = pi.club_name)
+        """,
+        (default_district,),
+    )
+    return query("SELECT COUNT(*) AS c FROM clubs")[0]["c"] - before
+
+
+def get_club_district(club_name: str) -> str:
+    rows = query("SELECT district FROM clubs WHERE club_name = %s", (club_name,))
+    return rows[0]["district"] if rows else ""
+
+
+def set_club_district(club_name: str, district: str) -> None:
+    execute(
+        """
+        INSERT INTO clubs (club_name, district) VALUES (%s, %s)
+        ON CONFLICT (club_name) DO UPDATE SET district = EXCLUDED.district
+        """,
+        (club_name, district),
+    )
+
+
+def clubs_in_district(district: str) -> list[str]:
+    rows = query("SELECT club_name FROM clubs WHERE district = %s ORDER BY club_name",
+                 (district,))
+    return [r["club_name"] for r in rows]
+
+
+def list_clubs_with_district() -> list[dict]:
+    return query("SELECT club_name, district FROM clubs ORDER BY district, club_name")
 
 
 def events_count() -> int:
@@ -874,6 +995,9 @@ def _row_to_event(r: dict) -> dict:
         golf_plans = []
     return {
         "id": r["id"], "scope": r["scope"], "club_name": r["club_name"],
+        # 沒有這一欄，凡是拿活動 dict 判斷地區的地方（_lookup_event、活動編輯）
+        # 都會讀到 None 而退回預設地區，等於隔離失效。
+        "district": r.get("district") or DEFAULT_DISTRICT,
         "date": iso, "displayDate": iso,
         "weekday": _WEEKDAYS[d.weekday()] if d else "",
         "title": r["title"], "location": r["location"], "chair": r["chair"],
@@ -895,15 +1019,24 @@ def save_golf_holes(event_id: int, holes: list) -> None:
             (json.dumps(list(holes)), event_id))
 
 
-def list_events(scope: str = "", club_name: str = "") -> list[dict]:
+def list_events(scope: str = "", club_name: str = "", district: str = "") -> list[dict]:
+    """district 留空 = 不分地區（維護用途）。一般查詢一定要帶，否則 3481 的社友
+    會看到 3523 的活動。社內活動同樣過濾地區：社名理論上不重複，但兩個地區各自
+    維護名冊，同名社遲早會出現，那時錯的不是畫面而是報名資料。"""
+    where, params = [], []
+    if scope in ("club", "district"):
+        where.append("scope = %s")
+        params.append(scope)
     if scope == "club":
-        rows = query("SELECT * FROM events WHERE scope='club' "
-                     "AND (club_name='' OR club_name=%s) ORDER BY date", (club_name,))
-    elif scope == "district":
-        rows = query("SELECT * FROM events WHERE scope='district' ORDER BY date")
-    else:
-        rows = query("SELECT * FROM events ORDER BY date")
-    return [_row_to_event(r) for r in rows]
+        where.append("(club_name = '' OR club_name = %s)")
+        params.append(club_name)
+    if district:
+        where.append("district = %s")
+        params.append(district)
+    sql = "SELECT * FROM events"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    return [_row_to_event(r) for r in query(sql + " ORDER BY date", tuple(params))]
 
 
 def get_event(event_id: int) -> dict | None:
@@ -939,8 +1072,9 @@ def create_event(data: dict) -> dict:
                 """
                 INSERT INTO events (scope, club_name, date, title, location,
                                     chair, time, type, fee, pdf_url,
-                                    start_time, mc, geo, agenda, golf_plans, source_url)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                    start_time, mc, geo, agenda, golf_plans, source_url,
+                                    district)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
                 """,
                 (data.get("scope", "district"), data.get("club_name", ""),
@@ -950,7 +1084,9 @@ def create_event(data: dict) -> dict:
                  data.get("start_time", ""), data.get("mc", ""), data.get("geo", ""),
                  json.dumps(data.get("agenda") or []),
                  json.dumps(data.get("golf_plans") or []),
-                 data.get("source_url", "")),
+                 data.get("source_url", ""),
+                 # 欄位漏在這個清單外面的話，活動會靜靜地落到預設地區去
+                 data.get("district") or DEFAULT_DISTRICT),
             )
             row = cur.fetchone()
         conn.commit()
@@ -1235,6 +1371,13 @@ def ensure_user_roles_table() -> None:
         SELECT line_user_id, 'admin_all' FROM admin_users
         ON CONFLICT (line_user_id) DO NOTHING
     """)
+    # 管理員管的是哪一個地區。空白 = 由他的社推出來，這也是既有每一列的狀態；
+    # 只有地區級管理員（admin_all，沒有社可以推）才需要明寫，否則 3481 的地區
+    # 管理員會落到預設地區去管 3523 的活動。
+    execute("ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS district TEXT NOT NULL DEFAULT ''")
+    # 這一欄最早的版本預設 3523，既有的列因此被填上一個「其實該由社推出來」的地區。
+    # 欄位已經加過的資料庫不會再跑上面那行，所以預設值要另外扳回來。
+    execute("ALTER TABLE user_roles ALTER COLUMN district SET DEFAULT ''")
 
 
 def get_user_role(line_user_id: str) -> str:
@@ -1242,19 +1385,35 @@ def get_user_role(line_user_id: str) -> str:
     return rows[0]["role"] if rows else "member"
 
 
-def set_user_role(line_user_id: str, role: str, club_name: str = "", scope: str = "") -> None:
-    """Blank scope keeps the user's current viewpoint; new rows default to district."""
+def get_user_district(line_user_id: str) -> str:
+    """這個人屬於哪一個地區。
+
+    順序是「角色上明寫的 → 他的社所屬地區 → 預設地區」。社友不必也不該自己選
+    地區：他填的是社名，社在哪個地區是社的屬性，兩邊各存一份遲早會打架。"""
+    rows = query("SELECT district FROM user_roles WHERE line_user_id = %s", (line_user_id,))
+    if rows and rows[0]["district"]:
+        return rows[0]["district"]
+    club = get_user_club(line_user_id)
+    return (get_club_district(club) if club else "") or DEFAULT_DISTRICT
+
+
+def set_user_role(line_user_id: str, role: str, club_name: str = "", scope: str = "",
+                  district: str = "") -> None:
+    """Blank scope keeps the user's current viewpoint; new rows default to district.
+    district 留空同樣是「不動」：多數管理員的地區由他的社決定，不必也不該在這裡
+    重複一份。"""
     execute(
         """
-        INSERT INTO user_roles (line_user_id, role, club_name, scope, updated_at)
-        VALUES (%s, %s, %s, COALESCE(NULLIF(%s, ''), 'district'), NOW())
+        INSERT INTO user_roles (line_user_id, role, club_name, scope, district, updated_at)
+        VALUES (%s, %s, %s, COALESCE(NULLIF(%s, ''), 'district'), %s, NOW())
         ON CONFLICT (line_user_id) DO UPDATE SET
             role = EXCLUDED.role,
             club_name = EXCLUDED.club_name,
             scope = COALESCE(NULLIF(%s, ''), user_roles.scope),
+            district = COALESCE(NULLIF(%s, ''), user_roles.district),
             updated_at = NOW()
         """,
-        (line_user_id, role, club_name, scope, scope),
+        (line_user_id, role, club_name, scope, district, scope, district),
     )
 
 
@@ -1330,7 +1489,14 @@ def get_club_attendance(club_name: str) -> list[dict]:
     )
 
 
-def list_clubs() -> list[str]:
+def list_clubs(district: str = "") -> list[str]:
+    """社名清單。帶了 district 就只給那個地區的社 —— 社別選單、批次報名的社選擇
+    都走這裡，不過濾的話 3481 的執秘會在自己的選單裡看到 3523 的社。
+
+    以 clubs 表為準（開機會把名冊裡出現過的社都補進去），沒有登記地區的社不會
+    憑空出現在任何一個地區底下。"""
+    if district:
+        return clubs_in_district(district)
     rows = query(
         "SELECT DISTINCT club_name FROM personal_information "
         "WHERE club_name IS NOT NULL AND club_name <> '' ORDER BY club_name"

@@ -52,12 +52,23 @@ async def lifespan(app: FastAPI):
     db.ensure_bulletin_content_table()
     db.ensure_club_finance_table()
     db.ensure_member_business_table()
+    # 地區要在活動之前建好：活動與社都掛在地區底下，順序反了就會有一批資料指向
+    # 一個還不存在的地區。
+    db.ensure_districts_table()
+    for d in _SEED_DISTRICTS:
+        db.seed_district(**d)
+    db.ensure_clubs_table()
     db.ensure_events_table()
     db.ensure_event_pdf_table()
     # First run: migrate the previously-hardcoded schedule into the editable table.
     if db.events_count() == 0:
         db.seed_events(list(_EVENT_SCHEDULE) + _club_events("本社"))
     db.ensure_personal_information_columns()
+    # 名冊裡有、但還沒登記地區的社，補成預設地區。既有的社都是 3523 年代建的；
+    # 漏掉任何一個，那個社的社友會落到「沒有地區」而什麼活動都看不到。
+    added = db.backfill_clubs()
+    if added:
+        logger.info("clubs backfilled into %s: %d", db.DEFAULT_DISTRICT, added)
     # 背景固定抓新公文進行事曆：開機先跑一次，之後每 6 小時再查一次（只處理沒同步
     # 過的，穩態幾乎不做事）。這後端沒有排程器，這條 daemon 執行緒就是它的 cron；
     # 用執行緒是因為 sync 走的是 requests/Drive/OpenAI 的同步 I/O，不該卡住啟動。
@@ -82,6 +93,19 @@ def _verify_line_signature(body: bytes, signature: str) -> bool:
     digest = hmac.new(LINE_CHANNEL_SECRET.encode(), body, hashlib.sha256).digest()
     expected = base64.b64encode(digest).decode()
     return hmac.compare_digest(expected, signature)
+
+
+# ── 地區 ──────────────────────────────────────────────────────────────────────
+# 開機時確保這些地區存在（已存在就不動，管理員後來改的設定不會被蓋掉）。
+# notices_api 是那個地區公文網站的 WordPress REST 根目錄，留空 = 不自動同步公文，
+# 該地區的活動就純靠人工在行事曆建立。3481 的來源網站尚未確認，先留空。
+_SEED_DISTRICTS = [
+    {"code": "3523", "name": "國際扶輪 3523 地區", "short_name": "3523 地區",
+     "website": "https://www.rotary3523.org.tw",
+     "notices_api": "https://ri3523.org/wp-json/wp/v2"},
+    {"code": "3481", "name": "國際扶輪 3481 地區", "short_name": "3481 地區",
+     "website": "", "notices_api": ""},
+]
 
 
 # ── Event schedule ────────────────────────────────────────────────────────────
@@ -337,16 +361,29 @@ def _club_events(club_name: str) -> list[dict]:
     ]
 
 
-def _events_for_scope(scope: str, club_name: str = "") -> list[dict]:
+def _district_of(user_id: str) -> dict:
+    """使用者所屬地區的設定（名稱、網站、公文來源）。
+
+    地區被刪掉或資料還沒建時退回一組以代碼組出來的預設值，不要讓標題變成空白或
+    整支端點爆掉 —— 地區資料出問題時，社友該看到的是活動，不是錯誤畫面。"""
+    code = db.get_user_district(user_id) if user_id else db.DEFAULT_DISTRICT
+    return db.get_district(code) or {
+        "code": code, "name": f"國際扶輪 {code} 地區", "short_name": f"{code} 地區",
+        "website": "", "notices_api": "",
+    }
+
+
+def _events_for_scope(scope: str, club_name: str = "", district: str = "") -> list[dict]:
     # Events now live in an editable DB table (seeded from the lists above); the
     # 執秘 maintains them from the admin panel. All lookups go through here / db.
-    return db.list_events(scope, club_name)
+    # district 一律要帶：這是 3481 的社友看不到 3523 活動的唯一機制。
+    return db.list_events(scope, club_name, district or db.DEFAULT_DISTRICT)
 
 
 def _current_event(user_id: str) -> dict | None:
     """Closest upcoming event within the user's active scope (else most recent past)."""
     scope = db.get_user_scope(user_id)
-    evs = _events_for_scope(scope, db.get_user_club(user_id))
+    evs = _events_for_scope(scope, db.get_user_club(user_id), db.get_user_district(user_id))
     if not evs:
         return None
     today = date.today().isoformat()
@@ -357,8 +394,16 @@ def _current_event(user_id: str) -> dict | None:
 
 
 def _lookup_event(user_id: str, ev_id: int) -> dict | None:
-    """Find an event by id (ids are unique across district + club schedules)."""
-    return db.get_event(ev_id)
+    """Find an event by id (ids are unique across district + club schedules).
+
+    別的地區的活動一律當作不存在。報名、報到、繳費回報、後台作業全都經過這裡
+    查活動，所以地區的隔離只要守住這一關 —— 每個呼叫點各自檢查一次，遲早會有
+    一個漏掉，而那一個就是別區的人報進本區名單的入口。"""
+    ev = db.get_event(ev_id)
+    if ev is None:
+        return None
+    district = db.get_user_district(user_id) if user_id else db.DEFAULT_DISTRICT
+    return ev if (ev.get("district") or db.DEFAULT_DISTRICT) == district else None
 
 
 # ── Flex Message builders ─────────────────────────────────────────────────────
@@ -927,7 +972,7 @@ def _build_member_result(members: list[dict]) -> dict:
     return {"type": "carousel", "contents": bubbles}
 
 
-def _build_award_result(rows: list[dict]) -> dict:
+def _build_award_result(rows: list[dict], district_name: str = "") -> dict:
     total = rows[0].get("total_count", len(rows)) if rows else 0
     bubbles = []
     for r in rows:
@@ -959,7 +1004,7 @@ def _build_award_result(rows: list[dict]) -> dict:
             "header": {
                 "type": "box", "layout": "vertical",
                 "backgroundColor": "#f59e0b", "paddingAll": "12px",
-                "contents": [{"type": "text", "text": "國際扶輪 3523 地區", "size": "xxs", "color": "#ffffff", "weight": "bold"}],
+                "contents": [{"type": "text", "text": district_name or "國際扶輪", "size": "xxs", "color": "#ffffff", "weight": "bold"}],
             },
             "body": {"type": "box", "layout": "vertical", "paddingAll": "14px", "contents": body_contents},
         })
@@ -1010,7 +1055,8 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
     # ── Home flows ─────────────────────────────────────────────────────────────
     if action == "event_list":
         scope = db.get_user_scope(user_id)
-        events = _events_for_scope(scope, db.get_user_club(user_id))
+        events = _events_for_scope(scope, db.get_user_club(user_id),
+                                   db.get_user_district(user_id))
         alt = "🏠 本社近期活動" if scope == "club" else "📅 地區近期活動"
         line_api.reply_flex(reply_token, alt, _build_event_list_carousel(events))
 
@@ -1214,8 +1260,10 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
 
     # ── Calendar (backward-compat) ─────────────────────────────────────────────
     elif action == "calendar":
-        line_api.reply_flex(reply_token, "📅 3523 地區年度行事曆",
-                            _build_event_list_carousel(db.list_events("district")))
+        d = _district_of(user_id)
+        line_api.reply_flex(reply_token, f"📅 {d['short_name']}年度行事曆",
+                            _build_event_list_carousel(
+                                db.list_events("district", district=d["code"])))
 
     elif data.startswith("action=event_detail&id="):
         try:
@@ -1317,7 +1365,8 @@ def _handle_text(reply_token: str, user_id: str, text: str) -> None:
             line_api.reply_text_with_quick_reply(
                 reply_token, f"找不到「{kw}」的得獎紀錄。\n可改用社名或 Nickname 再查一次。", items)
         else:
-            line_api.reply_flex(reply_token, f"🏆 「{kw}」得獎查詢", _build_award_result(rows))
+            line_api.reply_flex(reply_token, f"🏆 「{kw}」得獎查詢",
+                                _build_award_result(rows, _district_of(user_id)["name"]))
 
     elif state["state"] == "awaiting_announcement":
         db.set_user_state(user_id, "confirm_announcement", {"text": text})
@@ -2179,7 +2228,7 @@ async def events(request: Request, scope: str = ""):
     if scope not in ("district", "club"):
         scope = db.get_user_scope(uid) if uid else "district"
     club = db.get_user_club(uid) if uid else ""
-    evs = _events_for_scope(scope, club)
+    evs = _events_for_scope(scope, club, db.get_user_district(uid) if uid else "")
     # 活動 PDF 三個來源：(1) 已存檔的議程（後端即時產生向量 PDF）；(2) 舊版存進 DB
     # 的議程 PDF；(3) 執秘上傳到 Drive 資料夾的檔案。任一存在就把 pdf_url 指到後端
     # 端點（GET /events/{id}/pdf）。
@@ -2279,7 +2328,20 @@ async def admin_create_event(request: Request):
     data = _clean_event_payload(await request.json())
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="活動標題必填")
+    # 地區不由前端決定：活動一律建在建立者自己的地區底下，否則一個打錯的欄位
+    # 就會讓活動出現在別的地區的行事曆上。
+    data["district"] = db.get_user_district(uid)
     return {"status": "ok", "event": db.create_event(data)}
+
+
+def _same_district_event(uid: str, event_id: int) -> dict | None:
+    """要改的活動必須跟操作者同地區，否則當成不存在。
+
+    回 404 而不是 403 是刻意的：別的地區有沒有這個活動，本來就不干他的事。"""
+    ev = db.get_event(event_id)
+    if ev is None or (ev.get("district") or db.DEFAULT_DISTRICT) != db.get_user_district(uid):
+        return None
+    return ev
 
 
 @app.put("/admin/events/{event_id}")
@@ -2288,7 +2350,11 @@ async def admin_update_event(event_id: int, request: Request):
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="Not an admin")
-    ev = db.update_event(event_id, _clean_event_payload(await request.json()))
+    if _same_district_event(uid, event_id) is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    data = _clean_event_payload(await request.json())
+    data.pop("district", None)          # 活動不能被搬到別的地區
+    ev = db.update_event(event_id, data)
     if ev is None:
         raise HTTPException(status_code=404, detail="Event not found")
     return {"status": "ok", "event": ev}
@@ -2300,6 +2366,8 @@ async def admin_delete_event(event_id: int, request: Request):
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="Not an admin")
+    if _same_district_event(uid, event_id) is None:
+        raise HTTPException(status_code=404, detail="Event not found")
     db.delete_event(event_id)
     return {"status": "ok"}
 
@@ -2341,7 +2409,8 @@ async def me(request: Request):
     """The caller's role / scope / club — LIFF uses this to gate the admin tab."""
     uid = request.headers.get("X-Line-UserId", "")
     if not uid:
-        return {"status": "no_user", "is_admin": False, "role": "member"}
+        d = db.get_district(db.DEFAULT_DISTRICT) or {}
+        return {"status": "no_user", "is_admin": False, "role": "member", "district": d}
     return {
         "status": "ok",
         "role": db.get_user_role(uid),
@@ -2351,6 +2420,8 @@ async def me(request: Request):
         "name": _member_name(uid),
         # 還沒填完基本資料的話，LIFF 一開就先請本人補（見 openProfileGate）。
         "needs_profile": _profile_incomplete(_member_profile(uid)),
+        # 前端的標題、地區網站連結都跟著這一包走，不再各自寫死 3523
+        "district": _district_of(uid),
     }
 
 
@@ -2551,7 +2622,9 @@ async def payment_report(request: Request):
         return {"status": "invalid", "message": "請輸入正確的匯款帳號末 5 碼"}
 
     event_id = body.get("event_id")
-    ev = (_lookup_event(uid, int(event_id)) if event_id else None) or _current_event(uid)
+    # 指名了活動就只能是那一場。以前查不到會靜靜地退回「使用者當前的活動」，
+    # 有了第二個地區之後那是實害：點 3481 的活動送出，人卻被報進自己這區的下一場。
+    ev = _lookup_event(uid, int(event_id)) if event_id else _current_event(uid)
     if ev is None:
         return {"status": "no_event", "message": "找不到對應活動"}
 
@@ -2643,7 +2716,8 @@ async def admin_registrants(request: Request, event: int | None = None, club: st
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "registrants": []}
-    ev = (_lookup_event(admin_uid, int(event)) if event else None) or _current_event(admin_uid)
+    # 同上：指名的活動看不到就是看不到，不要改端出另一場的報名名單。
+    ev = _lookup_event(admin_uid, int(event)) if event else _current_event(admin_uid)
     if ev is None:
         return {"status": "no_event", "registrants": []}
     rows = db.get_event_registrants(ev["id"], club)
@@ -3541,20 +3615,90 @@ async def admin_survey_report(request: Request):
     return {"status": "ok", "names": names, "recipients": sent, "to_self": not presidents}
 
 
+# ── 地區管理 ──────────────────────────────────────────────────────────────────
+# 新增地區、設定它的名稱／網站／公文來源、把社指派給地區。這些以前都不存在，
+# 因為只有一個地區；現在不給介面的話，每加一個社就要有人進資料庫下 SQL。
+
+@app.get("/admin/districts")
+async def admin_districts(request: Request):
+    """地區清單與各自的社。只有 admin_all 看得到全部 —— 社幹部沒有理由知道別的
+    地區有哪些社。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="無地區管理權限")
+    mine = db.get_user_district(uid)
+    everything = db.get_user_role(uid) == "admin_all"
+    districts = db.list_districts()
+    if not everything:
+        districts = [d for d in districts if d["code"] == mine]
+    by_district = {}
+    for c in db.list_clubs_with_district():
+        by_district.setdefault(c["district"], []).append(c["club_name"])
+    return {"status": "ok", "my_district": mine,
+            "districts": [{**d, "clubs": by_district.get(d["code"], [])} for d in districts]}
+
+
+@app.post("/admin/districts")
+async def admin_district_save(request: Request):
+    """建立或修改一個地區。code 建立後不可改：活動、社、角色全都指向它。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if db.get_user_role(uid) != "admin_all":
+        return {"status": "forbidden", "message": "只有最高管理員可以維護地區"}
+    body = await request.json()
+    code = str(body.get("code", "")).strip()
+    if not code.isdigit() or not (3 <= len(code) <= 5):
+        return {"status": "invalid", "message": "地區代碼需為 3-5 位數字，例如 3481"}
+    name = str(body.get("name", "")).strip() or f"國際扶輪 {code} 地區"
+    short = str(body.get("short_name", "")).strip() or f"{code} 地區"
+    website = str(body.get("website", "")).strip()
+    notices_api = str(body.get("notices_api", "")).strip()
+    if db.get_district(code):
+        db.update_district(code, name, short, website, notices_api)
+        return {"status": "ok", "code": code, "created": False}
+    db.seed_district(code, name, short, website, notices_api)
+    return {"status": "ok", "code": code, "created": True}
+
+
+@app.post("/admin/districts/club")
+async def admin_district_set_club(request: Request):
+    """把一個社指派到某個地區。
+
+    社友只填社名，社屬於哪個地區是社的屬性 —— 改了之後那個社的所有社友、活動、
+    帳單一起換地區，所以只開放給最高管理員。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if db.get_user_role(uid) != "admin_all":
+        return {"status": "forbidden", "message": "只有最高管理員可以調整社的地區"}
+    body = await request.json()
+    club = str(body.get("club", "")).strip()
+    district = str(body.get("district", "")).strip()
+    if not club:
+        return {"status": "invalid", "message": "缺少社名"}
+    if not db.get_district(district):
+        return {"status": "invalid", "message": f"地區 {district} 不存在"}
+    db.set_club_district(club, district)
+    return {"status": "ok", "club": club, "district": district}
+
+
 @app.get("/admin/clubs")
 async def admin_clubs(request: Request):
-    """Club dropdown + members for the exec-secretary bulk-register form (admin only)."""
+    """Club dropdown + members for the exec-secretary bulk-register form (admin only).
+    只列自己地區的社 —— 3481 的執秘在批次報名時不該挑得到 3523 的社。"""
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "clubs": []}
-    return {"status": "ok", "clubs": db.list_clubs()}
+    district = db.get_user_district(admin_uid)
+    return {"status": "ok", "district": district, "clubs": db.list_clubs(district)}
 
 
 @app.get("/admin/club_members")
 async def admin_club_members(request: Request, club: str = ""):
+    """某個社的名冊。club 是呼叫端給的，所以要驗它跟管理員同地區：這支端點本來
+    誰都能查任何一個社，多了第二個地區之後那就是跨地區的個資外洩。"""
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "members": []}
+    if club and db.get_club_district(club) != db.get_user_district(admin_uid):
+        return {"status": "forbidden", "message": "無法查詢其他地區的社友名冊", "members": []}
     return {"status": "ok", "members": db.get_club_members(club)}
 
 
@@ -3572,6 +3716,14 @@ async def admin_bulk_register(request: Request):
     ev = _lookup_event(admin_uid, int(event_id)) if event_id else _current_event(admin_uid)
     if ev is None:
         return {"status": "no_event", "message": "找不到對應活動"}
+
+    # 要報名的人也必須是同地區的。活動已由 _lookup_event 把關，但 uids 是呼叫端
+    # 給的，不驗的話一次批次就能把別區的社友塞進本區的名單。
+    district = db.get_user_district(admin_uid)
+    outsiders = [u for u in uids if db.get_user_district(u) != district]
+    if outsiders:
+        return {"status": "forbidden",
+                "message": f"名單中有 {len(outsiders)} 位不屬於本地區的社友，無法代為報名"}
 
     # 來賓的差點與方案只能在建立當下問——他沒有報名紀錄可以事後補填。
     # 方案要對照本場賽事的設定，所以這段要在查到 ev 之後。

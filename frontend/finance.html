@@ -419,6 +419,8 @@
     lucide.createIcons();
     await ensureLineLogin();
     try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '' }; }
+    // 標題掛的是這位執秘所屬的地區，不是寫死的 3523
+    if (me.district && me.district.short_name) document.title = `扶輪${me.district.short_name} 社費財務看板`;
     if (!me.is_admin) {
       // 後端也擋（/finance/* 一律 403），這裡只是不要讓人對著錯誤訊息猜原因。
       showNotice('此頁僅供執秘／財務使用。社友請在 LINE 官方帳號打「社費」查看自己的帳單。');
