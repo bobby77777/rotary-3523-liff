@@ -232,6 +232,7 @@
                     placeholder="如: 18">
                 <p class="text-[10px] text-gray-400 mt-1 text-center">※ 供「報名差點」淨桿榜計算；新貝利亞淨桿仍以抽洞結算。</p>
             </div>
+            <div id="self-reg-dues-note" class="hidden bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl text-xs text-indigo-800 leading-relaxed"></div>
             <div>
                 <label class="block text-xs font-bold text-gray-700 mb-1">匯款帳號後 5 碼 (供對帳)</label>
                 <input type="tel" id="self-bank-digits" maxlength="5" pattern="\d{5}" inputmode="numeric"
@@ -609,9 +610,24 @@
                         <input id="event-form-time" placeholder="12:00-14:00" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-500 mb-1">費用</label>
-                        <input id="event-form-fee" placeholder="NT$300" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                        <label class="block text-[10px] font-bold text-gray-500 mb-1">費用（顯示用文字）</label>
+                        <input id="event-form-fee" placeholder="NT$300" oninput="suggestFeeAmount()" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
                     </div>
+                </div>
+                <!-- 每人報名費：報名時要自動記到社友社費帳單的金額。上面那格是自由文字
+                     （「每隊 NT$1,500」也寫在裡面），不能拿來收錢，所以另外收一個數字。 -->
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
+                    <label class="block text-[10px] font-bold text-indigo-800 mb-1">
+                        <i class="fa-solid fa-link mr-0.5"></i>每人報名費（地區活動才有效）</label>
+                    <div class="flex gap-2 items-center">
+                        <input id="event-form-fee-amount" type="number" min="0" step="50" placeholder="留空 = 不自動記帳"
+                            class="flex-1 bg-white border border-indigo-200 text-gray-900 rounded-lg py-2 px-3 text-xs shadow-sm">
+                        <button type="button" id="fee-amount-suggest" onclick="applyFeeSuggestion()"
+                            class="hidden shrink-0 bg-white border border-indigo-300 text-indigo-700 px-2 py-2 rounded-lg text-[10px] font-bold shadow-sm"></button>
+                    </div>
+                    <p class="text-[10px] text-indigo-700 mt-1 leading-relaxed">
+                        填了之後，社友自行報名或執秘代為報名時，這筆錢會自動記到他<b>當月的社費帳單</b>，不必另外匯款。高球賽事以社友選的球場方案金額為準，不看這格。
+                    </p>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
@@ -1792,6 +1808,41 @@ function openMatchmakingModal() {
     document.getElementById('matchmaking-query').value = '';
     document.getElementById('matchmaking-result').innerHTML = '';
     openModal('modal-matchmaking');
+}
+
+// 從「費用」的自由文字猜每人報名費，猜到才顯示按鈕，執秘按了才會填進去。
+// 刻意保守：看到「每隊／每社／團體／保證金」這類字就不猜，那些不是每人金額；
+// 文字裡有兩個以上金額也不猜，那是多種方案，只能由人決定收哪一個。
+function _guessFeeAmount(text) {
+    const t = String(text || '');
+    if (!t.trim() || /每隊|每社|每組|每桌|團體|保證金|贊助|捐款/.test(t)) return null;
+    const amounts = (t.match(/\d[\d,]*/g) || [])
+        .map(n => parseInt(n.replace(/,/g, ''), 10))
+        .filter(n => Number.isFinite(n) && n > 0);
+    const uniq = [...new Set(amounts)];
+    // 六位數以上不是每人報名費，是計畫金額或捐款目標（例：惜食行動計畫 NT$100,000）
+    return uniq.length === 1 && uniq[0] < 100000 ? uniq[0] : null;
+}
+
+function suggestFeeAmount() {
+    const btn = document.getElementById('fee-amount-suggest');
+    if (!btn) return;
+    const guess = _guessFeeAmount(document.getElementById('event-form-fee').value);
+    const filled = document.getElementById('event-form-fee-amount').value.trim();
+    // 已經填了就不打擾；猜出來的跟現值一樣也沒必要顯示
+    if (guess == null || (filled && parseInt(filled, 10) === guess)) {
+        btn.classList.add('hidden');
+        return;
+    }
+    btn.dataset.amount = guess;
+    btn.textContent = `帶入 ${guess.toLocaleString()}`;
+    btn.classList.remove('hidden');
+}
+
+function applyFeeSuggestion() {
+    const btn = document.getElementById('fee-amount-suggest');
+    document.getElementById('event-form-fee-amount').value = btn.dataset.amount || '';
+    suggestFeeAmount();
 }
 
 function _escHtml(s) {
@@ -3198,7 +3249,22 @@ function triggerMainBannerClick() {
         + plans.map(p => `<option value="${p.code}">${_escHtml(golfPlanText(p))}</option>`).join('');
     if (reg?.course_plan) planSelect.value = reg.course_plan;
     if (isGolf) syncHandicapRequirement();
+    renderSelfRegDuesNote(reg);
     openModal('modal-self-register');
+}
+
+// 報名費會自動進社費的話，要在他按下送出之前就講清楚，否則他會再去匯一次款。
+function renderSelfRegDuesNote(reg) {
+    const el = document.getElementById('self-reg-dues-note');
+    const ev = currentActiveEvent;
+    const amount = parseInt(ev?.fee_amount, 10);
+    const links = ev?.scope === 'district' && Number.isFinite(amount) && amount > 0;
+    // 已經報過名的人再開這個視窗只是補資料，錢早就記過了
+    el.classList.toggle('hidden', !links || !!reg);
+    if (links && !reg) {
+        el.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i>報名費 <b>NT$ ${amount.toLocaleString()}</b>
+            會自動列入您<b>本月的社費帳單</b>，不必另外匯款。`;
+    }
 }
 
 async function confirmRegistration() {
@@ -3718,6 +3784,8 @@ function openEventForm(ev) {
     document.getElementById('event-form-location').value = ev.location || '';
     document.getElementById('event-form-time').value = ev.time || '';
     document.getElementById('event-form-fee').value = ev.fee || '';
+    document.getElementById('event-form-fee-amount').value = ev.fee_amount ?? '';
+    suggestFeeAmount();
     document.getElementById('event-form-type').value = ev.type || '';
     document.getElementById('event-form-chair').value = ev.chair || '';
     document.getElementById('event-form-geo').value = ev.geo || '';
@@ -3777,6 +3845,8 @@ async function saveEventForm() {
         location: document.getElementById('event-form-location').value.trim(),
         time: document.getElementById('event-form-time').value.trim(),
         fee: document.getElementById('event-form-fee').value.trim(),
+        // 空字串 → 後端存 NULL（不自動記帳），跟填 0 是兩回事
+        fee_amount: document.getElementById('event-form-fee-amount').value.trim(),
         type: document.getElementById('event-form-type').value.trim(),
         chair: document.getElementById('event-form-chair').value.trim(),
         geo: document.getElementById('event-form-geo').value.trim(),

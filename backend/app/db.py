@@ -376,6 +376,55 @@ def pay_dues(club_name: str, month: str, line_user_id: str, bank_digits: str) ->
     )
 
 
+def add_dues_custom_item(club_name: str, month: str, line_user_id: str,
+                         name: str, amount: int, event_id: int) -> bool:
+    """Append an event's registration fee to a member's bill. True if it was added.
+
+    Carries event_id so the same event can never be charged twice — a re-run of
+    the exec's batch, or a member re-opening the registration form, must not
+    double-bill. That marker survives 執秘 editing the bill by hand (see
+    main._clean_dues_items), which is the whole reason it lives in the item
+    rather than in a separate table.
+
+    Reads and writes in one transaction with FOR UPDATE: two members registering
+    at the same moment would otherwise each read the old list and the second
+    write would drop the first one's fee. Only touches customs, so 餐費/IOU and
+    the paid/confirmed flags are left exactly as they were."""
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT customs FROM club_dues "
+                "WHERE club_name = %s AND month = %s AND line_user_id = %s FOR UPDATE",
+                (club_name, month, line_user_id),
+            )
+            row = cur.fetchone()
+            customs = list(row["customs"] or []) if row else []
+            if any(isinstance(c, dict) and c.get("event_id") == event_id for c in customs):
+                conn.commit()
+                return False
+            customs.append({"name": name, "amount": int(amount), "event_id": event_id})
+            if row is not None:
+                cur.execute(
+                    "UPDATE club_dues SET customs = %s, updated_at = NOW() "
+                    "WHERE club_name = %s AND month = %s AND line_user_id = %s",
+                    (json.dumps(customs), club_name, month, line_user_id),
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO club_dues (club_name, month, line_user_id, customs, updated_at) "
+                    "VALUES (%s, %s, %s, %s, NOW())",
+                    (club_name, month, line_user_id, json.dumps(customs)),
+                )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _release_conn(conn)
+
+
 def confirm_dues(club_name: str, month: str, line_user_id: str, confirmed: bool) -> None:
     """執秘 marks a member's dues as reconciled against the bank statement.
 
@@ -748,8 +797,8 @@ def search_business(q: str, exclude_uid: str = "", limit: int = 10) -> list[dict
 _WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 # Simple scalar text/date fields (agenda is handled separately as a JSON string).
 _EVENT_FIELDS = ("scope", "club_name", "date", "title", "location",
-                 "chair", "time", "type", "fee", "pdf_url", "start_time", "mc", "geo",
-                 "source_url")
+                 "chair", "time", "type", "fee", "fee_amount", "pdf_url",
+                 "start_time", "mc", "geo", "source_url")
 
 
 def ensure_events_table() -> None:
@@ -784,6 +833,10 @@ def ensure_events_table() -> None:
     # 公文自動同步（notices.py）：來源貼文網址，當作去重鍵——已同步過的公文不再重覆新增。
     # 空字串 = 人工在行事曆建立的活動，跟自動抓來的公文區分開。
     execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS source_url TEXT NOT NULL DEFAULT ''")
+    # 每人報名費（數字）。fee 是給人看的自由文字（「每隊 NT$1,500」「NT$100,000」
+    # 都在裡面），拿它換算會算出錯的金額，所以要收進社費的數字另存一欄。
+    # NULL / 0 = 這場不自動上社費。
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS fee_amount INTEGER")
 
 
 def events_count() -> int:
@@ -832,6 +885,7 @@ def _row_to_event(r: dict) -> dict:
         "weekday": _WEEKDAYS[d.weekday()] if d else "",
         "title": r["title"], "location": r["location"], "chair": r["chair"],
         "time": r["time"], "type": r["type"], "fee": r["fee"],
+        "fee_amount": r.get("fee_amount"),
         "pdf_url": r["pdf_url"],
         "start_time": r.get("start_time") or "",
         "mc": r.get("mc") or "",
@@ -892,15 +946,15 @@ def create_event(data: dict) -> dict:
             cur.execute(
                 """
                 INSERT INTO events (scope, club_name, date, title, location,
-                                    chair, time, type, fee, pdf_url,
+                                    chair, time, type, fee, fee_amount, pdf_url,
                                     start_time, mc, geo, agenda, golf_plans, source_url)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
                 """,
                 (data.get("scope", "district"), data.get("club_name", ""),
                  data.get("date") or None, data.get("title", ""), data.get("location", ""),
                  data.get("chair", ""), data.get("time", ""), data.get("type", ""),
-                 data.get("fee", ""), data.get("pdf_url", ""),
+                 data.get("fee", ""), data.get("fee_amount"), data.get("pdf_url", ""),
                  data.get("start_time", ""), data.get("mc", ""), data.get("geo", ""),
                  json.dumps(data.get("agenda") or []),
                  json.dumps(data.get("golf_plans") or []),
@@ -1310,6 +1364,7 @@ def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
     handicaps = handicaps or {}
     course_plans = course_plans or {}
     new_count = 0
+    new_uids: list[str] = []
     conn = _get_conn()
     try:
         with conn.cursor() as cur:
@@ -1328,6 +1383,7 @@ def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
                 )
                 if cur.fetchone() is not None:
                     new_count += 1
+                    new_uids.append(uid)
                 elif handicaps.get(uid) is not None or course_plans.get(uid) is not None:
                     cur.execute(
                         "UPDATE registrations SET "
@@ -1337,7 +1393,9 @@ def bulk_register(uids: list[str], event_id: int, bank_digits: str = "",
                         (handicaps.get(uid), course_plans.get(uid), uid, event_id),
                     )
         conn.commit()
-        return {"new": new_count, "dup": len(uids) - new_count}
+        # new_uids：這一輪真正新報名的人。呼叫端要拿它決定該向誰收報名費，
+        # 只有計數的話會把早就報過名的人再收一次。
+        return {"new": new_count, "dup": len(uids) - new_count, "new_uids": new_uids}
     except Exception:
         conn.rollback()
         raise
