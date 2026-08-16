@@ -1603,65 +1603,13 @@ async def dues_member(request: Request, club: str = "", month: str = "", uid: st
 def _clean_dues_items(body: dict) -> tuple[int, int, list]:
     """例會餐費 / IOU / 臨時項目 out of a save request. Unnamed custom rows are
     dropped — the member sees the name on their bill, so a nameless charge is
-    something 執秘 started typing and abandoned, not a fee.
-
-    event_id is carried through untouched: it marks a fee that got here from a
-    報名, and dropping it on an edit would let the same event be charged twice."""
-    customs = []
-    for c in body.get("customs", []):
-        if not str(c.get("name", "")).strip():
-            continue
-        item = {"name": str(c.get("name", "")), "amount": int(c.get("amount", 0) or 0)}
-        if c.get("event_id") is not None:
-            item["event_id"] = int(c["event_id"])
-        customs.append(item)
-    return int(body.get("meal", 0) or 0), int(body.get("iou", 0) or 0), customs
-
-
-# ── 地區活動報名費 → 社友社費 ─────────────────────────────────────────────────
-# 報了名就是欠了那筆錢。以前這兩件事各走各的：報名進 registrations，社費在
-# club_dues，執秘得自己記得把年會費、研習會費逐筆抄進每個人的帳單。現在報名
-# 當下就掛上去。
-
-def _registration_fee(ev: dict, plan: str | None) -> int:
-    """這場活動要向這位社友收多少。0 = 不自動上社費。
-
-    高球賽事優先用他實際選的球場方案金額 —— 下場含餐和只參加餐會本來就不同價，
-    用一個「每人報名費」表達不了。其餘活動用執秘填的 fee_amount；fee 那欄是給人
-    看的自由文字（「每隊 NT$1,500」「NT$100,000」都在裡面），解析它會收錯錢。"""
-    if plan:
-        p = _find_plan(ev, plan)
-        if p and p.get("fee") is not None:
-            return int(p["fee"] or 0)
-    try:
-        return max(0, int(ev.get("fee_amount") or 0))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _link_fee_to_dues(uid: str, ev: dict, plan: str | None = None) -> int:
-    """Put a district event's registration fee on the member's dues bill for the
-    month they registered in. Returns the amount charged, 0 if nothing was.
-
-    報名當月而不是活動月份：三個月前就報名的年會，錢要跟著結帳的那個月走，
-    否則執秘這個月結完帳，未來的帳單還會冒出新的金額。
-
-    地區活動限定 —— 社內活動的收費方式各社自己有一套，不在這裡假設。"""
-    if ev.get("scope") != "district":
-        return 0
-    amount = _registration_fee(ev, plan)
-    if amount <= 0:
-        return 0
-    club = db.get_user_club(uid)
-    if not club:
-        return 0            # 沒社別就沒有社費帳單可以掛
-    try:
-        added = db.add_dues_custom_item(
-            club, _this_month(), uid, ev.get("title", "活動報名費"), amount, ev["id"])
-    except Exception:
-        logger.exception("dues link failed for %s / event %s", uid, ev.get("id"))
-        return 0
-    return amount if added else 0
+    something 執秘 started typing and abandoned, not a fee."""
+    return (
+        int(body.get("meal", 0) or 0),
+        int(body.get("iou", 0) or 0),
+        [{"name": str(c.get("name", "")), "amount": int(c.get("amount", 0) or 0)}
+         for c in body.get("customs", []) if str(c.get("name", "")).strip()],
+    )
 
 
 def _push_dues_bill(uid: str, month: str, total: int) -> None:
@@ -2092,19 +2040,6 @@ def _clean_event_payload(data: dict) -> dict:
         if err:
             raise HTTPException(status_code=400, detail=err)
         out["golf_plans"] = plans
-    # 每人報名費同理：這個數字會直接變成社友帳單上的一列，壞值不能存。
-    # 空白 → NULL（不自動上社費），不是 0，兩者在畫面上要分得出來。
-    if "fee_amount" in out:
-        raw = out["fee_amount"]
-        if raw in (None, "", False):
-            out["fee_amount"] = None
-        else:
-            try:
-                out["fee_amount"] = int(raw)
-            except (TypeError, ValueError):
-                raise HTTPException(status_code=400, detail="每人報名費請填數字")
-            if out["fee_amount"] < 0:
-                raise HTTPException(status_code=400, detail="每人報名費不可為負數")
     return out
 
 
@@ -2418,16 +2353,12 @@ async def payment_report(request: Request):
             return {"status": "invalid", "message": "高爾夫球賽報名請填寫您的差點"}
 
     res = db.report_payment(uid, ev["id"], digits, handicap, plan)
-    # 新報名才收費；已經報過名的人這次只是回來回報匯款或補資料。
-    linked = 0 if res["was_registered"] else _link_fee_to_dues(uid, ev, plan)
     if res["was_registered"]:
         note = f"💰 已回報【{ev['title']}】匯款末 5 碼：{digits}\n秘書處對帳後會通知您。"
     else:
         note = f"✅ 報名成功：{ev['title']}\n{ev['date']}（{ev['weekday']}）{ev['time']}　{ev['location']}"
         note += (f"\n匯款末 5 碼：{digits}（待對帳）" if digits
                  else "\n完成匯款後請至「個人中心 → 提供匯款帳號」補填末 5 碼。")
-    if linked:
-        note += f"\n💵 報名費 NT${linked:,} 已列入本月社費帳單，不必另外匯款。"
     if plan is not None:
         note += f"\n⛳️ 球場方案：{_plan_summary(ev, plan)}"
     if handicap is not None:
@@ -3462,24 +3393,15 @@ async def admin_bulk_register(request: Request):
     result = db.bulk_register(uids, ev["id"], bank_digits, admin_uid, handicaps, course_plans)
     guest_count = db.add_event_guests(ev["id"], guests, admin_uid, bank_digits)
 
-    # 報名費只向這一輪真正新報名的人收；早就報過名的人不能再收一次。
-    # 來賓沒有社費帳單，本來就不在這裡面。
-    linked = {u: _link_fee_to_dues(u, ev, course_plans.get(u)) for u in result["new_uids"]}
-    linked_total = sum(linked.values())
-
     # Notify each newly-registered member in their own chat.
     for uid in uids:
         try:
-            fee = linked.get(uid, 0)
-            line_api.push_text(uid, f"📋 執秘已代您報名【{ev['title']}】，如有疑問請洽社務行政。"
-                               + (f"\n💵 報名費 NT${fee:,} 已列入本月社費帳單，不必另外匯款。" if fee else ""))
+            line_api.push_text(uid, f"📋 執秘已代您報名【{ev['title']}】，如有疑問請洽社務行政。")
         except Exception:
             logger.exception("bulk-register push failed for %s", uid)
 
     _push_receipt(admin_uid, f"✅ 已完成 {result['new'] + guest_count} 筆【{ev['title']}】報名"
-                             + (f"（另有 {result['dup']} 人先前已報名）" if result["dup"] else "")
-                             + (f"\n💵 報名費共 NT${linked_total:,} 已列入 {sum(1 for v in linked.values() if v)} 位社友的本月社費"
-                                if linked_total else ""))
+                             + (f"（另有 {result['dup']} 人先前已報名）" if result["dup"] else ""))
 
     return {
         "status": "ok",
@@ -3488,8 +3410,6 @@ async def admin_bulk_register(request: Request):
         "members_new": result["new"],
         "members_dup": result["dup"],
         "guests": guest_count,
-        "dues_linked": sum(1 for v in linked.values() if v),
-        "dues_total": linked_total,
     }
 
 
