@@ -459,6 +459,55 @@ def delete_dues_settings(club_name: str, effective_month: str) -> None:
             (club_name, effective_month))
 
 
+# ── 社的收款帳戶 ──────────────────────────────────────────────────────────────
+# 社友要繳社費／活動費時得知道錢匯去哪。以前這件事只存在 LINE 群組的公告裡，
+# 每個人翻紀錄找一次；現在存成資料，繳費畫面直接顯示。每社一組。
+
+def ensure_club_bank_account_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS club_bank_account (
+            club_name    TEXT PRIMARY KEY,
+            bank_name    TEXT NOT NULL DEFAULT '',
+            bank_code    TEXT NOT NULL DEFAULT '',
+            branch       TEXT NOT NULL DEFAULT '',
+            account_no   TEXT NOT NULL DEFAULT '',
+            account_name TEXT NOT NULL DEFAULT '',
+            note         TEXT NOT NULL DEFAULT '',
+            updated_at   TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def get_club_bank_account(club_name: str) -> dict | None:
+    rows = query(
+        "SELECT bank_name, bank_code, branch, account_no, account_name, note "
+        "FROM club_bank_account WHERE club_name = %s",
+        (club_name,),
+    )
+    return rows[0] if rows else None
+
+
+def save_club_bank_account(club_name: str, data: dict) -> None:
+    execute(
+        """
+        INSERT INTO club_bank_account
+            (club_name, bank_name, bank_code, branch, account_no, account_name, note, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (club_name) DO UPDATE SET
+            bank_name = EXCLUDED.bank_name,
+            bank_code = EXCLUDED.bank_code,
+            branch = EXCLUDED.branch,
+            account_no = EXCLUDED.account_no,
+            account_name = EXCLUDED.account_name,
+            note = EXCLUDED.note,
+            updated_at = NOW()
+        """,
+        (club_name, data.get("bank_name", ""), data.get("bank_code", ""),
+         data.get("branch", ""), data.get("account_no", ""),
+         data.get("account_name", ""), data.get("note", "")),
+    )
+
+
 def ensure_golf_scores_table() -> None:
     execute("""
         CREATE TABLE IF NOT EXISTS golf_scores (

@@ -44,7 +44,7 @@
           <i data-lucide="file-plus-2" class="w-4 h-4"></i> <span id="btn-bulk-label">批次記帳</span>
         </button>
         <button onclick="openRates()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
-          <i data-lucide="settings-2" class="w-4 h-4"></i> 月費設定
+          <i data-lucide="settings-2" class="w-4 h-4"></i> 收費設定
         </button>
         <button onclick="printSheet()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded font-medium text-base flex items-center gap-2 transition-colors">
           <i data-lucide="printer" class="w-4 h-4"></i> 下載收繳明細
@@ -147,7 +147,7 @@
         <div class="flex justify-between text-slate-600"><span>常年月費</span><span class="font-bold tabular-nums" id="bill-base">—</span></div>
         <div class="flex justify-between text-slate-600"><span>地區分攤金</span><span class="font-bold tabular-nums" id="bill-district">—</span></div>
         <button onclick="closeBill(); openRates();" class="text-[13px] font-bold text-indigo-600 hover:text-indigo-800">
-          這兩項全社一致 · 前往月費設定 →</button>
+          這兩項全社一致 · 前往收費設定 →</button>
       </div>
 
       <div class="space-y-2">
@@ -240,7 +240,7 @@
 <div id="rates-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
   <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
     <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between flex-shrink-0">
-      <span class="font-bold">月費設定</span>
+      <span class="font-bold">收費設定</span>
       <button onclick="closeRates()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
     <div class="p-5 space-y-4 overflow-y-auto">
@@ -277,6 +277,46 @@
       <div>
         <p class="text-[13px] font-bold text-slate-400 mb-1">生效歷程</p>
         <div id="rates-history" class="space-y-1.5"></div>
+      </div>
+
+      <!-- 收款帳戶：社友的繳費畫面會直接顯示這裡填的內容 -->
+      <div class="border-t border-slate-200 pt-4 space-y-2">
+        <div class="flex items-center justify-between">
+          <p class="text-[13px] font-bold text-slate-400">收款帳戶</p>
+          <span id="bank-state" class="text-[13px] font-bold"></span>
+        </div>
+        <p class="text-[13px] text-slate-500 leading-relaxed">
+          社友在「報名繳費」「匯款資訊」「本月社費」三個地方會看到這組帳號，可一鍵複製。
+        </p>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="col-span-2 sm:col-span-1">
+            <span class="block text-[13px] font-semibold text-slate-600 mb-0.5">銀行</span>
+            <input id="bank-name" type="text" placeholder="台灣銀行"
+              class="w-full border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600"></label>
+          <label>
+            <span class="block text-[13px] font-semibold text-slate-600 mb-0.5">銀行代號</span>
+            <input id="bank-code" type="text" placeholder="004"
+              class="w-full border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600"></label>
+          <label>
+            <span class="block text-[13px] font-semibold text-slate-600 mb-0.5">分行</span>
+            <input id="bank-branch" type="text" placeholder="松山分行"
+              class="w-full border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600"></label>
+          <label class="col-span-2">
+            <span class="block text-[13px] font-semibold text-slate-600 mb-0.5">帳號</span>
+            <input id="bank-account-no" type="text" placeholder="123-456-789012"
+              class="w-full border border-slate-300 rounded p-2 text-base font-bold outline-none focus:border-indigo-600"></label>
+          <label class="col-span-2">
+            <span class="block text-[13px] font-semibold text-slate-600 mb-0.5">戶名</span>
+            <input id="bank-account-name" type="text" placeholder="台北松山扶輪社"
+              class="w-full border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600"></label>
+          <label class="col-span-2">
+            <span class="block text-[13px] font-semibold text-slate-600 mb-0.5">備註（選填）</span>
+            <input id="bank-note" type="text" placeholder="匯款後請於備註欄填寫姓名"
+              class="w-full border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600"></label>
+        </div>
+        <div class="flex justify-end">
+          <button onclick="saveBank()" id="bank-save" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">儲存帳戶</button>
+        </div>
       </div>
     </div>
     <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
@@ -837,7 +877,49 @@
     renderRatesCurrent();
     renderRatesHistory();
     renderRatesTotal();
+    loadBank();
     lucide.createIcons();
+  }
+
+  // ── 收款帳戶 ──────────────────────────────────────────────────────────────
+  const BANK_FIELDS = {
+    'bank-name': 'bank_name', 'bank-code': 'bank_code', 'bank-branch': 'branch',
+    'bank-account-no': 'account_no', 'bank-account-name': 'account_name', 'bank-note': 'note',
+  };
+
+  async function loadBank() {
+    let d;
+    try { d = await apiFetch('/club/bank_account'); } catch (e) { d = null; }
+    const a = (d && d.account) || {};
+    for (const [id, key] of Object.entries(BANK_FIELDS)) {
+      document.getElementById(id).value = a[key] || '';
+    }
+    const state = document.getElementById('bank-state');
+    const ok = !!(d && d.configured);
+    state.textContent = ok ? '社友看得到' : '尚未設定，社友看不到帳號';
+    state.className = `text-[13px] font-bold ${ok ? 'text-emerald-600' : 'text-amber-600'}`;
+  }
+
+  async function saveBank() {
+    const payload = {};
+    for (const [id, key] of Object.entries(BANK_FIELDS)) {
+      payload[key] = document.getElementById(id).value.trim();
+    }
+    if (!payload.account_no) { alert('請填寫帳號。'); return; }
+    const btn = document.getElementById('bank-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const data = await apiFetch('/club/bank_account', {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      await loadBank();
+      alert('收款帳戶已更新，社友的繳費畫面會立刻看到新的帳號。');
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '儲存帳戶';
+    }
   }
 
   function renderRatesCurrent() {
