@@ -38,6 +38,10 @@
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <!-- 只有跨地區管理員看得到：一般執秘永遠只有自己的社，給他一個只有一個
+             選項的選單只是多一個看不懂的控制項。 -->
+        <select id="club-selector" onchange="selectClub(this.value)"
+          class="hidden bg-indigo-900 border border-indigo-800 text-white text-base rounded p-2.5 outline-none cursor-pointer shadow-sm min-w-[9rem]"></select>
         <select id="month-selector" onchange="selectMonth(this.value)"
           class="bg-indigo-900 border border-indigo-800 text-white text-base rounded p-2.5 outline-none cursor-pointer shadow-sm min-w-[10rem]"></select>
         <button id="btn-bulk" onclick="openBulkBill()" class="hidden bg-amber-400 hover:bg-amber-300 text-indigo-950 px-4 py-2.5 rounded font-bold text-base flex items-center gap-2 transition-colors shadow-md">
@@ -443,6 +447,7 @@
   let me = { is_admin: false, club: '' };
   let board = null;            // /finance/board 回來的整包
   let activeMonth = '';
+  let activeClub = '';          // 空 = 自己的社；跨地區管理員切社時才有值
   let filter = 'all';          // 明細表的篩選：all / unpaid / reported / confirmed
 
   // 錢收到哪一步就三種：未繳 → 待對帳 → 已繳。「還沒登餐費」不是狀態，
@@ -503,6 +508,26 @@
     el.classList.remove('hidden');
   }
 
+  // 跨地區管理員（總部）才有的社別切換。他看得到每一個地區的每一個社，
+  // 其餘人這個選單不存在，後端也只認他自己的社。
+  function renderClubSelector() {
+    const sel = document.getElementById('club-selector');
+    if (!board.all_districts || !(board.clubs || []).length) {
+      sel.classList.add('hidden');
+      return;
+    }
+    sel.innerHTML = board.clubs.map(c =>
+      `<option value="${esc(c)}" ${c === board.club ? 'selected' : ''}>${esc(c)}</option>`).join('');
+    sel.value = board.club;
+    sel.classList.remove('hidden');
+  }
+
+  async function selectClub(c) {
+    activeClub = c;
+    await loadBoard();
+    loadTrend();
+  }
+
   async function selectMonth(m) {
     activeMonth = m;
     await loadBoard();
@@ -513,7 +538,8 @@
     showNotice('載入中…');
     let data;
     try {
-      data = await apiFetch('/finance/board?month=' + encodeURIComponent(activeMonth));
+      data = await apiFetch('/finance/board?month=' + encodeURIComponent(activeMonth)
+        + (activeClub ? '&club=' + encodeURIComponent(activeClub) : ''));
     } catch (e) {
       showNotice('載入失敗：' + e.message);
       return;
@@ -528,6 +554,7 @@
        `月費固定 ${money(data.base + data.district)}`
        + (data.rates_default ? '（預設）' : `（${monthLabel(data.rates_from)} 起）`)]
       .filter(Boolean).join(' · ');
+    renderClubSelector();
     renderCards();
     renderBalance();
     renderFilters();
@@ -614,7 +641,7 @@
     el.innerHTML = `<p class="text-[14px] text-slate-400 text-center py-6">載入中…</p>`;
     let data;
     try {
-      data = await apiFetch('/finance/trend?months=6&end=' + encodeURIComponent(activeMonth));
+      data = await apiFetch('/finance/trend?months=6&end=' + encodeURIComponent(activeMonth) + (activeClub ? '&club=' + encodeURIComponent(activeClub) : ''));
     } catch (e) {
       el.innerHTML = `<p class="text-[14px] text-slate-400 text-center py-6">趨勢載入失敗：${esc(e.message)}</p>`;
       return;
@@ -746,7 +773,7 @@
     try {
       const data = await apiFetch('/finance/bank_digits', {
         method: 'POST',
-        body: JSON.stringify({ month: activeMonth, uid, bank_digits: digits }),
+        body: JSON.stringify({ club: activeClub, month: activeMonth, uid, bank_digits: digits }),
       });
       if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
       // 這一欄不影響金額與收繳率，改完就地更新，不必整個看板重載
@@ -794,7 +821,7 @@
     try {
       const data = await apiFetch('/finance/confirm', {
         method: 'POST',
-        body: JSON.stringify({ month: activeMonth, uid, confirmed }),
+        body: JSON.stringify({ club: activeClub, month: activeMonth, uid, confirmed }),
       });
       if (data.status !== 'ok') { alert(data.message || '對帳失敗'); return; }
       await loadBoard();       // 以後端為準重載，總額與收繳率才不會跟明細對不上
@@ -991,8 +1018,8 @@
       const data = await apiFetch(bulk ? '/dues/bulk_save' : '/dues/save', {
         method: 'POST',
         body: JSON.stringify(bulk
-          ? { month: activeMonth, uids: billTargets, ...d }
-          : { month: activeMonth, uid: editingUid, ...d }),
+          ? { club: activeClub, month: activeMonth, uids: billTargets, ...d }
+          : { club: activeClub, month: activeMonth, uid: editingUid, ...d }),
       });
       if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
       closeBill();
@@ -1195,7 +1222,7 @@
     try {
       const data = await apiFetch('/dues/settings', {
         method: 'POST',
-        body: JSON.stringify({ effective_month: month, base, district }),
+        body: JSON.stringify({ club: activeClub, effective_month: month, base, district }),
       });
       if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
       await openRates();       // 重讀，歷程與「適用中」才會跟著更新
@@ -1214,7 +1241,7 @@
     try {
       const data = await apiFetch('/dues/settings/delete', {
         method: 'POST',
-        body: JSON.stringify({ effective_month: month }),
+        body: JSON.stringify({ club: activeClub, effective_month: month }),
       });
       if (data.status !== 'ok') { alert(data.message || '刪除失敗'); return; }
       await openRates();
@@ -1249,7 +1276,7 @@
     btn.disabled = true; btn.textContent = '儲存中…';
     try {
       const data = await apiFetch('/finance/opening', {
-        method: 'POST', body: JSON.stringify({ month, amount }),
+        method: 'POST', body: JSON.stringify({ club: activeClub, month, amount }),
       });
       if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
       closeOpening();
@@ -1267,7 +1294,7 @@
       + '等於把系統上線之前社裡原有的錢當成 0。')) return;
     try {
       const data = await apiFetch('/finance/opening', {
-        method: 'POST', body: JSON.stringify({ clear: true }),
+        method: 'POST', body: JSON.stringify({ club: activeClub, clear: true }),
       });
       if (data.status !== 'ok') { alert(data.message || '清除失敗'); return; }
       closeOpening();
@@ -1287,7 +1314,7 @@
     document.getElementById('roster-list').innerHTML =
       `<p class="text-[13px] text-slate-400 italic py-2">載入中…</p>`;
     try {
-      roster = await apiFetch('/finance/roster');
+      roster = await apiFetch('/finance/roster' + (activeClub ? '?club=' + encodeURIComponent(activeClub) : ''));
     } catch (e) {
       document.getElementById('roster-list').innerHTML =
         `<p class="text-[13px] text-rose-600 py-2">載入失敗：${esc(e.message)}</p>`;
@@ -1335,6 +1362,7 @@
       const data = await apiFetch('/finance/roster/add', {
         method: 'POST',
         body: JSON.stringify({
+          club: activeClub,
           full_name: name,
           nickname: document.getElementById('roster-nickname').value.trim(),
           diet_type: document.getElementById('roster-diet').value,
@@ -1369,7 +1397,7 @@
     try {
       const data = await apiFetch('/finance/roster/delete', {
         method: 'POST',
-        body: JSON.stringify({ uid }),
+        body: JSON.stringify({ club: activeClub, uid }),
       });
       if (data.status !== 'ok') { alert(data.message || '刪除失敗'); return; }
       await openRoster();

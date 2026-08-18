@@ -374,17 +374,24 @@ def _district_of(user_id: str) -> dict:
     }
 
 
-def _events_for_scope(scope: str, club_name: str = "", district: str = "") -> list[dict]:
-    # Events now live in an editable DB table (seeded from the lists above); the
-    # 執秘 maintains them from the admin panel. All lookups go through here / db.
-    # district 一律要帶：這是 3481 的社友看不到 3523 活動的唯一機制。
+def _events_for_scope(scope: str, club_name: str = "",
+                      district: str | None = "") -> list[dict]:
+    """Events now live in an editable DB table (seeded from the lists above); the
+    執秘 maintains them from the admin panel. All lookups go through here / db.
+
+    district 一律要帶：這是 3481 的社友看不到 3523 活動的唯一機制。三種值意義不同
+    —— 代碼是那一區、None 是不分地區（只有跨地區管理員拿得到）、空字串是「沒指定」
+    而落回預設地區。少了 None 這一種，跨地區管理員的「全部」會被當成沒指定，
+    看到的仍然只有預設地區。"""
+    if district is None:
+        return db.list_events(scope, club_name, "")
     return db.list_events(scope, club_name, district or db.DEFAULT_DISTRICT)
 
 
 def _current_event(user_id: str) -> dict | None:
     """Closest upcoming event within the user's active scope (else most recent past)."""
     scope = db.get_user_scope(user_id)
-    evs = _events_for_scope(scope, db.get_user_club(user_id), db.get_user_district(user_id))
+    evs = _events_for_scope(scope, db.get_user_club(user_id), _visible_district(user_id))
     if not evs:
         return None
     today = date.today().isoformat()
@@ -399,12 +406,33 @@ def _lookup_event(user_id: str, ev_id: int) -> dict | None:
 
     別的地區的活動一律當作不存在。報名、報到、繳費回報、後台作業全都經過這裡
     查活動，所以地區的隔離只要守住這一關 —— 每個呼叫點各自檢查一次，遲早會有
-    一個漏掉，而那一個就是別區的人報進本區名單的入口。"""
+    一個漏掉，而那一個就是別區的人報進本區名單的入口。
+
+    跨地區管理員是唯一的例外，見 db.is_super_admin。"""
     ev = db.get_event(ev_id)
     if ev is None:
         return None
+    if user_id and db.is_super_admin(user_id):
+        return ev
     district = db.get_user_district(user_id) if user_id else db.DEFAULT_DISTRICT
     return ev if (ev.get("district") or db.DEFAULT_DISTRICT) == district else None
+
+
+def _visible_district(user_id: str) -> str | None:
+    """查活動時要套的地區條件；跨地區管理員回 None = 不過濾（見 _events_for_scope）。"""
+    return None if db.is_super_admin(user_id) else db.get_user_district(user_id)
+
+
+def _target_club(admin_uid: str, requested: str = "") -> str:
+    """社務類畫面（財務看板、名冊、社費）要操作哪一個社。
+
+    一般管理員永遠只有自己的社，指定別的社會被忽略而不是報錯 —— 那是呼叫端帶
+    參數的問題，不是使用者做錯什麼。跨地區管理員可以指定任何一個社，這正是
+    「看得到全部社」的意思。"""
+    requested = (requested or "").strip()
+    if requested and db.is_super_admin(admin_uid):
+        return requested
+    return db.get_user_club(admin_uid)
 
 
 # ── Flex Message builders ─────────────────────────────────────────────────────
@@ -1057,7 +1085,7 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
     if action == "event_list":
         scope = db.get_user_scope(user_id)
         events = _events_for_scope(scope, db.get_user_club(user_id),
-                                   db.get_user_district(user_id))
+                                   _visible_district(user_id))
         alt = "🏠 本社近期活動" if scope == "club" else "📅 地區近期活動"
         line_api.reply_flex(reply_token, alt, _build_event_list_carousel(events))
 
@@ -1645,8 +1673,9 @@ async def dues_member(request: Request, club: str = "", month: str = "", uid: st
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden"}
-    if not club:
-        club = db.get_user_club(admin_uid)
+    # club 是呼叫端給的，之前照單全收 —— 任何一位管理員都能讀別的社的帳單。
+    # 現在只有跨地區管理員指定得動，其餘人一律自己的社。
+    club = _target_club(admin_uid, club)
     row = db.get_dues(club, month, uid) if (month and uid) else None
     return {"status": "ok", **_dues_payload(row, *_dues_rates(club, month))}
 
@@ -1693,7 +1722,7 @@ async def dues_save(request: Request):
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "message": "無社費記帳權限"}
     body = await request.json()
-    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
     month = str(body.get("month", "")).strip()
     uid = str(body.get("uid", "")).strip()
     if not (club and month and uid):
@@ -1717,7 +1746,7 @@ async def dues_bulk_save(request: Request):
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "message": "無社費記帳權限"}
     body = await request.json()
-    club = str(body.get("club", "")).strip() or db.get_user_club(admin_uid)
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
     month = str(body.get("month", "")).strip()
     uids = [str(u).strip() for u in body.get("uids", []) if str(u).strip()]
     if not (club and _valid_month(month) and uids):
@@ -2015,10 +2044,10 @@ async def finance_opening(request: Request):
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         return {"status": "forbidden", "message": "無財務管理權限"}
-    club = db.get_user_club(uid)
+    body = await request.json()
+    club = _target_club(uid, str(body.get("club", "")).strip())
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
-    body = await request.json()
     if body.get("clear"):
         db.delete_opening_balance(club)
         return {"status": "ok", "cleared": True}
@@ -2034,12 +2063,12 @@ async def finance_opening(request: Request):
 
 
 @app.get("/finance/board")
-async def finance_board(request: Request, month: str = ""):
+async def finance_board(request: Request, month: str = "", club: str = ""):
     """One month of club money: per-member dues collection + the expense sheet."""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="無財務管理權限")
-    club = db.get_user_club(uid)
+    club = _target_club(uid, club)
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     month = month if _valid_month(month) else _this_month()
@@ -2063,6 +2092,9 @@ async def finance_board(request: Request, month: str = ""):
     totals["arrears"] = sum(r["arrears_total"] for r in rows)
     totals["arrears_members"] = sum(1 for r in rows if r["arrears_total"])
     return {"status": "ok", "club": club, "month": month, "members": rows,
+            # 跨地區管理員可以切社，畫面要知道現在看的是誰、還能切到哪些社
+            "all_districts": db.is_super_admin(uid),
+            "clubs": [c["club_name"] for c in db.all_clubs()] if db.is_super_admin(uid) else [],
             "totals": totals, "expense": expense,
             "net": net,
             # 上期結餘與期末結餘：社的錢是滾過來的，只看單月會以為社裡只有這個月
@@ -2084,12 +2116,12 @@ def _rates_payload(club: str, month: str) -> dict:
 
 
 @app.get("/dues/settings")
-async def dues_settings_get(request: Request, month: str = ""):
+async def dues_settings_get(request: Request, month: str = "", club: str = ""):
     """月費費率設定：這個月適用哪一段，以及全部的生效歷程。"""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="無社費設定權限")
-    club = db.get_user_club(uid)
+    club = _target_club(uid, club)
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     month = month if _valid_month(month) else _this_month()
@@ -2109,10 +2141,10 @@ async def dues_settings_save(request: Request):
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         return {"status": "forbidden", "message": "無社費設定權限"}
-    club = db.get_user_club(uid)
+    body = await request.json()
+    club = _target_club(uid, str(body.get("club", "")).strip())
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
-    body = await request.json()
     month = str(body.get("effective_month", "")).strip()
     if not _valid_month(month):
         return {"status": "invalid", "message": "生效月份格式需為 YYYY-MM"}
@@ -2135,10 +2167,10 @@ async def dues_settings_delete(request: Request):
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         return {"status": "forbidden", "message": "無社費設定權限"}
-    club = db.get_user_club(uid)
+    body = await request.json()
+    club = _target_club(uid, str(body.get("club", "")).strip())
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
-    body = await request.json()
     month = str(body.get("effective_month", "")).strip()
     if not _valid_month(month):
         return {"status": "invalid", "message": "生效月份格式需為 YYYY-MM"}
@@ -2158,7 +2190,7 @@ async def finance_confirm(request: Request):
     if not (_valid_month(month) and uid):
         return {"status": "invalid", "message": "缺少月份或社友"}
     confirmed = bool(body.get("confirmed", True))
-    club = db.get_user_club(admin_uid)
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
     # 只有固定月費、還沒登過餐費／IOU 的社友也會繳錢，看板上他就是「未繳」。
     # 這種人還沒有 club_dues 那一列，先補一列空的明細，才有東西可以標記已收。
     if not db.get_dues(club, month, uid):
@@ -2193,7 +2225,7 @@ async def finance_bank_digits(request: Request):
         return {"status": "invalid", "message": "缺少月份或社友"}
     if digits and (len(digits) != 5 or not digits.isdigit()):
         return {"status": "invalid", "message": "末 5 碼需為 5 位數字"}
-    club = db.get_user_club(admin_uid)
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     db.set_dues_bank_digits(club, month, uid, digits)
@@ -2211,12 +2243,12 @@ def _is_line_bound(uid: str) -> bool:
 
 
 @app.get("/finance/roster")
-async def finance_roster(request: Request):
+async def finance_roster(request: Request, club: str = ""):
     """執秘自己社的名冊，附上刪除前該知道的事：有沒有綁 LINE、有幾個月的帳單。"""
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         raise HTTPException(status_code=403, detail="無社友名冊管理權限")
-    club = db.get_user_club(admin_uid)
+    club = _target_club(admin_uid, club)
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     dues_months = db.dues_month_counts(club)
@@ -2241,10 +2273,10 @@ async def finance_roster_add(request: Request):
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "message": "無社友名冊管理權限"}
-    club = db.get_user_club(admin_uid)
+    body = await request.json()
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
-    body = await request.json()
     name = str(body.get("full_name", "")).strip()
     nickname = str(body.get("nickname", "")).strip()
     diet = str(body.get("diet_type", "")).strip() or _DIET_TYPES[0]
@@ -2274,10 +2306,10 @@ async def finance_roster_delete(request: Request):
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "message": "無社友名冊管理權限"}
-    club = db.get_user_club(admin_uid)
+    body = await request.json()
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
-    body = await request.json()
     uid = str(body.get("uid", "")).strip()
     if not uid:
         return {"status": "invalid", "message": "缺少社友"}
@@ -2289,13 +2321,13 @@ async def finance_roster_delete(request: Request):
 
 
 @app.get("/finance/trend")
-async def finance_trend(request: Request, months: int = 6, end: str = ""):
+async def finance_trend(request: Request, months: int = 6, end: str = "", club: str = ""):
     """收入／支出／結餘 for the last N months — the run of numbers a treasurer reads
     to spot the month collection slipped, which a single month can never show."""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="無財務管理權限")
-    club = db.get_user_club(uid)
+    club = _target_club(uid, club)
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     members = db.get_club_members(club)     # 社友名單每個月都一樣，撈一次就好
@@ -2316,7 +2348,7 @@ async def events(request: Request, scope: str = ""):
     if scope not in ("district", "club"):
         scope = db.get_user_scope(uid) if uid else "district"
     club = db.get_user_club(uid) if uid else ""
-    evs = _events_for_scope(scope, club, db.get_user_district(uid) if uid else "")
+    evs = _events_for_scope(scope, club, _visible_district(uid) if uid else "")
     # 活動 PDF 三個來源：(1) 已存檔的議程（後端即時產生向量 PDF）；(2) 舊版存進 DB
     # 的議程 PDF；(3) 執秘上傳到 Drive 資料夾的檔案。任一存在就把 pdf_url 指到後端
     # 端點（GET /events/{id}/pdf）。
@@ -2427,7 +2459,11 @@ def _same_district_event(uid: str, event_id: int) -> dict | None:
 
     回 404 而不是 403 是刻意的：別的地區有沒有這個活動，本來就不干他的事。"""
     ev = db.get_event(event_id)
-    if ev is None or (ev.get("district") or db.DEFAULT_DISTRICT) != db.get_user_district(uid):
+    if ev is None:
+        return None
+    if db.is_super_admin(uid):
+        return ev
+    if (ev.get("district") or db.DEFAULT_DISTRICT) != db.get_user_district(uid):
         return None
     return ev
 
@@ -2510,6 +2546,8 @@ async def me(request: Request):
         "needs_profile": _profile_incomplete(_member_profile(uid)),
         # 前端的標題、地區網站連結都跟著這一包走，不再各自寫死 3523
         "district": _district_of(uid),
+        # 跨地區管理員的畫面要多一個社／地區的切換器（見 finance.html 的社別選單）
+        "all_districts": db.is_super_admin(uid),
     }
 
 
@@ -3774,6 +3812,9 @@ async def admin_clubs(request: Request):
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "clubs": []}
+    if db.is_super_admin(admin_uid):
+        return {"status": "ok", "district": "", "all_districts": True,
+                "clubs": [c["club_name"] for c in db.all_clubs()]}
     district = db.get_user_district(admin_uid)
     return {"status": "ok", "district": district, "clubs": db.list_clubs(district)}
 
@@ -3785,7 +3826,8 @@ async def admin_club_members(request: Request, club: str = ""):
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "members": []}
-    if club and db.get_club_district(club) != db.get_user_district(admin_uid):
+    if (club and not db.is_super_admin(admin_uid)
+            and db.get_club_district(club) != db.get_user_district(admin_uid)):
         return {"status": "forbidden", "message": "無法查詢其他地區的社友名冊", "members": []}
     return {"status": "ok", "members": db.get_club_members(club)}
 
@@ -3808,7 +3850,8 @@ async def admin_bulk_register(request: Request):
     # 要報名的人也必須是同地區的。活動已由 _lookup_event 把關，但 uids 是呼叫端
     # 給的，不驗的話一次批次就能把別區的社友塞進本區的名單。
     district = db.get_user_district(admin_uid)
-    outsiders = [u for u in uids if db.get_user_district(u) != district]
+    outsiders = ([] if db.is_super_admin(admin_uid)
+                 else [u for u in uids if db.get_user_district(u) != district])
     if outsiders:
         return {"status": "forbidden",
                 "message": f"名單中有 {len(outsiders)} 位不屬於本地區的社友，無法代為報名"}

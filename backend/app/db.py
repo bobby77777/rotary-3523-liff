@@ -1434,11 +1434,36 @@ def ensure_user_roles_table() -> None:
     # 這一欄最早的版本預設 3523，既有的列因此被填上一個「其實該由社推出來」的地區。
     # 欄位已經加過的資料庫不會再跑上面那行，所以預設值要另外扳回來。
     execute("ALTER TABLE user_roles ALTER COLUMN district SET DEFAULT ''")
+    # 跨地區權限：看得到、管得到每一個地區與每一個社。地區隔離是預設，這是明確
+    # 的例外，所以是獨立一欄而不是在 district 塞一個 '*' 之類的特殊值 —— 特殊值
+    # 會被每一支忘了處理它的查詢當成一個真的地區代碼。
+    execute("ALTER TABLE user_roles ADD COLUMN IF NOT EXISTS all_districts BOOLEAN NOT NULL DEFAULT FALSE")
 
 
 def get_user_role(line_user_id: str) -> str:
     rows = query("SELECT role FROM user_roles WHERE line_user_id = %s", (line_user_id,))
     return rows[0]["role"] if rows else "member"
+
+
+def is_super_admin(line_user_id: str) -> bool:
+    """看得到全部地區與全部社的人（總部／系統維運）。
+
+    仍然要是 admin_all：跨地區只放大範圍，不會讓一個沒有管理權的人突然有權限。"""
+    rows = query(
+        "SELECT role, all_districts FROM user_roles WHERE line_user_id = %s",
+        (line_user_id,),
+    )
+    return bool(rows) and rows[0]["role"] == "admin_all" and bool(rows[0]["all_districts"])
+
+
+def set_all_districts(line_user_id: str, enabled: bool) -> None:
+    execute("UPDATE user_roles SET all_districts = %s, updated_at = NOW() "
+            "WHERE line_user_id = %s", (enabled, line_user_id))
+
+
+def all_clubs() -> list[dict]:
+    """全部的社與其地區，給跨地區管理員切換用。"""
+    return query("SELECT club_name, district FROM clubs ORDER BY district, club_name")
 
 
 def get_user_district(line_user_id: str) -> str:
