@@ -103,9 +103,10 @@ def _verify_line_signature(body: bytes, signature: str) -> bool:
 _SEED_DISTRICTS = [
     {"code": "3523", "name": "國際扶輪 3523 地區", "short_name": "3523 地區",
      "website": "https://www.rotary3523.org.tw",
-     "notices_api": "https://ri3523.org/wp-json/wp/v2"},
+     "notices_api": "https://ri3523.org/wp-json/wp/v2",
+     "contact_email": "office@rotary3523.org.tw"},
     {"code": "3481", "name": "國際扶輪 3481 地區", "short_name": "3481 地區",
-     "website": "", "notices_api": ""},
+     "website": "", "notices_api": "", "contact_email": ""},
 ]
 
 
@@ -370,7 +371,7 @@ def _district_of(user_id: str) -> dict:
     code = db.get_user_district(user_id) if user_id else db.DEFAULT_DISTRICT
     return db.get_district(code) or {
         "code": code, "name": f"國際扶輪 {code} 地區", "short_name": f"{code} 地區",
-        "website": "", "notices_api": "",
+        "website": "", "notices_api": "", "contact_email": "",
     }
 
 
@@ -1231,9 +1232,13 @@ def _handle_postback(reply_token: str, user_id: str, data: str) -> None:
             return
         # 其餘後台功能都已改成直接開 LIFF（見 _admin_buttons）；這裡只剩後台支援。
         if p.get("f") == "support":
+            # 信箱跟著問的人所屬地區走；該地區還沒填就不要編一個出來
+            email = _district_of(user_id).get("contact_email") or ""
             line_api.reply_text(reply_token,
-                                "🎧 秘書處聯絡方式\n\n信箱：office@rotary3523.org.tw\n"
-                                "系統問題請附上活動名稱與畫面截圖，我們會盡快回覆。")
+                                "🎧 秘書處聯絡方式\n\n"
+                                + (f"信箱：{email}\n" if email
+                                   else "（貴地區尚未設定秘書處信箱）\n")
+                                + "系統問題請附上活動名稱與畫面截圖，我們會盡快回覆。")
         else:
             line_api.reply_text(reply_token, "請改用後台選單中的按鈕操作 🙏")
 
@@ -3778,10 +3783,11 @@ async def admin_district_save(request: Request):
     short = str(body.get("short_name", "")).strip() or f"{code} 地區"
     website = str(body.get("website", "")).strip()
     notices_api = str(body.get("notices_api", "")).strip()
+    email = str(body.get("contact_email", "")).strip()
     if db.get_district(code):
-        db.update_district(code, name, short, website, notices_api)
+        db.update_district(code, name, short, website, notices_api, email)
         return {"status": "ok", "code": code, "created": False}
-    db.seed_district(code, name, short, website, notices_api)
+    db.seed_district(code, name, short, website, notices_api, email)
     return {"status": "ok", "code": code, "created": True}
 
 

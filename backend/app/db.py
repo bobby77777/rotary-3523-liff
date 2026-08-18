@@ -919,39 +919,44 @@ def ensure_districts_table() -> None:
             created_at  TIMESTAMPTZ DEFAULT NOW()
         )
     """)
+    # 秘書處聯絡信箱。以前寫死在 LINE 回覆與 LIFF 裡，3481 的社友會拿到 3523 的
+    # 信箱 —— 聯絡方式跟地區網站一樣是地區的屬性，不是程式常數。
+    execute("ALTER TABLE districts ADD COLUMN IF NOT EXISTS contact_email TEXT NOT NULL DEFAULT ''")
 
 
-def seed_district(code: str, name: str, short_name: str,
-                  website: str = "", notices_api: str = "") -> None:
+def seed_district(code: str, name: str, short_name: str, website: str = "",
+                  notices_api: str = "", contact_email: str = "") -> None:
     """建立地區；已存在就不動它 —— 這是開機時跑的，不能蓋掉管理員後來改的設定。"""
     execute(
         """
-        INSERT INTO districts (code, name, short_name, website, notices_api)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO districts (code, name, short_name, website, notices_api, contact_email)
+        VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (code) DO NOTHING
         """,
-        (code, name, short_name, website, notices_api),
+        (code, name, short_name, website, notices_api, contact_email),
     )
 
 
 def list_districts() -> list[dict]:
-    return query("SELECT code, name, short_name, website, notices_api FROM districts ORDER BY code")
+    return query("SELECT code, name, short_name, website, notices_api, contact_email "
+                 "FROM districts ORDER BY code")
 
 
 def get_district(code: str) -> dict | None:
     rows = query(
-        "SELECT code, name, short_name, website, notices_api FROM districts WHERE code = %s",
+        "SELECT code, name, short_name, website, notices_api, contact_email "
+        "FROM districts WHERE code = %s",
         (code,),
     )
     return rows[0] if rows else None
 
 
-def update_district(code: str, name: str, short_name: str,
-                    website: str, notices_api: str) -> None:
+def update_district(code: str, name: str, short_name: str, website: str,
+                    notices_api: str, contact_email: str = "") -> None:
     execute(
-        "UPDATE districts SET name = %s, short_name = %s, website = %s, notices_api = %s "
-        "WHERE code = %s",
-        (name, short_name, website, notices_api, code),
+        "UPDATE districts SET name = %s, short_name = %s, website = %s, "
+        "notices_api = %s, contact_email = %s WHERE code = %s",
+        (name, short_name, website, notices_api, contact_email, code),
     )
 
 

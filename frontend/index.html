@@ -160,6 +160,8 @@
                     class="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
                 <input id="district-notices" placeholder="公文來源 WordPress API（選填）"
                     class="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                <input id="district-email" type="email" placeholder="秘書處信箱（選填）"
+                    class="w-full bg-white border border-gray-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
                 <p class="text-[10px] text-slate-400 leading-relaxed">
                     公文來源填該地區網站的 WordPress REST 根目錄（例：https://ri3523.org/wp-json/wp/v2）。
                     留空表示不自動抓公文，該地區的活動由執秘手動建立。
@@ -1143,7 +1145,7 @@ const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
 // 地區名稱與網站由後端 /me 給（見 applyDistrict）。這裡的值只是還沒拿到之前的
 // 佔位字樣：使用者屬於哪個地區是資料，不是部署時的設定。
 let DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
-let districtInfo = { code: '3523', name: '國際扶輪 3523 地區', short_name: '3523 地區' };
+let districtInfo = { code: '3523', name: '國際扶輪 3523 地區', short_name: '3523 地區', contact_email: '' };
 // ============================================================
 
 // 全畫面的地區字樣一次換掉。以前每個標題各自寫死 3523，多了一個地區之後
@@ -1154,6 +1156,7 @@ function applyDistrict(d) {
         code: d.code,
         name: d.name || `國際扶輪 ${d.code} 地區`,
         short_name: d.short_name || `${d.code} 地區`,
+        contact_email: d.contact_email || '',
     };
     if (d.website) DISTRICT_WEBSITE = d.website;
     document.title = districtInfo.name;
@@ -1355,6 +1358,7 @@ function editDistrict(code) {
     document.getElementById('district-name').value = d.name;
     document.getElementById('district-website').value = d.website || '';
     document.getElementById('district-notices').value = d.notices_api || '';
+    document.getElementById('district-email').value = d.contact_email || '';
 }
 
 async function saveDistrict() {
@@ -1370,6 +1374,7 @@ async function saveDistrict() {
                 name: document.getElementById('district-name').value.trim(),
                 website: document.getElementById('district-website').value.trim(),
                 notices_api: document.getElementById('district-notices').value.trim(),
+                contact_email: document.getElementById('district-email').value.trim(),
             }),
         });
         if (data.status !== 'ok') { showAlert('儲存失敗', data.message || '請稍後再試。'); return; }
@@ -3681,7 +3686,9 @@ function clickMenuItem(itemName, key) {
         if (liff.isInClient()) liff.openWindow({ url: DISTRICT_WEBSITE, external: true });
         else window.open(DISTRICT_WEBSITE, '_blank');
     } else if (key === 'admin-contact') {
-        showAlert('秘書處聯絡資訊', '信箱：office@rotary3523.org.tw\n\n系統問題請附上活動名稱與畫面截圖。');
+        showAlert('秘書處聯絡資訊',
+            (districtInfo.contact_email ? `信箱：${districtInfo.contact_email}` : '貴地區尚未設定秘書處信箱')
+            + '\n\n系統問題請附上活動名稱與畫面截圖。');
     }
 }
 
