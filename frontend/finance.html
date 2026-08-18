@@ -242,7 +242,7 @@
       </div>
       <div>
         <div class="flex items-center justify-between mb-1">
-          <span class="text-[13px] font-bold text-slate-400">社友代墊款（待歸墊）</span>
+          <span class="text-[13px] font-bold text-slate-400">社友代墊款</span>
           <button onclick="addAdvanceRow()" class="text-[13px] font-bold text-amber-600 hover:text-amber-800">＋ 新增</button>
         </div>
         <div id="exp-advances" class="space-y-2"></div>
@@ -304,6 +304,41 @@
     </div>
     <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
       <button onclick="closeRates()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 期初結餘 Modal ==================== -->
+<div id="opening-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+    <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between flex-shrink-0">
+      <span class="font-bold">期初結餘</span>
+      <button onclick="closeOpening()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <p class="text-[14px] text-slate-500 leading-relaxed">
+        系統開始記帳的那個月，社的帳上有多少錢。這個數字沒有任何一筆收支推算得出來，
+        只能填一次；之後每個月的上期結餘都會自動結轉，不必再輸入。
+      </p>
+      <label class="flex items-center justify-between gap-3">
+        <span class="text-[15px] font-semibold text-slate-700">開帳年月</span>
+        <input id="opening-month" type="month"
+          class="w-1/2 border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600">
+      </label>
+      <label class="flex items-center justify-between gap-3">
+        <span class="text-[15px] font-semibold text-slate-700">當時帳上金額</span>
+        <input id="opening-amount" type="number" placeholder="0" onfocus="this.select()"
+          class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-indigo-600">
+      </label>
+      <p class="text-[13px] text-slate-400">社有欠款可填負數。</p>
+      <p id="opening-current" class="text-[13px] text-slate-500"></p>
+    </div>
+    <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
+      <button onclick="clearOpening()" id="opening-clear" class="px-3 py-2 rounded text-[14px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">清除設定</button>
+      <div class="flex gap-2">
+        <button onclick="closeOpening()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">取消</button>
+        <button onclick="saveOpening()" id="opening-save" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">儲存</button>
+      </div>
     </div>
   </div>
 </div>
@@ -520,8 +555,26 @@
         <span class="${bold ? 'font-bold' : ''}">${esc(label)}</span>
         <span class="font-bold tabular-nums">${money(amt)}</span>
       </div>`;
-    const net = board.net;
+    const net = board.net, carry = board.carry || 0, closing = board.closing;
+    // 上期結餘怎麼來的要講得出來，否則沒有人敢相信這個數字：期初結餘設了沒、
+    // 中間結轉了幾個月。
+    const carryNote = board.opening_applies
+      ? `${monthLabel(board.opening_month)} 期初 ${money(board.opening_amount)}`
+        + (board.counted_months ? ` ＋ 其後 ${board.counted_months} 個月結轉` : '')
+      : board.has_opening
+        ? `此月早於開帳月份（${monthLabel(board.opening_month)}），期初結餘尚未起算`
+        : (board.counted_months
+            ? `${board.counted_months} 個月累計（尚未設定期初結餘）`
+            : '尚未設定期初結餘');
     document.getElementById('balance').innerHTML = `
+      <div class="flex justify-between items-center text-slate-500">
+        <span>上期結餘
+          <button onclick="openOpening()" class="ml-1 text-[13px] font-bold text-indigo-600 hover:text-indigo-800">設定</button>
+        </span>
+        <span class="font-bold tabular-nums ${carry < 0 ? 'text-rose-600' : ''}">${money(carry)}</span>
+      </div>
+      <p class="text-[12px] text-slate-400 -mt-1">${esc(carryNote)}</p>
+      <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
       ${line('社費收入（已繳）', t.confirmed, 'text-emerald-700', true)}
       <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
       ${line('場地租金', e.rent)}
@@ -529,13 +582,15 @@
       ${e.fixed.map(f => line(f.name || '固定支出', f.amount)).join('')}
       ${e.advances.length ? line(`社友代墊款（${e.advances.length} 筆）`, e.advance_total, 'text-amber-700') : ''}
       ${line('支出小計', e.total, 'text-rose-600', true)}
+      ${line('本月結餘', net, net >= 0 ? 'text-slate-700' : 'text-rose-600', true)}
       <div class="border-t-2 border-slate-800 pt-2 mt-2"></div>
       <div class="flex justify-between items-center">
-        <span class="font-black">本月結餘</span>
-        <span class="font-black text-xl tabular-nums ${net >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${money(net)}</span>
+        <span class="font-black">期末結餘</span>
+        <span class="font-black text-xl tabular-nums ${closing >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${money(closing)}</span>
       </div>
+      <p class="text-[12px] text-slate-400">上期 ${money(carry)} ＋ 本月 ${money(net)}，也就是下個月的上期結餘。</p>
       ${e.total === 0 ? `<p class="text-[13px] text-slate-400 pt-1">本月尚未填社務對帳表（支出以 0 計）。按右上角「編輯支出」填寫。</p>` : ''}
-      ${t.reported > 0 ? `<p class="text-[13px] text-amber-600 pt-1">另有 ${money(t.reported)} 已回報但未對帳，尚未計入收入。</p>` : ''}`;
+      ${t.reported > 0 ? `<p class="text-[13px] text-amber-600 pt-1">另有 ${money(t.reported)} 已回報但未對帳，尚未計入收入與結餘。</p>` : ''}`;
   }
 
   // 趨勢圖獨立載入：一次要算 6 個月，比當月看板慢，不該讓它擋住主要數字。
@@ -1119,6 +1174,56 @@
 
   function closeRates() { hideModal('rates-modal'); }
 
+  // ==================== 期初結餘 ====================
+  function openOpening() {
+    document.getElementById('opening-month').value = board.opening_month || activeMonth;
+    document.getElementById('opening-amount').value = board.has_opening ? board.opening_amount : '';
+    document.getElementById('opening-current').textContent = board.has_opening
+      ? `目前設定：${monthLabel(board.opening_month)} 起 ${money(board.opening_amount)}`
+      : '目前未設定，上期結餘完全由系統內的收支累計而來。';
+    document.getElementById('opening-clear').classList.toggle('hidden', !board.has_opening);
+    showModal('opening-modal');
+    lucide.createIcons();
+  }
+
+  function closeOpening() { hideModal('opening-modal'); }
+
+  async function saveOpening() {
+    const month = document.getElementById('opening-month').value;
+    if (!/^\d{4}-\d{2}$/.test(month)) { alert('請選擇開帳年月。'); return; }
+    const amount = parseInt(document.getElementById('opening-amount').value) || 0;
+    const btn = document.getElementById('opening-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const data = await apiFetch('/finance/opening', {
+        method: 'POST', body: JSON.stringify({ month, amount }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      closeOpening();
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '儲存';
+    }
+  }
+
+  async function clearOpening() {
+    if (!confirm('清除期初結餘設定？\n\n上期結餘會改成只累計系統內記過的收支，'
+      + '等於把系統上線之前社裡原有的錢當成 0。')) return;
+    try {
+      const data = await apiFetch('/finance/opening', {
+        method: 'POST', body: JSON.stringify({ clear: true }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '清除失敗'); return; }
+      closeOpening();
+      await loadBoard();
+    } catch (e) {
+      alert('清除失敗：' + e.message);
+    }
+  }
+
   // ==================== 社友名冊 ====================
   // 名冊以前只長不消：退社的人年年出現在應收名單裡，還沒加官方帳號的新社友則
   // 根本進不來。這裡讓執秘自己維護，改完重載看板，應收總額才跟著對。
@@ -1292,6 +1397,10 @@
           本月支出合計 ${money(e.total)}（場地租金 ${money(e.rent)}、人事薪資 ${money(e.salary)}、
           固定支出 ${money(e.fixed_total)}、社友代墊款 ${money(e.advance_total)}）；
           本月結餘 ${money(board.net)}。
+        </p>
+        <p style="font-size:9pt; color:#0f172a; margin-top:4pt;">
+          上期結餘 ${money(board.carry || 0)} ＋ 本月結餘 ${money(board.net)}
+          ＝ <b>期末結餘 ${money(board.closing)}</b>
         </p>
       </div>`;
     window.print();

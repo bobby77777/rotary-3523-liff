@@ -693,6 +693,62 @@ def ensure_club_finance_table() -> None:
     """)
 
 
+# ── 期初結餘與結轉 ────────────────────────────────────────────────────────────
+# 每個月的結餘不是獨立的：社的錢是一路滾過來的，這個月開始的時候手上有多少，
+# 等於上個月結束時剩多少。系統上線之前社裡本來就有錢，那個數字沒有任何一筆
+# 收支可以推得出來，只能由財務長填一次（期初結餘），之後全部自動結轉。
+
+def ensure_club_opening_balance_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS club_opening_balance (
+            club_name  TEXT PRIMARY KEY,
+            month      TEXT NOT NULL,
+            amount     BIGINT NOT NULL DEFAULT 0,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def get_opening_balance(club_name: str) -> dict | None:
+    rows = query("SELECT month, amount FROM club_opening_balance WHERE club_name = %s",
+                 (club_name,))
+    return rows[0] if rows else None
+
+
+def save_opening_balance(club_name: str, month: str, amount: int) -> None:
+    execute(
+        """
+        INSERT INTO club_opening_balance (club_name, month, amount, updated_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (club_name) DO UPDATE SET
+            month = EXCLUDED.month, amount = EXCLUDED.amount, updated_at = NOW()
+        """,
+        (club_name, month, amount),
+    )
+
+
+def delete_opening_balance(club_name: str) -> None:
+    execute("DELETE FROM club_opening_balance WHERE club_name = %s", (club_name,))
+
+
+def finance_months(club_name: str) -> list[str]:
+    """有錢動過的月份（有帳單或有支出表的），由舊到新。
+
+    結轉只需要走這些月份：沒有任何帳單也沒有支出表的月份，收入與支出都是 0，
+    對結餘沒有貢獻。這讓結轉的成本跟「這個社實際記過幾個月的帳」成正比，而不是
+    跟「從期初到現在有幾個月」成正比。"""
+    rows = query(
+        """
+        SELECT month FROM club_dues WHERE club_name = %s
+        UNION
+        SELECT month FROM club_finance WHERE club_name = %s
+        ORDER BY month
+        """,
+        (club_name, club_name),
+    )
+    return [r["month"] for r in rows]
+
+
 def get_club_finance(club_name: str, month: str) -> dict | None:
     rows = query("SELECT data FROM club_finance WHERE club_name = %s AND month = %s",
                  (club_name, month))

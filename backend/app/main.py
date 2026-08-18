@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
     db.ensure_bulletin_editors_table()
     db.ensure_bulletin_content_table()
     db.ensure_club_finance_table()
+    db.ensure_club_opening_balance_table()
     db.ensure_member_business_table()
     # 地區要在活動之前建好：活動與社都掛在地區底下，順序反了就會有一批資料指向
     # 一個還不存在的地區。
@@ -1964,6 +1965,64 @@ def _expense_summary(data: dict | None) -> dict:
     }
 
 
+def _month_net(club: str, month: str, members: list[dict]) -> int:
+    """某個月的淨額：收到的社費減掉社務支出。
+
+    收入只認「已繳」—— 社友回報了但執秘還沒對到的錢還沒進帳，把它算進結餘等於
+    自己騙自己，下個月的期初就會對不上銀行。"""
+    confirmed = _dues_totals(_dues_rows(club, month, members))["confirmed"]
+    return confirmed - _expense_summary(db.get_club_finance(club, month))["total"]
+
+
+def _carry_forward(club: str, month: str, members: list[dict]) -> dict:
+    """這個月開始時手上有多少 = 期初結餘 + 期初之後、本月之前每個月的淨額。
+
+    逐月累加而不是存一個數字：任何一個舊月份被更正（補記一筆餐費、改對帳狀態），
+    往後每一個月的期初都要跟著變，存起來的快照只會慢慢跟事實脫節。"""
+    opening = db.get_opening_balance(club)
+    start = opening["month"] if opening else ""
+    # 期初結餘只從開帳月份起算。看更早的月份時它還不存在，把它算進去等於讓錢
+    # 出現在它進帳之前，那幾個月的結餘會憑空多出一筆。
+    applies = bool(opening) and month >= start
+    carry = int(opening["amount"]) if applies else 0
+    months = [m for m in db.finance_months(club) if m < month and (not start or m >= start)]
+    for m in months:
+        carry += _month_net(club, m, members)
+    return {"carry": carry,
+            "opening_month": start,
+            "opening_amount": int(opening["amount"]) if opening else 0,
+            "has_opening": opening is not None,
+            "opening_applies": applies,
+            "counted_months": len(months)}
+
+
+@app.post("/finance/opening")
+async def finance_opening(request: Request):
+    """設定期初結餘：某個月開始時社的帳上有多少錢。
+
+    系統上線之前的收支沒有任何紀錄可以推算，只能由財務長填一次。填了之後每個月
+    的期初都自動結轉，不必再輸入第二次。amount 可以是負數（社有欠款）。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        return {"status": "forbidden", "message": "無財務管理權限"}
+    club = db.get_user_club(uid)
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    body = await request.json()
+    if body.get("clear"):
+        db.delete_opening_balance(club)
+        return {"status": "ok", "cleared": True}
+    month = str(body.get("month", "")).strip()
+    if not _valid_month(month):
+        return {"status": "invalid", "message": "生效年月格式需為 YYYY-MM"}
+    try:
+        amount = int(body.get("amount", 0) or 0)
+    except (TypeError, ValueError):
+        return {"status": "invalid", "message": "金額需為數字"}
+    db.save_opening_balance(club, month, amount)
+    return {"status": "ok", "month": month, "amount": amount}
+
+
 @app.get("/finance/board")
 async def finance_board(request: Request, month: str = ""):
     """One month of club money: per-member dues collection + the expense sheet."""
@@ -1974,13 +2033,20 @@ async def finance_board(request: Request, month: str = ""):
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     month = month if _valid_month(month) else _this_month()
-    rows = _dues_rows(club, month, db.get_club_members(club))
+    members = db.get_club_members(club)      # 結轉每個月都要用同一份名單，撈一次就好
+    rows = _dues_rows(club, month, members)
     rows.sort(key=lambda r: (["unpaid", "reported", "confirmed"].index(r["status"]), r["name"]))
     totals = _dues_totals(rows)
     expense = _expense_summary(db.get_club_finance(club, month))
+    net = totals["confirmed"] - expense["total"]
+    carry = _carry_forward(club, month, members)
     return {"status": "ok", "club": club, "month": month, "members": rows,
             "totals": totals, "expense": expense,
-            "net": totals["confirmed"] - expense["total"],
+            "net": net,
+            # 上期結餘與期末結餘：社的錢是滾過來的，只看單月會以為社裡只有這個月
+            # 收到的那些錢。closing 就是下個月的期初。
+            **carry,
+            "closing": carry["carry"] + net,
             # 帳單編輯要顯示固定的兩項，金額由後端給，前端不自己抄一份常數
             **_rates_payload(club, month)}
 
