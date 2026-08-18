@@ -626,6 +626,12 @@
             <!-- FORM VIEW -->
             <div id="event-admin-form-view" class="hidden space-y-3">
                 <input type="hidden" id="event-form-id">
+                <!-- 地區：只有跨地區管理員（總部）看得到。其餘人的活動一律建在
+                     自己的地區，後端也只認那一個，給他一個選單只會讓人以為選得動。 -->
+                <div id="event-form-district-block" class="hidden">
+                    <label class="block text-[10px] font-bold text-gray-500 mb-1">地區</label>
+                    <select id="event-form-district" class="w-full bg-white border border-cyan-200 text-gray-900 rounded-lg py-2 px-3 text-xs font-bold shadow-sm"></select>
+                </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 mb-1">範圍</label>
                     <select id="event-form-scope" class="w-full bg-white border border-gray-200 text-gray-900 rounded-lg py-2 px-3 text-xs font-bold shadow-sm">
@@ -3856,6 +3862,12 @@ function openEventAdminModal() {
     openModal('modal-event-admin');
     closeEventForm();                       // always start on the list view
     setEventAdminScope(eventAdminScope);
+    // 地區清單抓回來之後，若表單已經開著就補畫一次（跨地區管理員才有這一格）
+    loadDistrictChoices().then(() => {
+        if (!document.getElementById('event-admin-form-view').classList.contains('hidden')) {
+            renderEventDistrict({ district: document.getElementById('event-form-district').value });
+        }
+    });
 }
 
 function setEventAdminScope(scope) {
@@ -3898,6 +3910,7 @@ async function loadEventAdminList() {
 function openEventForm(ev) {
     ev = ev || {};
     document.getElementById('event-form-id').value = ev.id || '';
+    renderEventDistrict(ev);
     document.getElementById('event-form-scope').value = ev.scope || eventAdminScope;
     document.getElementById('event-form-date').value = ev.date || '';
     document.getElementById('event-form-title').value = ev.title || '';
@@ -3954,6 +3967,29 @@ function closeEventForm() {
     document.getElementById('event-admin-list-view').classList.remove('hidden');
 }
 
+// 跨地區管理員才有的「活動要建在哪一區」。清單在第一次開表單時抓一次就夠，
+// 地區不是每天都會變的東西。
+let districtChoices = [];
+
+async function loadDistrictChoices() {
+    if (districtChoices.length || systemRole !== 'admin_all') return;
+    try {
+        const data = await apiFetch('/admin/districts');
+        if (data.status === 'ok') districtChoices = data.districts || [];
+    } catch (e) { /* 抓不到就沿用預設地區，不擋住建立活動 */ }
+}
+
+function renderEventDistrict(ev) {
+    const block = document.getElementById('event-form-district-block');
+    const sel = document.getElementById('event-form-district');
+    // 只有一個地區可選時也不必出現：那就是他自己的地區
+    if (districtChoices.length < 2) { block.classList.add('hidden'); return; }
+    sel.innerHTML = districtChoices.map(d =>
+        `<option value="${_escHtml(d.code)}">${_escHtml(d.name)}</option>`).join('');
+    sel.value = (ev && ev.district) || districtInfo.code;
+    block.classList.remove('hidden');
+}
+
 async function saveEventForm() {
     const id = document.getElementById('event-form-id').value;
     const payload = {
@@ -3968,6 +4004,9 @@ async function saveEventForm() {
         geo: document.getElementById('event-form-geo').value.trim(),
         golf_plans: collectEventPlans(),
     };
+    // 只有跨地區管理員送得出地區；後端對其他人一律忽略這個欄位
+    const dSel = document.getElementById('event-form-district');
+    if (districtChoices.length && dSel.value) payload.district = dSel.value;
     if (!payload.title) { showAlert('缺少標題', '請輸入活動標題。'); return; }
     if (payload.geo && !/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(payload.geo)) {
         showAlert('座標格式錯誤', '會場座標請填「緯度,經度」，例如 25.0785,121.5262。'); return;

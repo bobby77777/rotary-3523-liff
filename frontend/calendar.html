@@ -70,6 +70,12 @@
               <label class="block text-xs text-slate-500 mb-1">活動日期</label>
               <input type="date" id="new-event-date" class="w-full p-2.5 border border-slate-300 rounded focus:border-blue-500 outline-none text-sm shadow-sm" />
             </div>
+            <!-- 地區：只有跨地區管理員看得到。沒有這一格的話，他在這裡建的活動
+                 一律落到自己那一區，而且列表混著兩區看不出來，等於默默建錯。 -->
+            <div id="new-event-district-block" class="w-full md:w-48 hidden">
+              <label class="block text-xs text-slate-500 mb-1">地區</label>
+              <select id="new-event-district" class="w-full p-2.5 border border-cyan-300 rounded focus:border-cyan-500 outline-none text-sm shadow-sm"></select>
+            </div>
             <button onclick="createNewEvent()" class="w-full md:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors shadow-md flex items-center justify-center gap-2">新增 <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
           </div>
         </div>
@@ -247,6 +253,7 @@
       await ensureLineLogin();   // 取得開啟者本人身分（決定是否為管理員）
       try { me = await apiFetch('/me'); } catch (e) { me = { is_admin: false, club: '', scope: 'district' }; }
       districtName = (me.district && me.district.short_name) || '地區';
+      await loadDistrictChoices();
       document.title = `扶輪${districtName} 行事曆與議程系統`;
       currentScope = me.club ? 'club' : 'district';
       buildViewSelector();
@@ -319,6 +326,22 @@
       lucide.createIcons();
     }
 
+    // 跨地區管理員（總部）建活動時要選地區；一般管理員只有自己那一區，選單不出現。
+    let districtChoices = [];
+    async function loadDistrictChoices() {
+      if (!me.all_districts) return;
+      try {
+        const data = await apiFetch('/admin/districts');
+        districtChoices = (data.status === 'ok' && data.districts) || [];
+      } catch (e) { return; }          // 抓不到就沿用預設地區，不擋住建立活動
+      if (districtChoices.length < 2) return;
+      const sel = document.getElementById('new-event-district');
+      sel.innerHTML = districtChoices.map(d =>
+        `<option value="${escAttr(d.code)}">${escapeHtml(d.name)}</option>`).join('');
+      sel.value = (me.district && me.district.code) || districtChoices[0].code;
+      document.getElementById('new-event-district-block').classList.remove('hidden');
+    }
+
     async function createNewEvent() {
       if (!canEdit()) return;
       const titleInput = document.getElementById('new-event-title');
@@ -330,6 +353,8 @@
         club_name: currentScope === 'club' ? (me.club || '') : '',
         title, date: dateInput.value || null, start_time: '12:00', agenda: [],
       };
+      const dSel = document.getElementById('new-event-district');
+      if (districtChoices.length > 1 && dSel.value) payload.district = dSel.value;
       try {
         await apiFetch('/admin/events', { method: 'POST', body: JSON.stringify(payload) });
         titleInput.value = ''; dateInput.value = '';

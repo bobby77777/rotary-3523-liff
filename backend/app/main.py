@@ -2454,9 +2454,22 @@ async def admin_create_event(request: Request):
     if not data.get("title"):
         raise HTTPException(status_code=400, detail="活動標題必填")
     # 地區不由前端決定：活動一律建在建立者自己的地區底下，否則一個打錯的欄位
-    # 就會讓活動出現在別的地區的行事曆上。
-    data["district"] = db.get_user_district(uid)
+    # 就會讓活動出現在別的地區的行事曆上。跨地區管理員是例外 —— 他本來就管所有
+    # 地區，而且沒有這個例外的話，他自己那一區以外的地區永遠不會有活動。
+    data["district"] = _event_district(uid, data.get("district"))
     return {"status": "ok", "event": db.create_event(data)}
+
+
+def _event_district(uid: str, requested, current: str = "") -> str:
+    """活動要掛在哪一個地區。
+
+    一般管理員只有自己那一區，前端傳什麼都不算數；跨地區管理員可以指定，但仍然
+    要是系統裡真的存在的地區 —— 打錯一個代碼，那筆活動會掉進沒有人看得到的地方。"""
+    own = current or db.get_user_district(uid)
+    code = str(requested or "").strip()
+    if not code or not db.is_super_admin(uid):
+        return own
+    return code if db.get_district(code) else own
 
 
 def _same_district_event(uid: str, event_id: int) -> dict | None:
@@ -2479,10 +2492,14 @@ async def admin_update_event(event_id: int, request: Request):
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="Not an admin")
-    if _same_district_event(uid, event_id) is None:
+    current = _same_district_event(uid, event_id)
+    if current is None:
         raise HTTPException(status_code=404, detail="Event not found")
     data = _clean_event_payload(await request.json())
-    data.pop("district", None)          # 活動不能被搬到別的地區
+    # 一般管理員改不動地區（活動不能被搬到別的地區）；跨地區管理員可以，
+    # 因為建錯地區的活動總得有人搬得回去。
+    if "district" in data:
+        data["district"] = _event_district(uid, data["district"], current=current["district"])
     ev = db.update_event(event_id, data)
     if ev is None:
         raise HTTPException(status_code=404, detail="Event not found")
