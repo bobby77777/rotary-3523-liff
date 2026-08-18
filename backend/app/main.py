@@ -1965,31 +1965,41 @@ def _expense_summary(data: dict | None) -> dict:
     }
 
 
-def _month_net(club: str, month: str, members: list[dict]) -> int:
-    """某個月的淨額：收到的社費減掉社務支出。
-
-    收入只認「已繳」—— 社友回報了但執秘還沒對到的錢還沒進帳，把它算進結餘等於
-    自己騙自己，下個月的期初就會對不上銀行。"""
-    confirmed = _dues_totals(_dues_rows(club, month, members))["confirmed"]
-    return confirmed - _expense_summary(db.get_club_finance(club, month))["total"]
+def _carry_months(club: str, month: str) -> tuple[list[str], dict | None, bool]:
+    """要結轉的月份（本月之前、期初之後、且確實有記過帳的），以及期初設定。"""
+    opening = db.get_opening_balance(club)
+    start = opening["month"] if opening else ""
+    applies = bool(opening) and month >= start
+    months = [m for m in db.finance_months(club) if m < month and (not start or m >= start)]
+    return months, opening, applies
 
 
 def _carry_forward(club: str, month: str, members: list[dict]) -> dict:
-    """這個月開始時手上有多少 = 期初結餘 + 期初之後、本月之前每個月的淨額。
+    """這個月開始時手上有多少 = 期初結餘 + 期初之後、本月之前每個月的淨額，
+    外加每位社友從那些月份欠到現在的錢。
 
     逐月累加而不是存一個數字：任何一個舊月份被更正（補記一筆餐費、改對帳狀態），
-    往後每一個月的期初都要跟著變，存起來的快照只會慢慢跟事實脫節。"""
-    opening = db.get_opening_balance(club)
-    start = opening["month"] if opening else ""
-    # 期初結餘只從開帳月份起算。看更早的月份時它還不存在，把它算進去等於讓錢
-    # 出現在它進帳之前，那幾個月的結餘會憑空多出一筆。
-    applies = bool(opening) and month >= start
+    往後每一個月的期初都要跟著變，存起來的快照只會慢慢跟事實脫節。
+
+    社的結餘與社友的欠款走同一趟迴圈：兩者都是「把之前每個月再看一遍」，各跑
+    一次等於把最貴的部分做兩遍，也給了兩份可能對不起來的答案。"""
+    months, opening, applies = _carry_months(club, month)
     carry = int(opening["amount"]) if applies else 0
-    months = [m for m in db.finance_months(club) if m < month and (not start or m >= start)]
+    # uid -> [{month, amount, is_paid}]：欠的是哪幾個月要講得出來，社友被要求補繳
+    # 的第一句話一定是「哪一個月？」
+    arrears: dict[str, list[dict]] = {}
     for m in months:
-        carry += _month_net(club, m, members)
+        rows = _dues_rows(club, m, members)
+        carry += _dues_totals(rows)["confirmed"] - _expense_summary(db.get_club_finance(club, m))["total"]
+        for r in rows:
+            # 對過帳的才算收到。社友自己回報但還沒對到的仍然掛在他頭上，只是標記
+            # 出來，執秘看得出那筆是「在路上」還是真的沒繳。
+            if not r["confirmed"] and r["total"]:
+                arrears.setdefault(r["uid"], []).append(
+                    {"month": m, "amount": r["total"], "is_paid": r["is_paid"]})
     return {"carry": carry,
-            "opening_month": start,
+            "arrears": arrears,
+            "opening_month": opening["month"] if opening else "",
             "opening_amount": int(opening["amount"]) if opening else 0,
             "has_opening": opening is not None,
             "opening_applies": applies,
@@ -2040,6 +2050,18 @@ async def finance_board(request: Request, month: str = ""):
     expense = _expense_summary(db.get_club_finance(club, month))
     net = totals["confirmed"] - expense["total"]
     carry = _carry_forward(club, month, members)
+    # 每位社友把自己的上期未繳帶在身上：帳單編輯與明細表都要看得到「他還欠哪幾
+    # 個月」，逐一去翻舊月份是沒有人會做的事。
+    arrears = carry.pop("arrears", {})
+    for r in rows:
+        owed = arrears.get(r["uid"], [])
+        r["arrears"] = owed
+        r["arrears_total"] = sum(x["amount"] for x in owed)
+        # 本月應繳 + 上期未繳。刻意不寫進 total：那些月份的帳單本來就還在，
+        # 加進來的話應收會把同一筆錢算兩次。
+        r["due_with_arrears"] = r["total"] + r["arrears_total"]
+    totals["arrears"] = sum(r["arrears_total"] for r in rows)
+    totals["arrears_members"] = sum(1 for r in rows if r["arrears_total"])
     return {"status": "ok", "club": club, "month": month, "members": rows,
             "totals": totals, "expense": expense,
             "net": net,

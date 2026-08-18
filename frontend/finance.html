@@ -148,6 +148,20 @@
     <div class="p-5 space-y-3 overflow-y-auto">
       <p id="bill-target" class="text-[14px] text-slate-500"></p>
 
+      <!-- 上期未繳：這個月之前還沒對過帳的月份，錢仍然掛在這位社友頭上。
+           顯示而已，不寫進本月帳單 —— 那些月份的帳單還在，加進來會重複計費。 -->
+      <div id="bill-arrears" class="hidden bg-rose-50 border border-rose-200 rounded-lg p-3 text-[15px]">
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-rose-800">上期未繳</span>
+          <span class="font-black tabular-nums text-rose-700" id="bill-arrears-total">—</span>
+        </div>
+        <div id="bill-arrears-list" class="mt-1.5 space-y-1"></div>
+        <p class="text-[12px] text-rose-700/80 mt-2 leading-relaxed">
+          這些月份的帳單仍然掛著，不會併進本月帳單（併進來同一筆錢會被收兩次）。
+          收到錢請到該月份把他標記為已收。
+        </p>
+      </div>
+
       <!-- 固定兩項不在這裡改：全社一致，改了要整批生效，走「月費設定」那條路 -->
       <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5 text-[15px]">
         <div class="flex justify-between text-slate-600"><span>常年月費</span><span class="font-bold tabular-nums" id="bill-base">—</span></div>
@@ -204,7 +218,8 @@
     </div>
     <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
       <div class="text-[14px] text-slate-500">本月總計
-        <span class="font-black text-slate-900 text-lg ml-1 tabular-nums" id="bill-total">—</span></div>
+        <span class="font-black text-slate-900 text-lg ml-1 tabular-nums" id="bill-total">—</span>
+        <span id="bill-grand" class="hidden block text-[13px] text-rose-700 font-bold"></span></div>
       <div class="flex gap-2">
         <button onclick="closeBill()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">取消</button>
         <button onclick="saveBill()" id="bill-save" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">儲存</button>
@@ -680,7 +695,7 @@
         <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800 whitespace-nowrap">${money(r.total)}</td>
         <td class="px-4 py-2.5 text-[13px] text-slate-500">
           ${items.length ? esc(items.join('、')) : '<span class="text-slate-400">僅固定月費</span>'}
-          ${pendingFeeTag(r)}</td>
+          ${arrearsTag(r)}${pendingFeeTag(r)}</td>
         <td class="px-4 py-2.5 text-center whitespace-nowrap">
           <span class="px-2 py-0.5 rounded text-[13px] font-black border ${s.cls}">${s.label}</span></td>
         <td class="px-4 py-2.5 text-center whitespace-nowrap" id="digits-cell-${esc(r.uid)}">${digitsCell(r)}</td>
@@ -753,6 +768,14 @@
       title="${esc((r.event_fees || []).map(f => f.title).join('、'))}">地區活動 ${n} 場未記帳</span>`;
   }
 
+  // 欠上個月的錢，在明細那一欄就要看得到 —— 這是催繳時第一個要問的數字。
+  function arrearsTag(r) {
+    if (!r.arrears_total) return '';
+    const months = (r.arrears || []).map(a => monthLabel(a.month)).join('、');
+    return `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold bg-rose-100 text-rose-700 border border-rose-200 whitespace-nowrap inline-block"
+      title="${esc(months)}">上期未繳 ${money(r.arrears_total)}</span>`;
+  }
+
   // 每位社友都可以標記已收 —— 只有固定月費的人也會繳錢，後端會在對帳時
   // 幫他補一列空明細。
   function confirmBtn(r) {
@@ -799,9 +822,34 @@
       + (r.confirmed ? `<span class="text-emerald-600 font-bold">　· 已對帳，改金額請記得重新確認</span>` : '');
     // 已經開過帳單的人，預設不再推播；新開的帳單社友需要知道。
     document.getElementById('bill-notify').checked = !r.has_bill;
+    renderArrears(r);
     fillBillForm(r.meal, r.iou, r.customs || []);
     renderEventFees(r.event_fees);
     showModal('bill-modal');
+  }
+
+  // 上期未繳：之前沒對過帳的月份。執秘在開這個月的帳單時就要看到，否則要等到
+  // 有人問「他到底欠多少」才會有人去翻舊月份。
+  let billArrears = 0;
+  function renderArrears(r) {
+    const list = (r && r.arrears) || [];
+    billArrears = r ? (r.arrears_total || 0) : 0;
+    document.getElementById('bill-arrears').classList.toggle('hidden', !list.length);
+    if (!list.length) return;
+    document.getElementById('bill-arrears-total').textContent = money(billArrears);
+    document.getElementById('bill-arrears-list').innerHTML = list.map(a => `
+      <div class="flex justify-between items-center text-[14px]">
+        <button onclick="closeBill(); selectMonthFromArrears('${esc(a.month)}')"
+          class="text-rose-700 hover:text-rose-900 font-bold underline decoration-dotted">
+          ${esc(monthLabel(a.month))}</button>
+        <span class="tabular-nums text-rose-700">${money(a.amount)}
+          ${a.is_paid ? '<span class="text-[12px] text-amber-600 font-bold ml-1">已回報待對帳</span>' : ''}</span>
+      </div>`).join('');
+  }
+
+  async function selectMonthFromArrears(m) {
+    document.getElementById('month-selector').value = m;
+    await selectMonth(m);
   }
 
   function openBulkBill() {
@@ -815,8 +863,9 @@
       + `<br><span class="text-slate-400">已經登過的社友不受影響。個別差異開完之後再逐筆調整。</span>`;
     document.getElementById('bill-notify').checked = true;
     fillBillForm(0, 0, []);
-    // 報名費逐人逐場不同，批次記帳一律不碰
+    // 報名費與上期未繳都是逐人不同的，批次記帳一律不碰
     renderEventFees([]);
+    renderArrears(null);
     showModal('bill-modal');
   }
 
@@ -927,6 +976,10 @@
     const total = board.base + board.district + d.meal + d.iou
       + d.customs.reduce((s, c) => s + c.amount, 0);
     document.getElementById('bill-total').textContent = money(total);
+    // 累計應繳只在真的有欠款時出現，否則等於在每張帳單上重複本月總計
+    const grand = document.getElementById('bill-grand');
+    grand.classList.toggle('hidden', !billArrears);
+    if (billArrears) grand.textContent = `連同上期未繳共 ${money(total + billArrears)}`;
   }
 
   async function saveBill() {
@@ -956,7 +1009,7 @@
   }
 
   function closeBill() {
-    editingUid = null; billTargets = null; billEventFees = [];
+    editingUid = null; billTargets = null; billEventFees = []; billArrears = 0;
     hideModal('bill-modal');
   }
 
