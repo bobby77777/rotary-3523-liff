@@ -596,19 +596,25 @@ def ensure_bulletin_editors_table() -> None:
             created_at   TIMESTAMPTZ DEFAULT NOW()
         )
     """)
-    # Seed the original 社刊主委 so existing edit access is preserved after the move to DB.
-    execute("""
-        INSERT INTO bulletin_editors (line_user_id, name)
-        VALUES ('U40fb26734c5a1da70261e06570830f01', '社刊主委')
-        ON CONFLICT (line_user_id) DO NOTHING
-    """)
+    # 這裡本來寫死一位社刊主委的 LINE id 當種子，而且每次開機都會補回去 —— 換人
+    # 之後把舊主委移除，下次重啟他又出現，沒有人會想到去程式碼裡找原因。名單一律
+    # 以這張表為準；表空的時候由最高管理員頂著（見 is_bulletin_editor），他再把
+    # 真正的主委加進來。
 
 
 def is_bulletin_editor(line_user_id: str) -> bool:
+    """名單上的人可以編社刊。
+
+    名單還沒建立時，最高管理員頂著 —— 一個全新的社如果誰都不能編，社刊就永遠
+    開不了張，而「請先把自己加進名單」這種提示只有寫程式的人看得懂。"""
     if not line_user_id:
         return False
     rows = query("SELECT 1 FROM bulletin_editors WHERE line_user_id = %s", (line_user_id,))
-    return len(rows) > 0
+    if rows:
+        return True
+    if query("SELECT 1 FROM bulletin_editors LIMIT 1"):
+        return False
+    return get_user_role(line_user_id) == "admin_all"
 
 
 def add_bulletin_editor(line_user_id: str, name: str = "") -> None:
