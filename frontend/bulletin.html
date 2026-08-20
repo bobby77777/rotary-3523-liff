@@ -518,8 +518,8 @@
             <div class="canvas" id="canvas">
                 <!-- 刊頭 -->
                 <div class="page-header" contenteditable="false">
-                    <h2 id="header-club">台北信義扶輪社</h2>
-                    <div class="meta" contenteditable="true"><span id="header-issue">第 2489 期</span>例會社刊<br><span id="header-date">2026-07-04</span></div>
+                    <h2 class="hdr-club">台北信義扶輪社</h2>
+                    <div class="meta" contenteditable="true"><span class="hdr-issue">第 2489 期</span>例會社刊<br><span class="hdr-date">2026-07-04</span></div>
                 </div>
 
                 <!-- 內容動態渲染區 -->
@@ -1662,7 +1662,7 @@
             const srcHeader = pick('.page-header');
             if (liveHeader && srcHeader) {
                 liveHeader.innerHTML = srcHeader.innerHTML;
-                restoreHeaderIds(liveHeader);
+                restoreHeaderParts(liveHeader);
             }
             const liveFooter = document.querySelector('#canvas .page-footer');
             const srcFooter = pick('.page-footer');
@@ -1686,17 +1686,49 @@
         // 把 id 補回去，自動帶入才找得到元素；.meta 沒有 span 的舊社刊則就地拆成
         // 「期數 / 日期」兩段。拆完文字內容不變，主委改過的抬頭一樣會被保留 ——
         // applyBulletinHeader 只覆蓋還停在示範值的欄位。
-        function restoreHeaderIds(header) {
+        function restoreHeaderParts(header) {
             if (!header) return;
             const h2 = header.querySelector('h2');
-            if (h2 && !h2.id) h2.id = 'header-club';
+            if (h2) h2.classList.add('hdr-club');
             const meta = header.querySelector('.meta');
-            if (!meta || meta.querySelector('#header-issue')) return;
+            if (!meta || meta.querySelector('.hdr-issue')) return;
             const parts = meta.innerHTML.split(/<br\s*\/?>/i);
             if (parts.length < 2) return;
             const issue = parts[0].replace(/例會社刊\s*$/, '');
-            meta.innerHTML = `<span id="header-issue">${issue}</span>例會社刊<br>`
-                + `<span id="header-date">${parts.slice(1).join(' ')}</span>`;
+            meta.innerHTML = `<span class="hdr-issue">${issue}</span>例會社刊<br>`
+                + `<span class="hdr-date">${parts.slice(1).join(' ')}</span>`;
+        }
+
+        // 把社名／期數／日期寫進某一份刊頭。活動資料一律優先：主委手改過的也會被蓋掉，
+        // 因為社名、期數、日期都是活動本身的事實，手改只會讓它跟行事曆對不起來。
+        // 唯一的例外是抓不到期數的時候（例會名稱裡沒有數字）——那時保留原本的字，
+        // 用空白蓋掉等於把主委唯一能補的資訊擦掉。
+        function writeHeaderFields(header, info) {
+            if (!header || !info) return;
+            restoreHeaderParts(header);
+            const set = (sel, value) => {
+                const el = header.querySelector(sel);
+                if (el && value) el.textContent = value;
+            };
+            set('.hdr-club', info.club_full_name || info.club);
+            set('.hdr-issue', info.issue_no ? `第 ${info.issue_no} 期` : '');
+            set('.hdr-date', info.date);
+        }
+
+        // 抓這場例會的抬頭資料，閱覽與編輯共用
+        async function fetchBulletinHeader() {
+            try {
+                const res = await fetch(API_BASE + '/bulletin/header'
+                        + (EVENT_ID ? '?event=' + encodeURIComponent(EVENT_ID) : ''), {
+                    headers: { 'ngrok-skip-browser-warning': '1', 'X-Line-UserId': EDITOR_UID },
+                });
+                if (!res.ok) return null;
+                const info = await res.json();
+                return info && info.status === 'ok' ? info : null;
+            } catch (e) {
+                console.warn('社刊抬頭資料取得失敗，維持原本的文字', e);
+                return null;
+            }
         }
 
         // 抬頭的社名／期數／日期以前是寫死的示範值，每份社刊都要主委手動改一次。
@@ -1704,31 +1736,9 @@
         // （第1350次例會）解析、日期就是例會日期。
         // 只在還是預設值時才覆蓋 —— 主委改過的字不能被自動帶入蓋掉；載入舊社刊時
         // 存檔的抬頭也優先於自動值（loadIntoEditor 之後才呼叫，見 initEditor）。
-        const HEADER_DEFAULTS = { club: '台北信義扶輪社', issue: '第 2489 期', date: '2026-07-04' };
-
-        async function applyBulletinHeader({ force = false } = {}) {
-            let info;
-            try {
-                const res = await fetch(API_BASE + '/bulletin/header'
-                        + (EVENT_ID ? '?event=' + encodeURIComponent(EVENT_ID) : ''), {
-                    headers: { 'ngrok-skip-browser-warning': '1', 'X-Line-UserId': EDITOR_UID },
-                });
-                if (!res.ok) return;
-                info = await res.json();
-            } catch (e) {
-                console.warn('社刊抬頭自動帶入失敗，維持原本的文字', e);
-                return;
-            }
-            if (!info || info.status !== 'ok') return;
-            const put = (id, value, fallback) => {
-                const el = document.getElementById(id);
-                if (!el || !value) return;
-                // 沒動過的示範值可以覆蓋；主委自己改過的就留著
-                if (force || el.textContent.trim() === fallback) el.textContent = value;
-            };
-            put('header-club', info.club_full_name || info.club, HEADER_DEFAULTS.club);
-            put('header-issue', info.issue_no ? `第 ${info.issue_no} 期` : '', HEADER_DEFAULTS.issue);
-            put('header-date', info.date, HEADER_DEFAULTS.date);
+        async function applyBulletinHeader() {
+            writeHeaderFields(document.querySelector('#canvas .page-header'),
+                              await fetchBulletinHeader());
         }
 
         // 編輯模式開啟時：抓本社上次發布的社刊載回編輯器（沒發布過就維持預設範本）。
@@ -1762,9 +1772,10 @@
             }
         }
 
-        function renderReader() {
+        async function renderReader() {
             const reader = document.getElementById('reader');
             reader.innerHTML = '';
+            const headerInfo = await fetchBulletinHeader();
             // 優先呈現主委發布到雲端的成品；沒有雲端版本時，退回即時組出的預設範本。
             // 存的是「可編輯」版本，閱覽時 clean 掉編輯用的握把與 contenteditable。
             const src = loadedPages || [1, 2, 3, 4].map(n => buildPageInnerHTML(n));
@@ -1777,6 +1788,8 @@
                 canvas.innerHTML = html;
                 item.appendChild(canvas);
                 reader.appendChild(item);
+                // 抬頭以活動資料為準（發布當下存的可能是舊的或還沒改過的示範值）
+                writeHeaderFields(canvas.querySelector('.page-header'), headerInfo);
                 // 插進畫面之後才量得到：改版前發布的社刊沒有密度層級，
                 // 不重新適配的話社員會少看到幾列，而且完全沒有跡象。
                 fitTimelineIn(canvas, false);
@@ -1808,7 +1821,7 @@
                 // 社員唯讀模式：不需登入，用 ?club= 取該社社刊；先切閱覽外觀再排版呈現。
                 enterViewMode();
                 await loadBulletinContent();
-                renderReader();
+                await renderReader();
             } else {
                 // 編輯模式：先 LINE 登入取得身分，再把本社上次發布的社刊載回編輯器可繼續編輯。
                 await ensureLineLogin();
