@@ -601,11 +601,35 @@
         const pageCache = {};
         const pageKey = (page, layout) => page + ':' + layout;
 
+        // 畫布上「現在真的是哪一頁／哪一個版型」。跟 state.page 分開記，是因為
+        // 一旦 renderCanvas 中途出錯，state.page 已經換了而畫布還停在舊的那頁；
+        // 這時若照 state.page 收起來，舊頁的內容就會被存到新頁的格子裡。四頁全
+        // 變成同一頁就是這樣來的（第1350次例會）。
+        let canvasPage = 1;
+        let canvasLayout = null;
+
         function stashCurrentPage() {
             const container = document.getElementById('page-content');
             if (container && container.innerHTML.trim()) {
-                pageCache[pageKey(state.page, state.layouts[state.page])] = container.innerHTML;
+                pageCache[pageKey(canvasPage, canvasLayout || state.layouts[canvasPage])] = container.innerHTML;
             }
+        }
+
+        // 頁碼（PAGE 0N）住在畫布的頁尾裡，而載入舊社刊時整個頁尾會被存檔的版本
+        // 覆蓋掉——存檔的那份沒有這個 id。以前 changePage 直接對它設 innerText，
+        // 元素一旦不見就丟例外，而且是在 state.page 已經換過、畫布還沒重畫的中間，
+        // 於是「按了 P2/P3/P4 沒反應」，接著收頁面時又把舊內容存到新頁的格子裡，
+        // 四頁變成同一頁。這兩個函式讓它不管有沒有那個元素都能走完。
+        function setPageNumberLabel(page) {
+            const el = document.getElementById('page-number');
+            if (el) el.innerText = `PAGE 0${page}`;
+        }
+
+        function restorePageNumberId(footer) {
+            if (document.getElementById('page-number')) return;
+            const spans = Array.from(footer.querySelectorAll('span'));
+            const target = spans.find(sp => /PAGE\s*0?\d/i.test(sp.textContent || '')) || spans[spans.length - 1];
+            if (target) target.id = 'page-number';
         }
 
         function changePage(page, btnElement) {
@@ -615,7 +639,7 @@
             }
             stashCurrentPage();
             state.page = page;
-            document.getElementById('page-number').innerText = `PAGE 0${page}`;
+            setPageNumberLabel(page);
             renderLayoutSelector();
             renderCanvas();
         }
@@ -890,12 +914,25 @@
                 const styleName = layout.charAt(0) === 'C' ? '動態拼接' : '整齊網格';
                 layoutName = `${styleName} (${layout.charAt(1)}張)`;
             } else {
-                layoutName = templatesData[page].variants.find(v => v.id === layout).name;
+                // 找不到版型就退回這一頁的第一個版型並修正 state：以前這裡直接
+                // 取 .name，版型代碼一旦對不上就丟例外，函式在寫入畫布前就中斷，
+                // 畫面停在上一頁不動——看起來就是「按了沒反應」。
+                const variants = (templatesData[page] || {}).variants || [];
+                let variant = variants.find(v => v.id === layout);
+                if (!variant && variants.length) {
+                    variant = variants[0];
+                    state.layouts[page] = variant.id;
+                }
+                layoutName = variant ? variant.name : layout;
             }
+            const useLayout = state.layouts[page];
             document.getElementById('canvas-label').innerText = `Page ${page}: ${layoutName}`;
 
             // 將 HTML 寫入畫面 (回到編輯過的頁面時用快取，保住上傳的照片與改過的字)
-            container.innerHTML = pageCache[pageKey(page, layout)] || getPageContentHTML(page, layout);
+            container.innerHTML = pageCache[pageKey(page, useLayout)] || getPageContentHTML(page, useLayout);
+            // 寫進去了才更新「畫布上是哪一頁」，中途出錯時這兩個值仍然一致
+            canvasPage = page;
+            canvasLayout = useLayout;
             addTouchHandles();
 
             // 重新綁定 P3 動態拼接的拖曳事件
@@ -1414,7 +1451,9 @@
                     bg: rootStyle.getPropertyValue('--c-bg').trim(),
                 },
                 layouts: { ...state.layouts },
-                pages: currentPagesHTML(),
+                // 當下那一頁是整塊複製畫布，會把 id="page-content" 一起帶走；存進去
+                // 之後閱覽／列印區會出現第二個同名 id，getElementById 從此可能抓錯人。
+                pages: currentPagesHTML().map(h => h.replace(/ id="page-content"/g, '')),
             };
         }
 
@@ -1466,21 +1505,28 @@
             applyTheme(data.theme);
             if (data.layouts) state.layouts = { ...state.layouts, ...data.layouts };
             const parse = html => { const d = document.createElement('div'); d.innerHTML = html; reEnableEditing(d); return d; };
-            // 頁首（含期數/日期）與頁尾在各頁共用，取自第 1 頁還原到編輯畫布。
-            const p1 = parse(pages[0]);
+            // 頁首（含期數/日期）與頁尾在各頁共用。每一頁都存了一份，所以取「第一
+            // 個找得到的」而不是硬取第 1 頁——第 1 頁若是空的或壞的，期數與日期
+            // 不該跟著消失。
+            const parsed = pages.map(parse);
+            const pick = sel => parsed.map(d => d.querySelector(sel)).find(Boolean);
             const liveHeader = document.querySelector('#canvas .page-header');
-            const srcHeader = p1.querySelector('.page-header');
+            const srcHeader = pick('.page-header');
             if (liveHeader && srcHeader) liveHeader.innerHTML = srcHeader.innerHTML;
             const liveFooter = document.querySelector('#canvas .page-footer');
-            const srcFooter = p1.querySelector('.page-footer');
-            if (liveFooter && srcFooter) liveFooter.innerHTML = srcFooter.innerHTML;
+            const srcFooter = pick('.page-footer');
+            if (liveFooter && srcFooter) {
+                liveFooter.innerHTML = srcFooter.innerHTML;
+                restorePageNumberId(liveFooter);
+            }
             // 四頁的內文放進 pageCache（依各頁的版型 key），renderCanvas 就會顯示載入的內容。
             [1, 2, 3, 4].forEach(n => {
-                const pc = parse(pages[n - 1]).querySelector('.page-content');
-                if (pc) pageCache[pageKey(n, state.layouts[n])] = pc.innerHTML;
+                const pc = parsed[n - 1] && parsed[n - 1].querySelector('.page-content');
+                // 空頁不進快取 → renderCanvas 會用該頁的預設版型重新生成
+                if (pc && pc.innerHTML.trim()) pageCache[pageKey(n, state.layouts[n])] = pc.innerHTML;
             });
             state.page = 1;
-            document.getElementById('page-number').innerText = 'PAGE 01';
+            setPageNumberLabel(1);
             renderLayoutSelector();
             renderCanvas();
         }
