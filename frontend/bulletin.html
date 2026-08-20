@@ -133,7 +133,8 @@
         .timeline-container { flex: 1; min-height: 0; overflow-y: auto; padding-right: 10px; margin-bottom: 5px; position: relative; }
         /* 壓到最密仍然放不下時的提示：底部一道紅色漸層，告訴執秘下面還有東西，
            而且那些列在 PDF 裡會被裁掉。 */
-        .timeline-container.overflowing { box-shadow: inset 0 -18px 14px -14px rgba(198,40,40,0.55); }
+        #canvas .timeline-container.overflowing { box-shadow: inset 0 -18px 14px -14px rgba(198,40,40,0.55); }
+        #canvas .rotary-creed-footer.overflowing { box-shadow: inset 0 -14px 10px -10px rgba(198,40,40,0.55); }
         .timeline-container::-webkit-scrollbar { width: 5px; }
         .timeline-container::-webkit-scrollbar-track { background: transparent; }
         .timeline-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
@@ -978,7 +979,7 @@
             canvasLayout = useLayout;
             // 切到第 2 頁或載入舊社刊時重新適配：舊社刊是在還沒有密度層級的年代存的，
             // 列數多的那幾份載進來就會自己縮好。
-            if (page === 2) fitTimeline();
+            if (page === 2) { fitTimeline(); refitWhenFontsReady(); }
             addTouchHandles();
 
             // 重新綁定 P3 動態拼接的拖曳事件
@@ -1241,12 +1242,20 @@
         // 所以編輯器、社員閱覽、PDF 三邊看到的是同一個版面。
         // 壓到最密仍然放不下就直說：那些列在 PDF 裡會被裁掉，不能安靜地讓它發生。
         const TIMELINE_DENSITIES = ['', 'density-1', 'density-2', 'density-3', 'density-4'];
+        const TIMELINE_FULL_MSG = '⚠️ 這一頁已經放不下了：最後幾列在社員閱覽與 PDF 會被裁掉，請合併或刪除項目。';
 
-        function fitTimeline() {
-            const layout = document.querySelector('#canvas .layout-p2');
+        function fitTimeline() { return fitTimelineIn(document.getElementById('canvas'), true); }
+
+        // root 可以是編輯畫布、閱覽用的頁面、或畫面外的暫時容器。
+        // mark 只有編輯時才給：紅色提示是給主委看的，不該跟著發布出去。
+        function fitTimelineIn(root, mark) {
+            const layout = root && root.querySelector('.layout-p2');
             const container = layout && layout.querySelector('.timeline-container');
             const timeline = container && container.querySelector('.timeline');
             if (!layout || !container || !timeline) return;   // 不在第 2 頁
+            // 量不到就什麼都別做：還沒排版的容器（閱覽區還沒顯示、列印區 display:none）
+            // 高度是 0，照著量會判定「怎樣都放不下」而把已經正確的密度層級拆掉。
+            if (!container.clientHeight) return;
 
             let level = 0;
             for (; level < TIMELINE_DENSITIES.length; level++) {
@@ -1258,14 +1267,36 @@
             }
 
             const overflowing = level >= TIMELINE_DENSITIES.length;
-            container.classList.toggle('overflowing', overflowing);
-            return overflowing;
+            // 四大考驗那一區有高度上限，貼進長版的扶輪宗旨會被切掉；切掉了要說。
+            const creed = layout.querySelector('.rotary-creed-footer');
+            const creedCut = !!creed && creed.scrollHeight > creed.clientHeight + 1;
+            container.classList.toggle('overflowing', !!mark && overflowing);
+            if (creed) creed.classList.toggle('overflowing', !!mark && creedCut);
+            return overflowing || creedCut;
         }
 
-        // 加／刪流程之後重新適配；真的塞不下才提醒，一般情況安靜地縮就好。
-        function fitTimelineAndWarn() {
-            if (fitTimeline()) {
-                showToast('⚠️ 流程已超過一頁放得下的長度，最後幾列在 PDF 與社員閱覽時會被裁掉，請合併或刪除項目。');
+        // 量測要在字型載入後才算數：Noto 跟系統替代字的行高不一樣，會選到不同的密度，
+        // 而選到哪一級是會跟著存進發布版本的。
+        function refitWhenFontsReady() {
+            if (!document.fonts || !document.fonts.ready) return;
+            document.fonts.ready.then(() => fitTimeline()).catch(() => {});
+        }
+
+        // 閱覽與列印路徑沒有編輯畫布可量。這裡在畫面外放一個一樣大的暫時畫布，
+        // 量完把套好密度的 HTML 交回去 —— 以前發布的社刊沒有密度層級，不重新適配
+        // 就會在社員那邊安靜地少幾列。
+        function fitAgendaHTML(pageInnerHTML) {
+            const holder = document.createElement('div');
+            holder.className = 'canvas';
+            holder.style.cssText = 'position:absolute; left:-10000px; top:0; display:flex;';
+            holder.innerHTML = pageInnerHTML;
+            document.body.appendChild(holder);
+            try {
+                if (!holder.querySelector('.layout-p2')) return pageInnerHTML;
+                fitTimelineIn(holder, false);
+                return holder.innerHTML;
+            } finally {
+                holder.remove();
             }
         }
 
@@ -1278,8 +1309,7 @@
             newItem.querySelector('.duration').innerText = "10 分鐘";
             currentItem.parentNode.insertBefore(newItem, currentItem.nextSibling);
             recalculateTimeline();
-            fitTimelineAndWarn();
-            showToast('✅ 已成功新增一項流程！');
+            showToast(fitTimeline() ? TIMELINE_FULL_MSG : '✅ 已成功新增一項流程！');
         }
 
         function removeTimelineItem(btn) {
@@ -1306,8 +1336,7 @@
                 newItem.querySelector('.duration').innerText = "10 分鐘";
                 timeline.appendChild(newItem);
                 recalculateTimeline();
-                fitTimelineAndWarn();
-                showToast('✅ 已在最下方新增一項流程！');
+                showToast(fitTimeline() ? TIMELINE_FULL_MSG : '✅ 已在最下方新增一項流程！');
             }
         }
 
@@ -1336,7 +1365,15 @@
                     nextTimeEl.innerText = nextTimeStr;
                 }
             }
-            fitTimeline();
+            scheduleFit();
+        }
+
+        // 打字時延到下一個畫面更新再量一次就好
+        let fitPending = false;
+        function scheduleFit() {
+            if (fitPending) return;
+            fitPending = true;
+            requestAnimationFrame(() => { fitPending = false; fitTimeline(); });
         }
 
         function showToast(msg) {
@@ -1401,6 +1438,14 @@
             tmp.innerHTML = html;
             tmp.querySelectorAll('.item-controls, .item-add-del, .photo-tools, .timeline-add-btn, .delete-btn, .touch-resize-handle')
                .forEach(n => n.remove());
+            // 「放不下」的紅色提示是編輯時的提醒，社員與 PDF 不該看到
+            tmp.querySelectorAll('.overflowing').forEach(n => n.classList.remove('overflowing'));
+            // 舊社刊裡四大考驗被拖大而寫死的尺寸，閱覽與列印也要清掉（編輯路徑在 reEnableEditing）
+            tmp.querySelectorAll('.creed-content').forEach(el => {
+                el.classList.remove('resize-both', 'resize-x');
+                el.style.removeProperty('height');
+                el.style.removeProperty('width');
+            });
             tmp.querySelectorAll('[contenteditable]').forEach(n => n.setAttribute('contenteditable', 'false'));
             tmp.querySelectorAll('.editable-image').forEach(img => img.removeAttribute('onclick'));
             return tmp.innerHTML;
@@ -1417,9 +1462,14 @@
         }
 
         function currentPagesHTML() {
-            if (loadedPages) return loadedPages.slice();
+            if (loadedPages) return loadedPages.map((h, i) => i === 1 ? fitAgendaHTML(h) : h);
             stashCurrentPage();
-            return [1, 2, 3, 4].map(n => editablePageHTML(buildPageInnerHTML(n)));
+            // 第 2 頁沒被打開過的話，快取裡是還沒套密度的版本；發布與 PDF 都走這裡，
+            // 在這量一次，才不會把「編輯器看起來好好的、社員少幾列」的版本送出去。
+            return [1, 2, 3, 4].map(n => {
+                const html = editablePageHTML(buildPageInnerHTML(n));
+                return n === 2 ? fitAgendaHTML(html) : html;
+            });
         }
 
         // 產生真正的向量 PDF：把選定頁面放進列印專用區，交給瀏覽器原生列印引擎「另存為 PDF」。
@@ -1460,6 +1510,14 @@
             if (publishBusy) return;
             publishBusy = true;
             if (document.activeElement) document.activeElement.blur();
+            // 發布是社員真的會看到的那一刻，放不下就當面問清楚，
+            // 不能只靠新增當下那則會消失的提示。
+            if (fitTimeline()) {
+                if (!confirm(TIMELINE_FULL_MSG.replace('⚠️ ', '') + '\n\n仍要發布嗎？')) {
+                    publishBusy = false;
+                    return;
+                }
+            }
             showToast("⏳ 正在發布為本週社刊…");
             try {
                 await publishBulletinContent(serializeBulletin());
@@ -1719,6 +1777,9 @@
                 canvas.innerHTML = html;
                 item.appendChild(canvas);
                 reader.appendChild(item);
+                // 插進畫面之後才量得到：改版前發布的社刊沒有密度層級，
+                // 不重新適配的話社員會少看到幾列，而且完全沒有跡象。
+                fitTimelineIn(canvas, false);
             });
         }
 
