@@ -1345,10 +1345,13 @@ function renderDistrictList() {
             </div>
             <div class="mt-2 space-y-1">
                 ${d.clubs.length ? d.clubs.map(club => `
-                    <div class="flex items-center justify-between gap-2 text-[12px] bg-slate-50 rounded-lg px-2 py-1">
-                        <span class="truncate text-slate-700">${_escHtml(club)}</span>
-                        <select onchange="moveClub('${_escHtml(club)}', this.value)"
-                            class="text-[11px] border border-slate-200 rounded-md py-0.5 px-1 bg-white">
+                    <div class="flex items-center gap-2 text-[12px] bg-slate-50 rounded-lg px-2 py-1">
+                        <span class="w-16 shrink-0 truncate text-slate-700 font-bold">${_escHtml(club.name)}</span>
+                        <input value="${_escHtml(club.full_name || '')}" placeholder="社刊抬頭全名（例：台北松山扶輪社）"
+                            onchange="saveClubFullName('${_escHtml(club.name)}', '${_escHtml(d.code)}', this.value)"
+                            class="flex-1 min-w-0 text-[11px] border border-slate-200 rounded-md py-1 px-1.5 bg-white">
+                        <select onchange="moveClub('${_escHtml(club.name)}', this.value)"
+                            class="text-[11px] border border-slate-200 rounded-md py-0.5 px-1 bg-white shrink-0">
                             ${codes.map(c => `<option value="${_escHtml(c)}" ${c === d.code ? 'selected' : ''}>${_escHtml(c)}</option>`).join('')}
                         </select>
                     </div>`).join('')
@@ -1389,6 +1392,23 @@ async function saveDistrict() {
         showAlert('儲存失敗', e.message);
     } finally {
         btn.disabled = false; btn.textContent = '儲存地區';
+    }
+}
+
+// 社刊抬頭要印的完整社名（松山 → 台北松山扶輪社）。名冊與報名一律用簡稱，
+// 只有要給人看的版面需要全名，所以存在社身上而不是每份社刊各存一份。
+async function saveClubFullName(club, district, fullName) {
+    try {
+        const data = await apiFetch('/admin/districts/club', {
+            method: 'POST',
+            body: JSON.stringify({ club, district, full_name: fullName.trim() }),
+        });
+        if (data.status !== 'ok') { showAlert('儲存失敗', data.message || '請稍後再試。'); return; }
+        showToast ? showToast('已更新社刊全名') : null;
+        districtData = await apiFetch('/admin/districts');
+        renderDistrictList();
+    } catch (e) {
+        showAlert('儲存失敗', e.message);
     }
 }
 

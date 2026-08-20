@@ -972,6 +972,10 @@ def ensure_clubs_table() -> None:
             created_at TIMESTAMPTZ DEFAULT NOW()
         )
     """)
+    # 對外的完整社名（例：松山 → 台北松山扶輪社）。名冊與報名都用簡稱就夠，
+    # 但社刊抬頭、PDF 這種要給人看的地方需要全名。空白 = 沿用簡稱，不從簡稱
+    # 拼一個「台北◯◯扶輪社」出來 —— 不是每個社都在台北。
+    execute("ALTER TABLE clubs ADD COLUMN IF NOT EXISTS full_name TEXT NOT NULL DEFAULT ''")
 
 
 def backfill_clubs(default_district: str = DEFAULT_DISTRICT) -> int:
@@ -1010,6 +1014,16 @@ def set_club_district(club_name: str, district: str) -> None:
     )
 
 
+def get_club_full_name(club_name: str) -> str:
+    """社刊抬頭用的完整社名；沒設定就回簡稱。"""
+    rows = query("SELECT full_name FROM clubs WHERE club_name = %s", (club_name,))
+    return (rows[0]["full_name"] if rows else "") or club_name
+
+
+def set_club_full_name(club_name: str, full_name: str) -> None:
+    execute("UPDATE clubs SET full_name = %s WHERE club_name = %s", (full_name, club_name))
+
+
 def clubs_in_district(district: str) -> list[str]:
     rows = query("SELECT club_name FROM clubs WHERE district = %s ORDER BY club_name",
                  (district,))
@@ -1017,7 +1031,7 @@ def clubs_in_district(district: str) -> list[str]:
 
 
 def list_clubs_with_district() -> list[dict]:
-    return query("SELECT club_name, district FROM clubs ORDER BY district, club_name")
+    return query("SELECT club_name, district, full_name FROM clubs ORDER BY district, club_name")
 
 
 def events_count() -> int:
@@ -1474,7 +1488,7 @@ def set_all_districts(line_user_id: str, enabled: bool) -> None:
 
 def all_clubs() -> list[dict]:
     """全部的社與其地區，給跨地區管理員切換用。"""
-    return query("SELECT club_name, district FROM clubs ORDER BY district, club_name")
+    return query("SELECT club_name, district, full_name FROM clubs ORDER BY district, club_name")
 
 
 def get_user_district(line_user_id: str) -> str:

@@ -2715,6 +2715,41 @@ async def matchmaking(request: Request, q: str = ""):
     return {"status": "ok", "query": q, "matches": matches, "count": len(matches)}
 
 
+# ── 社刊抬頭 ──────────────────────────────────────────────────────────────────
+# 社名、期數、日期以前是寫死在版型裡的示範值（台北信義扶輪社／第 2489 期／
+# 2026-07-04），每一份社刊都要主委自己改，改漏了就掛著別人的社名發出去。
+
+def _issue_no(title: str) -> str:
+    """從例會名稱抓期數：「第1350次例會」「本社 第 1234 次例會 · 專題演講」→ 1350／1234。
+
+    只認「第…次／期」中間的數字，抓不到就回空字串讓主委自己填 —— 標題裡的數字
+    不見得是期數（「2026地區年會」的 2026 就不是），寧可留白也不要填錯一個看起來
+    很像真的的號碼。"""
+    m = re.search(r"第\s*(\d{1,5})\s*[次期]", str(title or ""))
+    return m.group(1) if m else ""
+
+
+@app.get("/bulletin/header")
+async def bulletin_header(request: Request, event: int | None = None):
+    """社刊抬頭要帶入的三個值：社名、期數、例會日期。
+
+    社名取完整名稱（沒設定就用簡稱）。沒帶 event 就只回社名，期數與日期留空。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    club = db.get_user_club(uid) if uid else ""
+    ev = _lookup_event(uid, int(event)) if event else None
+    # 社內活動掛在自己社底下；地區活動沒有社，抬頭仍用開啟者的社
+    if ev and ev.get("club_name"):
+        club = ev["club_name"]
+    return {
+        "status": "ok",
+        "club": club,
+        "club_full_name": db.get_club_full_name(club) if club else "",
+        "issue_no": _issue_no(ev["title"]) if ev else "",
+        "date": (ev or {}).get("date", ""),
+        "title": (ev or {}).get("title", ""),
+    }
+
+
 @app.get("/bulletin/can_edit")
 async def bulletin_can_edit(request: Request):
     """Whether the caller may edit the weekly bulletin — DB-driven 社刊主委 whitelist."""
@@ -3781,7 +3816,9 @@ async def admin_districts(request: Request):
         districts = [d for d in districts if d["code"] == mine]
     by_district = {}
     for c in db.list_clubs_with_district():
-        by_district.setdefault(c["district"], []).append(c["club_name"])
+        # 社刊抬頭的全名也一起給，地區管理那個畫面就是維護它的地方
+        by_district.setdefault(c["district"], []).append(
+            {"name": c["club_name"], "full_name": c.get("full_name") or ""})
     return {"status": "ok", "my_district": mine,
             "districts": [{**d, "clubs": by_district.get(d["code"], [])} for d in districts]}
 
@@ -3825,6 +3862,9 @@ async def admin_district_set_club(request: Request):
     if not db.get_district(district):
         return {"status": "invalid", "message": f"地區 {district} 不存在"}
     db.set_club_district(club, district)
+    # 完整社名（社刊抬頭用）順便在這裡維護；沒帶就不動它
+    if "full_name" in body:
+        db.set_club_full_name(club, str(body.get("full_name", "")).strip())
     return {"status": "ok", "club": club, "district": district}
 
 
