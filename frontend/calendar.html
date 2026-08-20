@@ -302,26 +302,39 @@
       }
       let html = '';
       events.forEach((evt, index) => {
-        const deleteBtn = editable ? `<button onclick="deleteEvent(${evt.id})" class="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>` : '';
-        // 例會（活動內容或類型含「例會」）：改成「編輯社刊」並連到 bulletin.html；其他：編輯/檢視議程。
-        let actionBtn;
+        // 操作欄固定三格：主要動作、次要動作、刪除。有些活動只有一個動作，
+        // 空的那格留著不填 —— 否則每一列的按鈕各自置中，橫看過去全部對不齊。
+        const btn = (onclick, icon, label, tone, title) =>
+          `<button onclick="${onclick}" ${title ? `title="${title}"` : ''}
+             class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 ${tone} rounded transition-colors text-sm font-medium whitespace-nowrap">
+             <i data-lucide="${icon}" class="w-4 h-4 pointer-events-none"></i> ${label}</button>`;
+        const TONE_MAIN = 'bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white';
+        const TONE_SUB  = 'bg-slate-100 text-slate-600 hover:bg-slate-600 hover:text-white';
+        const empty = '<span></span>';
+
+        const deleteBtn = editable
+          ? `<button onclick="deleteEvent(${evt.id})" class="justify-self-center p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>`
+          : empty;
+
+        // 例會：主要動作是社刊，次要是活動本身的日期／地點；其他活動：議程。
+        let primaryBtn, secondaryBtn = empty;
         if ((evt.title || '').includes('例會') || (evt.type || '').includes('例會')) {
-          const t = editable ? '編輯社刊' : '檢視社刊';
-          const detail = editable
-            ? `<button onclick="openAgenda(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-700 hover:text-white rounded transition-colors text-sm font-medium whitespace-nowrap" title="改日期、地點、司儀"><i data-lucide="calendar-cog" class="w-4 h-4 pointer-events-none"></i> 活動資料</button>`
-            : '';
-          actionBtn = `<button onclick="openBulletinEditor(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-600 hover:text-white rounded transition-colors text-sm font-medium whitespace-nowrap"><i data-lucide="newspaper" class="w-4 h-4 pointer-events-none"></i> ${t}</button>${detail}`;
+          primaryBtn = btn(`openBulletinEditor(${evt.id})`, 'newspaper',
+                           editable ? '編輯社刊' : '檢視社刊', TONE_MAIN);
+          if (editable) secondaryBtn = btn(`openAgenda(${evt.id})`, 'calendar-cog',
+                                           '活動資料', TONE_SUB, '改日期、地點、司儀');
         } else {
-          const t = editable ? '<i data-lucide="file-edit" class="w-4 h-4 pointer-events-none"></i> 編輯議程' : '<i data-lucide="eye" class="w-4 h-4 pointer-events-none"></i> 檢視議程';
-          actionBtn = `<button onclick="openAgenda(${evt.id})" class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded transition-colors text-sm font-medium whitespace-nowrap">${t}</button>`;
+          primaryBtn = btn(`openAgenda(${evt.id})`, editable ? 'file-edit' : 'eye',
+                           editable ? '編輯議程' : '檢視議程', TONE_MAIN);
         }
+        const actionBtn = primaryBtn + secondaryBtn;
         html += `
           <tr class="hover:bg-blue-50/50 transition-colors group">
             <td class="py-4 px-6 text-center font-mono text-slate-500">${index + 1}</td>
             <td class="py-4 px-6 font-medium text-slate-800 text-lg">${escapeHtml(evt.title)}</td>
             <td class="py-4 px-6 text-slate-600 font-mono">${evt.date || '未定'}</td>
             <td class="py-4 px-6 text-center">
-              <div class="flex items-center justify-center gap-3">
+              <div class="grid grid-cols-[7.5rem_7.5rem_2.5rem] items-center gap-2 w-fit mx-auto">
                 ${actionBtn}
                 ${deleteBtn}
               </div>
