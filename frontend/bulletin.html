@@ -101,7 +101,10 @@
         .page-header h2 { margin: 0; font-family: var(--font-body); font-size: 18px; letter-spacing: 2px; }
         .page-header .meta { font-size: 12px; text-align: right; opacity: 0.9; font-family: var(--font-body); }
         .page-footer { padding: 15px 30px; background-color: rgba(0,0,0,0.05); font-size: 11px; color: var(--c-text-light); display: flex; justify-content: space-between; margin-top: auto; font-family: var(--font-body); z-index: 10; }
-        .page-content { flex: 1; position: relative; width: 100%; height: 100%; box-sizing: border-box; }
+        /* min-height: 0 是關鍵：flex 子項的自動最小高度等於內容高度，少了這一行，
+           內容一長它就撐破 842px 的版面，把頁尾與各頁底部的區塊擠出畫布之外
+           （P.2 的四大考驗被推下去就是這樣來的）。 */
+        .page-content { flex: 1; min-height: 0; position: relative; width: 100%; height: 100%; box-sizing: border-box; }
 
         /* --- P1 --- */
         .layout-p1a { display: flex; height: 100%; }
@@ -127,7 +130,10 @@
         /* --- P2 --- */
         .layout-p2 { padding: 40px 60px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
         .p2-title { font-family: var(--font-head); font-size: 32px; color: var(--c-primary); margin-bottom: 20px; text-align: center; font-weight: bold; border-bottom: 2px solid var(--c-secondary); padding-bottom: 15px; flex-shrink: 0; }
-        .timeline-container { flex: 1; overflow-y: auto; padding-right: 10px; margin-bottom: 5px; }
+        .timeline-container { flex: 1; min-height: 0; overflow-y: auto; padding-right: 10px; margin-bottom: 5px; position: relative; }
+        /* 壓到最密仍然放不下時的提示：底部一道紅色漸層，告訴執秘下面還有東西，
+           而且那些列在 PDF 裡會被裁掉。 */
+        .timeline-container.overflowing { box-shadow: inset 0 -18px 14px -14px rgba(198,40,40,0.55); }
         .timeline-container::-webkit-scrollbar { width: 5px; }
         .timeline-container::-webkit-scrollbar-track { background: transparent; }
         .timeline-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
@@ -143,12 +149,49 @@
         .timeline-item:hover .item-controls { opacity: 1; }
         .item-controls button { background: #fff; border: 1px solid var(--c-secondary); color: var(--c-primary); width: 24px; height: 24px; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; font-size: 16px; padding: 0; }
         .item-controls button:hover { background: var(--c-secondary); color: #000; }
-        .timeline-add-btn { margin: 10px auto 10px; display: block; background: var(--c-secondary); color: #000; font-weight: bold; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-family: var(--font-body); transition: 0.2s; }
+        /* sticky：流程排滿之後這顆按鈕會被捲出可視範圍，執秘會以為它不見了。
+           黏在流程區底部就一直看得到；列印與閱覽時它本來就會被 cleanPageHTML 拿掉。 */
+        .timeline-add-btn { margin: 10px auto 10px; display: block; background: var(--c-secondary); color: #000; font-weight: bold; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-family: var(--font-body); transition: 0.2s; position: sticky; bottom: 0; z-index: 5; }
         .timeline-add-btn:hover { background: #E5BE45; transform: translateY(-2px); }
         .event-name { font-family: var(--font-head); font-size: 18px; color: var(--c-text); font-weight: bold; margin-bottom: 4px; line-height: 1.2; }
         .event-person { font-family: var(--font-body); font-size: 13px; color: var(--c-text-light); }
 
-        .rotary-creed-footer { padding-top: 15px; margin-top: 5px; border-top: 1px solid #DEE2E6; flex-shrink: 0; position: relative; }
+        /* 流程列數多的時候自動換上更密的層級（見 fitTimeline）。改的是行距與字級，
+           版面結構不動，所以編輯器、閱覽版、PDF 共用這份 CSS，三邊長得一樣。
+           層級掛在 .layout-p2 上，它在 .page-content 裡面，會跟著發布的 HTML 存下來。 */
+        .layout-p2.density-1 .timeline-item { margin-bottom: 16px; }
+        .layout-p2.density-1 .event-name    { font-size: 16px; }
+        .layout-p2.density-1 .event-person  { font-size: 12px; }
+        .layout-p2.density-1 .time          { font-size: 15px; }
+        .layout-p2.density-2 .timeline-item { margin-bottom: 10px; }
+        .layout-p2.density-2 .event-name    { font-size: 15px; margin-bottom: 2px; }
+        .layout-p2.density-2 .event-person  { font-size: 12px; }
+        .layout-p2.density-2 .time          { font-size: 14px; }
+        .layout-p2.density-2 .p2-title      { font-size: 28px; margin-bottom: 14px; padding-bottom: 10px; }
+        .layout-p2.density-3 .timeline-item { margin-bottom: 6px; }
+        .layout-p2.density-3 .event-name    { font-size: 14px; margin-bottom: 1px; }
+        .layout-p2.density-3 .event-person  { font-size: 11px; }
+        .layout-p2.density-3 .time          { font-size: 13px; }
+        .layout-p2.density-3 .duration      { font-size: 10px; padding: 2px 5px; }
+        .layout-p2.density-3 .p2-title      { font-size: 26px; margin-bottom: 12px; padding-bottom: 8px; }
+        .layout-p2.density-4 .timeline-item { margin-bottom: 3px; }
+        .layout-p2.density-4 .event-name    { font-size: 13px; margin-bottom: 0; line-height: 1.15; }
+        .layout-p2.density-4 .event-person  { font-size: 10px; line-height: 1.2; }
+        .layout-p2.density-4 .time          { font-size: 12px; }
+        .layout-p2.density-4 .duration      { font-size: 9px; padding: 1px 4px; }
+        .layout-p2.density-4 .event-dot     { width: 8px; height: 8px; top: 1px; }
+        .layout-p2.density-4 .p2-title      { font-size: 24px; margin-bottom: 10px; padding-bottom: 6px; }
+        /* 流程很長時，四大考驗這一區也讓一點高度出來（文字全留著，只是排得緊一些） */
+        .layout-p2.density-3 .rotary-creed-footer,
+        .layout-p2.density-4 .rotary-creed-footer { padding-top: 10px; max-height: 120px; }
+        .layout-p2.density-3 .creed-content,
+        .layout-p2.density-4 .creed-content { font-size: 11px; line-height: 1.4; }
+        .layout-p2.density-4 .creed-label   { font-size: 13px; }
+        .layout-p2.density-4 .creed-item    { margin-bottom: 4px; }
+
+        /* max-height：這一區以前可以被拖大、也會被長文撐開，撐開就吃掉上面流程的空間。
+           文字仍然可以編輯，只是不再影響版面配置。 */
+        .rotary-creed-footer { padding-top: 15px; margin-top: 5px; border-top: 1px solid #DEE2E6; flex-shrink: 0; position: relative; max-height: 150px; overflow: hidden; }
         .rotary-creed-footer::before { content: ''; position: absolute; top: -1px; left: 0; width: 80px; height: 3px; background: var(--c-secondary); }
         .creed-item { margin-bottom: 8px; }
         .creed-item:last-child { margin-bottom: 0; }
@@ -753,14 +796,14 @@
                         <div class="rotary-creed-footer">
                             <div class="creed-item">
                                 <div class="creed-label resize-x" contenteditable="true">【扶輪四大考驗】</div>
-                                <div class="creed-content resize-both" contenteditable="true">
+                                <div class="creed-content" contenteditable="true">
                                     我們所想、所說、所做的事 應事先捫心自問：<br>
                                     <strong>是否一切屬於真實？ 是否各方得到公平？ 能否促進親善友誼？ 能否兼顧彼此利益？</strong>
                                 </div>
                             </div>
                             <div class="creed-item">
                                 <div class="creed-label resize-x" contenteditable="true">【扶輪宗旨】</div>
-                                <div class="creed-content resize-both" contenteditable="true">
+                                <div class="creed-content" contenteditable="true">
                                     扶輪之宗旨在於鼓勵並培養以服務精神為可貴事業之基礎，尤其著重於鼓勵與培養。
                                 </div>
                             </div>
@@ -933,6 +976,9 @@
             // 寫進去了才更新「畫布上是哪一頁」，中途出錯時這兩個值仍然一致
             canvasPage = page;
             canvasLayout = useLayout;
+            // 切到第 2 頁或載入舊社刊時重新適配：舊社刊是在還沒有密度層級的年代存的，
+            // 列數多的那幾份載進來就會自己縮好。
+            if (page === 2) fitTimeline();
             addTouchHandles();
 
             // 重新綁定 P3 動態拼接的拖曳事件
@@ -1190,6 +1236,39 @@
             };
         }
 
+        // 流程列數變多時自動換上更密的行距與字級，讓四大考驗那一區不必被犧牲。
+        // 只調外觀不動結構，密度層級掛在 .layout-p2 上並跟著發布的 HTML 一起存，
+        // 所以編輯器、社員閱覽、PDF 三邊看到的是同一個版面。
+        // 壓到最密仍然放不下就直說：那些列在 PDF 裡會被裁掉，不能安靜地讓它發生。
+        const TIMELINE_DENSITIES = ['', 'density-1', 'density-2', 'density-3', 'density-4'];
+
+        function fitTimeline() {
+            const layout = document.querySelector('#canvas .layout-p2');
+            const container = layout && layout.querySelector('.timeline-container');
+            const timeline = container && container.querySelector('.timeline');
+            if (!layout || !container || !timeline) return;   // 不在第 2 頁
+
+            let level = 0;
+            for (; level < TIMELINE_DENSITIES.length; level++) {
+                TIMELINE_DENSITIES.forEach(c => c && layout.classList.remove(c));
+                if (TIMELINE_DENSITIES[level]) layout.classList.add(TIMELINE_DENSITIES[level]);
+                // 比的是流程列本身：「+ 增加新流程」按鈕列印時會被拿掉，把它算進去
+                // 會讓本來剛好放得下的列數被誤判成太長而提早壓縮。
+                if (timeline.scrollHeight <= container.clientHeight) break;
+            }
+
+            const overflowing = level >= TIMELINE_DENSITIES.length;
+            container.classList.toggle('overflowing', overflowing);
+            return overflowing;
+        }
+
+        // 加／刪流程之後重新適配；真的塞不下才提醒，一般情況安靜地縮就好。
+        function fitTimelineAndWarn() {
+            if (fitTimeline()) {
+                showToast('⚠️ 流程已超過一頁放得下的長度，最後幾列在 PDF 與社員閱覽時會被裁掉，請合併或刪除項目。');
+            }
+        }
+
         // --- 6.5 P2 流程項目動態增減功能 ---
         function addTimelineItem(btn) {
             const currentItem = btn.closest('.timeline-item');
@@ -1199,6 +1278,7 @@
             newItem.querySelector('.duration').innerText = "10 分鐘";
             currentItem.parentNode.insertBefore(newItem, currentItem.nextSibling);
             recalculateTimeline();
+            fitTimelineAndWarn();
             showToast('✅ 已成功新增一項流程！');
         }
 
@@ -1210,6 +1290,7 @@
             }
             btn.closest('.timeline-item').remove();
             recalculateTimeline();
+            fitTimeline();               // 刪到放得下就自動鬆回來
             showToast('🗑️ 已刪除該流程項目！');
         }
 
@@ -1225,6 +1306,7 @@
                 newItem.querySelector('.duration').innerText = "10 分鐘";
                 timeline.appendChild(newItem);
                 recalculateTimeline();
+                fitTimelineAndWarn();
                 showToast('✅ 已在最下方新增一項流程！');
             }
         }
@@ -1254,6 +1336,7 @@
                     nextTimeEl.innerText = nextTimeStr;
                 }
             }
+            fitTimeline();
         }
 
         function showToast(msg) {
@@ -1490,6 +1573,13 @@
         // 相容改版前用「乾淨版」存的舊社刊（那時 contenteditable 被設成 false、圖片 onclick 被移除）。
         function reEnableEditing(root) {
             root.querySelectorAll('[contenteditable]').forEach(e => e.setAttribute('contenteditable', 'true'));
+            // 四大考驗那一區以前可以拖大，拖出來的 inline 高度會被存進發布的版本，
+            // 載回來就繼續吃掉流程的空間。改成鎖定高度之後，順手把舊的尺寸清掉。
+            root.querySelectorAll('.creed-content').forEach(el => {
+                el.classList.remove('resize-both', 'resize-x');
+                el.style.removeProperty('height');
+                el.style.removeProperty('width');
+            });
             // 頁首/頁尾外框本來就不可編輯，只有裡面的文字可編。
             root.querySelectorAll('.page-header, .page-footer').forEach(e => e.setAttribute('contenteditable', 'false'));
             root.querySelectorAll('.editable-image').forEach(img => {
