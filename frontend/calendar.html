@@ -240,6 +240,7 @@
     let me = { is_admin: false, club: '', scope: 'district' };
     let districtName = '地區';   // 由 /me.district 帶入，見 init()
     let currentScope = 'district';        // 'district' | 'club'
+    let viewTarget = '';                  // 跨地區管理員選的地區代碼或社名；空 = 自己的
     let events = [];                      // 目前檢視範圍的活動（含 agenda）
     let activeEvent = null;               // 議程編輯中的活動（本地副本，儲存才寫回後端）
 
@@ -267,30 +268,70 @@
       await loadEvents();
     }
 
+    // 選單的每個選項都是「範圍:對象」：district: 是全部地區，district:3481 是那一區，
+    // club:南隆 是那個社。一般執秘只有兩個選項（自己的地區、自己的社），對象留空，
+    // 後端本來就只認他自己的；跨地區管理員才會列出全部。
     function buildViewSelector() {
       const sel = document.getElementById('view-selector');
-      let html = `<option value="district">🌐 ${districtName}總表</option>`;
-      if (me.club) html += `<option value="club">🏠 ${me.club}（本社）</option>`;
+      let html = '';
+      if (me.all_districts && districtChoices.length) {
+        html += `<option value="district:">🌐 全部地區總表</option>`;
+        districtChoices.forEach(d => {
+          html += `<option value="district:${escAttr(d.code)}">🌐 ${escapeHtml(d.short_name || d.code)}總表</option>`;
+          (d.clubs || []).forEach(c => {
+            const name = c.name || c;
+            html += `<option value="club:${escAttr(name)}">🏠 ${escapeHtml(name)}（${escapeHtml(d.code)}）</option>`;
+          });
+        });
+      } else {
+        html += `<option value="district:">🌐 ${escapeHtml(districtName)}總表</option>`;
+        if (me.club) html += `<option value="club:">🏠 ${escapeHtml(me.club)}（本社）</option>`;
+      }
       sel.innerHTML = html;
-      sel.value = currentScope;
+      sel.value = currentScope + ':' + viewTarget;
+      // 選單被重建後值可能對不上（例如目標社不在清單裡），回退到第一個選項
+      if (!sel.value) { sel.selectedIndex = 0; applyViewValue(sel.value); }
     }
 
-    async function switchView(scope) {
-      currentScope = scope;
+    function applyViewValue(value) {
+      const [scope, target] = String(value || 'district:').split(':');
+      currentScope = scope === 'club' ? 'club' : 'district';
+      viewTarget = target || '';
+    }
+
+    async function switchView(value) {
+      applyViewValue(value);
       if (activeEvent) backToList();
       await loadEvents();
     }
 
+    // 目前檢視範圍的顯示名稱
+    function viewTitle() {
+      if (currentScope === 'club') return viewTarget || me.club || '本社';
+      if (!viewTarget) return me.all_districts ? '全部地區' : districtName;
+      const d = districtChoices.find(x => x.code === viewTarget);
+      return d ? (d.short_name || d.code) : viewTarget;
+    }
+
+    // 某個社屬於哪一區（跨地區管理員才有完整清單）
+    function districtOfClub(club) {
+      if (!club) return '';
+      const d = districtChoices.find(x => (x.clubs || []).some(c => (c.name || c) === club));
+      return d ? d.code : '';
+    }
+
     async function loadEvents() {
       try {
-        const data = await apiFetch('/events?scope=' + currentScope);
+        const q = '/events?scope=' + currentScope
+          + (viewTarget ? '&' + (currentScope === 'club' ? 'club=' : 'district=')
+                          + encodeURIComponent(viewTarget) : '');
+        const data = await apiFetch(q);
         events = data.events || [];
       } catch (e) {
         events = [];
         alert('載入活動失敗：' + e.message);
       }
-      document.getElementById('main-title').innerText =
-        (currentScope === 'club' ? (me.club || '本社') : districtName) + ' 年度活動總表';
+      document.getElementById('main-title').innerText = viewTitle() + ' 年度活動總表';
       const editable = canEdit();
       document.getElementById('add-event-section').classList.toggle('hidden', !editable);
       document.getElementById('readonly-notice').classList.toggle('hidden', editable);
@@ -372,11 +413,14 @@
       if (!title) { alert('請輸入活動內容名稱！'); return; }
       const payload = {
         scope: currentScope,
-        club_name: currentScope === 'club' ? (me.club || '') : '',
+        club_name: currentScope === 'club' ? (viewTarget || me.club || '') : '',
         title, date: dateInput.value || null, start_time: '12:00', agenda: [],
       };
       const dSel = document.getElementById('new-event-district');
       if (districtChoices.length > 1 && dSel.value) payload.district = dSel.value;
+      // 正在看別的社時，活動要建在那個社所屬的地區，而不是建立者自己的
+      const clubDistrict = currentScope === 'club' ? districtOfClub(viewTarget) : '';
+      if (clubDistrict) payload.district = clubDistrict;
       try {
         await apiFetch('/admin/events', { method: 'POST', body: JSON.stringify(payload) });
         titleInput.value = ''; dateInput.value = '';

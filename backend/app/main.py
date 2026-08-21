@@ -2347,13 +2347,26 @@ async def finance_trend(request: Request, months: int = 6, end: str = "", club: 
 
 
 @app.get("/events")
-async def events(request: Request, scope: str = ""):
-    """Single source of truth for the LIFF's event list (district or club scope)."""
+async def events(request: Request, scope: str = "", district: str = "", club: str = ""):
+    """Single source of truth for the LIFF's event list (district or club scope).
+
+    district／club 只有跨地區管理員指定得動 —— 他要能一區一區、一社一社地看。
+    其餘人傳什麼都以自己的地區與社為準，跟 _target_club 同一個規矩。"""
     uid = request.headers.get("X-Line-UserId", "")
     if scope not in ("district", "club"):
         scope = db.get_user_scope(uid) if uid else "district"
-    club = db.get_user_club(uid) if uid else ""
-    evs = _events_for_scope(scope, club, _visible_district(uid) if uid else "")
+    everywhere = bool(uid) and db.is_super_admin(uid)
+    target_club = db.get_user_club(uid) if uid else ""
+    target_district = _visible_district(uid) if uid else ""
+    if everywhere:
+        if scope == "club" and club:
+            # 看別的社時，地區跟著那個社走，否則會拿自己的地區去濾別區的社
+            target_club = club
+            target_district = db.get_club_district(club) or None
+        elif scope == "district":
+            # 指定了就看那一區；沒指定維持 None＝全部地區一起看
+            target_district = district.strip() or None
+    evs = _events_for_scope(scope, target_club, target_district)
     # 活動 PDF 三個來源：(1) 已存檔的議程（後端即時產生向量 PDF）；(2) 舊版存進 DB
     # 的議程 PDF；(3) 執秘上傳到 Drive 資料夾的檔案。任一存在就把 pdf_url 指到後端
     # 端點（GET /events/{id}/pdf）。
