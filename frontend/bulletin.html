@@ -354,7 +354,11 @@
         body.view-mode .tool-tab:not(.export-tab) { display: none; }
         body.view-mode .sub-panel-container { display: none; }
         body.view-mode .canvas-stage { display: none; }
-        body.view-mode .workspace { flex-direction: column; align-items: center; padding-top: 28px; }
+        /* justify-content 一定要蓋掉。.workspace 原本是橫向排列並置中（編輯時只有一張畫布，
+           置中是對的），閱覽模式改成直向之後，那個置中就變成「垂直置中」：四頁比容器高，
+           溢出的部分會平均分到上下兩端，而上端那一半捲不回去（offsetTop 是負的）。
+           結果社員一打開就停在第 3 頁，前兩頁怎麼捲都看不到。 */
+        body.view-mode .workspace { flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 28px; }
         /* 唯讀模式社員只有這顆，做成實心主要鍵。 */
         body.view-mode .export-tab { margin-left: auto; background: var(--canva-accent); border: none; }
         body.view-mode .export-tab:hover { background: #7A33E6; }
@@ -1867,6 +1871,14 @@
             }
         }
 
+        // 社員點開社刊要從第 1 頁看起。捲動的是 .workspace（body 本身 overflow:hidden），
+        // 內容又是載入後才長出來的，所以瀏覽器記住的上次位置會在那之後才套用。
+        // 渲染完拉回最上面，圖片載完再拉一次（圖片會撐高版面）。
+        function scrollReaderToTop() {
+            const ws = document.querySelector('.workspace');
+            if (ws) ws.scrollTop = 0;
+            if (window.scrollY) window.scrollTo(0, 0);
+        }
         async function renderReader() {
             const reader = document.getElementById('reader');
             reader.innerHTML = '';
@@ -1889,10 +1901,19 @@
                 // 不重新適配的話社員會少看到幾列，而且完全沒有跡象。
                 fitTimelineIn(canvas, false);
             });
+            scrollReaderToTop();
+            // 圖片載完版面會變高，那之後再回到最上面一次
+            const imgs = [...reader.querySelectorAll('img')].filter(i => !i.complete);
+            if (imgs.length) {
+                Promise.all(imgs.map(i => new Promise(done => { i.onload = i.onerror = done; })))
+                    .then(scrollReaderToTop);
+            }
         }
 
         function enterViewMode() {
             document.body.classList.add('view-mode');
+            // 自己控制捲動位置，不要瀏覽器在內容長出來之後才把它拉回上次的地方
+            if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
             document.title = '扶輪社刊';
             const logo = document.querySelector('.nav-logo');
             if (logo) logo.innerHTML = '<span>PRO</span> 每週社刊';
