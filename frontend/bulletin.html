@@ -74,11 +74,20 @@
         .field-input { background: #3F4042; color: #fff; border: 1px solid transparent; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: var(--font-body); min-width: 150px; }
         .field-input:focus { outline: none; border-color: var(--canva-accent); }
         .field-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; cursor: pointer; }
+        .zoom-group { margin-left: auto; display: flex; align-items: center; gap: 4px; color: #ddd; font-size: 12px; padding-right: 6px; }
+        .zoom-group span { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+        .zoom-btn { background: #3F4042; color: #fff; border: none; border-radius: 6px; min-width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 8px; }
+        .zoom-btn:hover { background: #4F5052; }
+        .zoom-fit { font-size: 12px; }
+        /* 唯讀模式沒有工具列，這組也不該出現 */
+        body.view-mode .zoom-group { display: none; }
+        @media (max-width: 1100px) { .zoom-group { display: none; } }
+
         .btn.primary-btn { background: var(--canva-accent); }
         .btn.primary-btn:hover { background: #7A33E6; }
 
         /* --- 中央編輯區 --- */
-        .workspace { flex: 1; display: flex; justify-content: center; align-items: flex-start; position: relative; background-image: radial-gradient(#d1d1d1 1px, transparent 1px); background-size: 20px 20px; padding: 50px 40px; overflow: auto; -webkit-overflow-scrolling: touch; }
+        .workspace { flex: 1; display: flex; justify-content: center; justify-content: safe center; align-items: flex-start; position: relative; background-image: radial-gradient(#d1d1d1 1px, transparent 1px); background-size: 20px 20px; padding: 50px 40px; overflow: auto; -webkit-overflow-scrolling: touch; }
         /* stage 佔住「縮放後」的版面尺寸，wrapper 則維持 595x842 原始設計座標後再縮放。
            兩者分離，捲動範圍才會跟著縮放走，不會留下大片空白。 */
         .canvas-stage { width: calc(595px * var(--canvas-scale)); height: calc(842px * var(--canvas-scale)); flex-shrink: 0; margin: auto; position: relative; }
@@ -443,6 +452,14 @@
             <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg> 例會資料
         </div>
 
+        <!-- 縮放：預設「適合頁面」，想看細節就按 ＋（超過視窗高度時中央編輯區會捲動）。 -->
+        <div class="zoom-group" id="zoom-group">
+            <button class="zoom-btn" onclick="zoomCanvas(-0.1)" title="縮小">－</button>
+            <span id="zoom-level">100%</span>
+            <button class="zoom-btn" onclick="zoomCanvas(0.1)" title="放大">＋</button>
+            <button class="zoom-btn zoom-fit" onclick="zoomFit()" title="整頁完整顯示">適合頁面</button>
+        </div>
+
         <div class="tool-tab publish-tab" onclick="publishBulletin()">
             <svg viewBox="0 0 24 24" style="fill: white; width: 16px; height: 16px;"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg> 發布社刊
         </div>
@@ -629,19 +646,48 @@
         let globalZIndex = 100;
 
         // --- 0. 畫布自動縮放 ---
-        // 畫布是固定的 595x842 (A4 @72dpi) 設計座標，手機螢幕塞不下。
-        // 這裡量出 workspace 可用寬度換算縮放比，寫進 --canvas-scale 由 CSS 套用；
-        // 桌機空間足夠時維持 1，外觀與行為完全不變。
+        // 畫布是固定的 595x842 (A4 @72dpi) 設計座標。手機塞不下要縮小，而大螢幕上
+        // 它只佔中間一小塊、四周全是空白 —— 所以寬高都量，取比較緊的那一邊，
+        // 讓整頁「剛好放得下且盡量大」。
+        // 上限 1.8：再放大字會鬆散、圖片也開始糊，而且一頁就吃掉整個桌面。
+        // 下限 0.35：視窗被拉得很扁時仍看得見東西，不要縮到看不清。
         const CANVAS_W = 595, CANVAS_H = 842;
+        const CANVAS_SCALE_MAX = 3, CANVAS_SCALE_MIN = 0.35;
         let canvasScale = 1;
+        // null = 自動（適合頁面，跟著視窗大小走）；有值 = 使用者自己按過縮放
+        let userScale = null;
+
+        // 「適合頁面」：寬高都量，取比較緊的那一邊，讓整頁剛好放得下且盡量大。
+        function fitScale() {
+            const ws = document.querySelector('.workspace');
+            if (!ws) return 1;
+            const cs = getComputedStyle(ws);
+            const availW = ws.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            const availH = ws.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+            // 高度量不到（還沒排版）就先只看寬度，resize／字型就緒時會再算一次
+            const byH = availH > 0 ? availH / CANVAS_H : Infinity;
+            return Math.max(CANVAS_SCALE_MIN, Math.min(CANVAS_SCALE_MAX, Math.min(availW / CANVAS_W, byH)));
+        }
 
         function fitCanvas() {
-            const ws = document.querySelector('.workspace');
-            if (!ws) return;
-            const cs = getComputedStyle(ws);
-            const avail = ws.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-            canvasScale = Math.min(1, avail / CANVAS_W);
+            if (!document.querySelector('.workspace')) return;
+            canvasScale = userScale != null ? userScale : fitScale();
             document.documentElement.style.setProperty('--canvas-scale', canvasScale.toFixed(4));
+            const label = document.getElementById('zoom-level');
+            if (label) label.textContent = Math.round(canvasScale * 100) + '%';
+        }
+
+        // 放大縮小：一次 10%。放大到超過視窗高度是正常的，workspace 本來就會捲動。
+        function zoomCanvas(step) {
+            const base = canvasScale;
+            userScale = Math.max(CANVAS_SCALE_MIN, Math.min(CANVAS_SCALE_MAX, +(base + step).toFixed(4)));
+            fitCanvas();
+        }
+
+        // 回到自動：之後視窗變大變小都會跟著重算
+        function zoomFit() {
+            userScale = null;
+            fitCanvas();
         }
 
         window.addEventListener('resize', fitCanvas);
