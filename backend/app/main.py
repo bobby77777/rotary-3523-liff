@@ -2741,9 +2741,13 @@ def _issue_no(title: str) -> str:
 
 @app.get("/bulletin/header")
 async def bulletin_header(request: Request, event: int | None = None):
-    """社刊抬頭要帶入的三個值：社名、期數、例會日期。
+    """社刊抬頭要帶入的值：社名、期數、例會日期。
 
-    社名取完整名稱（沒設定就用簡稱）。沒帶 event 就只回社名，期數與日期留空。"""
+    社名取完整名稱（沒設定就用簡稱）。沒帶 event 就只回社名，其餘留空。
+
+    地點／司儀／開始時間不是抬頭要印的，是社刊編輯器裡「例會資料」那一格要填的
+    ——例會的這幾個欄位以前只能在行事曆改，社刊得另外開一個分頁。多回這三個欄位
+    就不必為了三個字再開一支端點；社友在活動卡上本來就看得到，沒有多露出什麼。"""
     uid = request.headers.get("X-Line-UserId", "")
     club = db.get_user_club(uid) if uid else ""
     ev = _lookup_event(uid, int(event)) if event else None
@@ -2757,6 +2761,12 @@ async def bulletin_header(request: Request, event: int | None = None):
         "issue_no": _issue_no(ev["title"]) if ev else "",
         "date": (ev or {}).get("date", ""),
         "title": (ev or {}).get("title", ""),
+        "location": (ev or {}).get("location", ""),
+        "mc": (ev or {}).get("mc", ""),
+        # 能不能改由後端說了算：PUT /admin/events/{id} 認的是 is_admin，而社刊主委
+        # 不一定是執秘（bulletin_editors 與 admin 是兩份名單）。前端自己猜的話，
+        # 會長出一顆按下去才發現是 403 的按鈕。
+        "can_edit_event": bool(ev) and db.is_admin(uid),
     }
 
 

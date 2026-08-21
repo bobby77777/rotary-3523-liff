@@ -54,6 +54,7 @@
         .control-group { display: flex; flex-direction: column; gap: 8px; }
         .control-group label { font-size: 11px; color: #A6A7A9; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
         .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: 500px; }
+        .hidden-tab { display: none; }
         .btn { background: #3F4042; color: #fff; border: 1px solid transparent; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: 0.2s; display: flex; align-items: center; gap: 6px; }
         .btn:hover { background: #4F5052; }
         .btn.active { border-color: var(--canva-accent); background: rgba(139, 61, 255, 0.2); box-shadow: 0 0 0 1px var(--canva-accent); }
@@ -67,6 +68,14 @@
         .gallery-btn:hover { border-color: var(--canva-accent); }
 
         .tip-box { margin-left: auto; background: rgba(139,61,255,0.1); border: 1px dashed var(--canva-accent); padding: 8px 15px; border-radius: 6px; font-size: 12px; color: #ddd; }
+
+        /* 「例會資料」面板的輸入框：這一區改的是活動本身（日期、地點…），不是社刊版面。
+           沿用面板的深色底，跟 .btn 同一組圓角與間距。 */
+        .field-input { background: #3F4042; color: #fff; border: 1px solid transparent; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: var(--font-body); min-width: 150px; }
+        .field-input:focus { outline: none; border-color: var(--canva-accent); }
+        .field-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; cursor: pointer; }
+        .btn.primary-btn { background: var(--canva-accent); }
+        .btn.primary-btn:hover { background: #7A33E6; }
 
         /* --- 中央編輯區 --- */
         .workspace { flex: 1; display: flex; justify-content: center; align-items: flex-start; position: relative; background-image: radial-gradient(#d1d1d1 1px, transparent 1px); background-size: 20px 20px; padding: 50px 40px; overflow: auto; -webkit-overflow-scrolling: touch; }
@@ -424,6 +433,11 @@
         <div class="tool-tab" onclick="switchPanel('text', this)">
             <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg> 自由文字
         </div>
+        <!-- 例會本身的資料（日期／地點／司儀）。以前只能回行事曆改，社刊得另開一個分頁；
+             沒有帶 ?event= 就沒有活動可存，那時整個分頁不顯示（見 initEventPanel）。 -->
+        <div class="tool-tab hidden-tab" id="tab-event" onclick="switchPanel('event', this)">
+            <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg> 例會資料
+        </div>
 
         <div class="tool-tab publish-tab" onclick="publishBulletin()">
             <svg viewBox="0 0 24 24" style="fill: white; width: 16px; height: 16px;"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg> 發布社刊
@@ -498,6 +512,34 @@
         </div>
 
         <!-- 文字面板 -->
+        <!-- 例會資料：存的是活動本身，不是社刊內容。存好之後抬頭（社名／期數／日期）
+             會重新抓一次，因為期數是後端從標題解析出來的。 -->
+        <div class="sub-panel" id="panel-event">
+            <div class="control-group">
+                <label>例會名稱</label>
+                <input id="event-field-title" class="field-input" style="min-width: 230px;" placeholder="例：第 1240 次例會">
+            </div>
+            <div class="control-group">
+                <label>日期</label>
+                <input id="event-field-date" type="date" class="field-input">
+            </div>
+            <div class="control-group">
+                <label>地點</label>
+                <input id="event-field-location" class="field-input" placeholder="例：本社例會餐廳">
+            </div>
+            <div class="control-group">
+                <label>司儀</label>
+                <input id="event-field-mc" class="field-input" placeholder="尚未設定">
+            </div>
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <div class="btn-row">
+                    <button class="btn primary-btn" id="event-save-btn" onclick="saveEventFields()">儲存活動資料</button>
+                </div>
+            </div>
+            <div class="tip-box">改完會同步到行事曆與社刊抬頭。例會流程請在 P.2 編輯。</div>
+        </div>
+
         <div class="sub-panel" id="panel-text">
             <div class="control-group">
                 <label>新增浮動文字方塊</label>
@@ -1736,9 +1778,62 @@
         // （第1350次例會）解析、日期就是例會日期。
         // 只在還是預設值時才覆蓋 —— 主委改過的字不能被自動帶入蓋掉；載入舊社刊時
         // 存檔的抬頭也優先於自動值（loadIntoEditor 之後才呼叫，見 initEditor）。
+        // 抬頭與「例會資料」面板共用同一次抓取：兩邊顯示的都是後端當下的活動資料，
+        // 不會有一邊已經更新、另一邊還停在舊值。
         async function applyBulletinHeader() {
-            writeHeaderFields(document.querySelector('#canvas .page-header'),
-                              await fetchBulletinHeader());
+            const info = await fetchBulletinHeader();
+            writeHeaderFields(document.querySelector('#canvas .page-header'), info);
+            fillEventPanel(info);
+        }
+
+        // 例會的日期、地點、司儀以前只能回行事曆改（那顆「活動資料」按鈕），社刊得
+        // 另外開一個分頁。改成在這裡編，行事曆那一列就只剩「編輯社刊」一顆按鈕。
+        function fillEventPanel(info) {
+            // 唯讀的社友、沒有活動 id、或沒有執秘權限的人都不給這張表單：
+            // 存不了的欄位擺在那裡，只會讓人白填一次才發現。
+            if (FORCE_VIEW || !EVENT_ID || !info || !info.can_edit_event) return;
+            const set = (id, v) => { document.getElementById(id).value = v || ''; };
+            set('event-field-title', info.title);
+            set('event-field-date', info.date);
+            set('event-field-location', info.location);
+            set('event-field-mc', info.mc);
+            document.getElementById('tab-event').classList.remove('hidden-tab');
+        }
+
+        // 只送這四個欄位：PUT /admin/events/{id} 是部分更新（見後端的
+        // _clean_event_payload 與 db.update_event），沒送的 agenda、golf_plans 不會被清掉。
+        async function saveEventFields() {
+            if (FORCE_VIEW || !EVENT_ID) return;
+            const val = id => document.getElementById(id).value.trim();
+            // 標題空白會讓這場例會既沒有名字、也不再被行事曆認成例會（社刊按鈕會跟著
+            // 消失），後端的 PUT 不擋這個，所以擋在按下去之前。
+            if (!val('event-field-title')) { showToast('⚠️ 例會名稱不能空白。'); return; }
+            const btn = document.getElementById('event-save-btn');
+            const label = btn.textContent;
+            btn.disabled = true; btn.textContent = '儲存中…';
+            try {
+                const res = await fetch(API_BASE + '/admin/events/' + encodeURIComponent(EVENT_ID), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json',
+                               'ngrok-skip-browser-warning': '1',
+                               'X-Line-UserId': EDITOR_UID },
+                    body: JSON.stringify({
+                        title: val('event-field-title'),
+                        date: val('event-field-date') || null,
+                        location: val('event-field-location'),
+                        mc: val('event-field-mc'),
+                    }),
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                // 重抓而不是就地改字：期數是後端從標題解析的，日期也經過 DATE 欄位
+                // 正規化，重抓拿到的才是社友之後會看到的那一份。
+                await applyBulletinHeader();
+                showToast('✅ 已更新這場例會的資料，抬頭同步跟上。');
+            } catch (e) {
+                showToast('⚠️ 儲存失敗（' + e.message + '），請再試一次。');
+            } finally {
+                btn.disabled = false; btn.textContent = label;
+            }
         }
 
         // 編輯模式開啟時：抓本社上次發布的社刊載回編輯器（沒發布過就維持預設範本）。
@@ -1826,8 +1921,8 @@
                 // 編輯模式：先 LINE 登入取得身分，再把本社上次發布的社刊載回編輯器可繼續編輯。
                 await ensureLineLogin();
                 await loadPublishedIntoEditor();
-                // 抬頭在載入舊社刊「之後」才帶入：這樣主委上次存的抬頭優先，
-                // 只有還停在示範值（台北信義扶輪社／第 2489 期）的才會被換成這場例會的實際資料。
+                // 抬頭在載入舊社刊「之後」才帶入：存檔的抬頭會被這場例會的實際資料蓋掉
+                // （活動資料是唯一來源，見 writeHeaderFields），順便填好「例會資料」面板。
                 await applyBulletinHeader();
             }
         })();

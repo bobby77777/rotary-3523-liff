@@ -92,15 +92,13 @@
       <div class="p-5 bg-blue-900 text-white">
         <button onclick="backToList()" class="text-blue-200 hover:text-white flex items-center gap-1 text-sm mb-4 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> 返回年度總表</button>
         <div class="flex items-center justify-between mb-1">
-          <div class="flex items-center gap-2"><i data-lucide="settings" class="w-6 h-6 text-yellow-400"></i><h1 class="text-xl font-bold tracking-wider" id="agenda-view-title">活動議程</h1></div>
+          <div class="flex items-center gap-2"><i data-lucide="settings" class="w-6 h-6 text-yellow-400"></i><h1 class="text-xl font-bold tracking-wider">活動議程</h1></div>
           <span id="agenda-role-badge" class="px-2 py-0.5 rounded text-xs bg-red-500 text-white hidden">唯讀</span>
         </div>
       </div>
       <div class="p-5 border-b border-slate-100 flex-1 overflow-y-auto">
         <h2 class="font-semibold text-slate-700 mb-4 flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> 基礎資訊</h2>
-        <p id="agenda-meeting-note" class="hidden text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded p-2 mb-4 leading-relaxed">
-          這是例會：改完日期、地點記得按下方「儲存」。<br>例會流程請在「編輯社刊」的第 2 頁編輯。
-        </p>
+
         <div class="space-y-4">
           <div><label class="block text-xs text-slate-500 mb-1">活動內容</label><input type="text" id="input-title" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none font-bold text-blue-900 event-field" /></div>
           <div><label class="block text-xs text-slate-500 mb-1">活動日期</label><input type="date" id="input-date" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
@@ -250,6 +248,12 @@
     // ==================== 初始化 ====================
     document.addEventListener('DOMContentLoaded', init);
 
+    // 例會的日期改在社刊編輯器（另一個分頁），回到這個分頁時重抓一次，
+    // 免得列表停在舊日期。議程編輯中不重抓，以免蓋掉還沒儲存的修改。
+    window.addEventListener('focus', () => {
+      if (document.getElementById('view-agenda').classList.contains('hidden')) loadEvents();
+    });
+
     async function init() {
       lucide.createIcons();
       setupGlobalAgendaListeners();
@@ -302,40 +306,39 @@
       }
       let html = '';
       events.forEach((evt, index) => {
-        // 操作欄固定三格：主要動作、次要動作、刪除。有些活動只有一個動作，
-        // 空的那格留著不填 —— 否則每一列的按鈕各自置中，橫看過去全部對不齊。
+        // 操作欄固定兩格：主要動作、刪除。唯讀時刪除那格留空不填 ——
+        // 否則每一列的按鈕各自置中，橫看過去全部對不齊。
         const btn = (onclick, icon, label, tone, title) =>
           `<button onclick="${onclick}" ${title ? `title="${title}"` : ''}
              class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 ${tone} rounded transition-colors text-sm font-medium whitespace-nowrap">
              <i data-lucide="${icon}" class="w-4 h-4 pointer-events-none"></i> ${label}</button>`;
         const TONE_MAIN = 'bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white';
-        const TONE_SUB  = 'bg-slate-100 text-slate-600 hover:bg-slate-600 hover:text-white';
         const empty = '<span></span>';
 
         const deleteBtn = editable
           ? `<button onclick="deleteEvent(${evt.id})" class="justify-self-center p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i></button>`
           : empty;
 
-        // 例會：主要動作是社刊，次要是活動本身的日期／地點；其他活動：議程。
-        let primaryBtn, secondaryBtn = empty;
-        if ((evt.title || '').includes('例會') || (evt.type || '').includes('例會')) {
-          primaryBtn = btn(`openBulletinEditor(${evt.id})`, 'newspaper',
-                           editable ? '編輯社刊' : '檢視社刊', TONE_MAIN);
-          if (editable) secondaryBtn = btn(`openAgenda(${evt.id})`, 'calendar-cog',
-                                           '活動資料', TONE_SUB, '改日期、地點、司儀');
-        } else {
-          primaryBtn = btn(`openAgenda(${evt.id})`, editable ? 'file-edit' : 'eye',
-                           editable ? '編輯議程' : '檢視議程', TONE_MAIN);
-        }
-        const actionBtn = primaryBtn + secondaryBtn;
+        // 例會＝「本社的」例會。地區行事曆上的公文標題裡也會出現「例會」（例：函請
+        // 各社踴躍報名…地區年會聯合例會…），那是一份公文，要的是議程編輯器而不是社刊。
+        // 判斷條件跟 index.html 的 isRegularMeeting 一致，都要求本社視角。
+        const isMeeting = currentScope === 'club'
+          && ((evt.title || '').includes('例會') || (evt.type || '').includes('例會'));
+        // 例會的日期、地點、司儀改在社刊編輯器裡（見 bulletin.html 的「例會資料」），
+        // 所以這裡一列只要一顆按鈕。
+        const primaryBtn = isMeeting
+          ? btn(`openBulletinEditor(${evt.id})`, 'newspaper',
+                editable ? '編輯社刊' : '檢視社刊', TONE_MAIN)
+          : btn(`openAgenda(${evt.id})`, editable ? 'file-edit' : 'eye',
+                editable ? '編輯議程' : '檢視議程', TONE_MAIN);
         html += `
           <tr class="hover:bg-blue-50/50 transition-colors group">
             <td class="py-4 px-6 text-center font-mono text-slate-500">${index + 1}</td>
             <td class="py-4 px-6 font-medium text-slate-800 text-lg">${escapeHtml(evt.title)}</td>
             <td class="py-4 px-6 text-slate-600 font-mono">${evt.date || '未定'}</td>
             <td class="py-4 px-6 text-center">
-              <div class="grid grid-cols-[7.5rem_7.5rem_2.5rem] items-center gap-2 w-fit mx-auto">
-                ${actionBtn}
+              <div class="grid grid-cols-[7.5rem_2.5rem] items-center gap-2 w-fit mx-auto">
+                ${primaryBtn}
                 ${deleteBtn}
               </div>
             </td>
@@ -412,12 +415,6 @@
       document.getElementById('view-agenda').classList.add('flex');
 
       const editable = canEdit();
-      // 例會的議程在社刊第 2 頁，這個畫面對它來說是改日期／地點／司儀的地方，
-      // 標題就照實說，不要讓人以為要在兩個地方各排一次議程。
-      const isMeeting = (activeEvent.title || '').includes('例會')
-                     || (activeEvent.type || '').includes('例會');
-      document.getElementById('agenda-view-title').textContent = isMeeting ? '活動資料' : '活動議程';
-      document.getElementById('agenda-meeting-note').classList.toggle('hidden', !isMeeting);
       document.getElementById('agenda-role-badge').classList.toggle('hidden', editable);
       document.getElementById('ai-agent-section').classList.toggle('hidden', !editable);
       document.getElementById('add-agenda-item-section').classList.toggle('hidden', !editable);
