@@ -1157,19 +1157,33 @@
     lucide.createIcons();
   }
 
+  // 代墊社友從名冊挑，不要用打的：打錯字、只寫綽號、同名的人分不出來，事後要查
+  // 「這筆是誰墊的」就沒得查。名單直接用看板已經載好的社友（board.members）。
+  function advanceMemberOptions(selected) {
+    const names = (board && board.members || [])
+      .filter(m => !m.orphan).map(m => m.name).filter(Boolean);
+    // 已經存過、但名冊上找不到的名字（退社、舊資料手打的）照樣留著，不然一存檔就被改掉
+    if (selected && !names.includes(selected)) names.unshift(selected);
+    return [`<option value="">請選擇社友</option>`]
+      .concat([...new Set(names)].map(n =>
+        `<option value="${esc(n)}" ${n === selected ? 'selected' : ''}>${esc(n)}</option>`))
+      .join('');
+  }
+
   function addAdvanceRow(member = '', detail = '', amount = 0) {
     const div = document.createElement('div');
     div.className = 'space-y-1.5 advance-row bg-amber-50 border border-amber-200 rounded-lg p-2';
     div.innerHTML = `
       <div class="flex gap-2 items-center">
-        <input type="text" placeholder="代墊社友" class="adv-member w-1/2 border border-amber-300 rounded p-2 text-[15px] outline-none focus:border-amber-500">
+        <select class="adv-member w-1/2 border border-amber-300 rounded p-2 text-[15px] bg-white outline-none focus:border-amber-500">
+          ${advanceMemberOptions(member)}
+        </select>
         <input type="number" placeholder="0" onfocus="this.select()" oninput="renderExpenseTotal()"
           class="adv-amount w-1/2 border border-amber-300 rounded p-2 text-[15px] text-right font-bold outline-none focus:border-amber-500">
         <button onclick="this.closest('.advance-row').remove(); renderExpenseTotal();" class="text-amber-300 hover:text-rose-600 p-1 transition-colors">
           <i data-lucide="trash-2" class="w-4 h-4"></i></button>
       </div>
       <input type="text" placeholder="用途（如：例會茶水）" class="adv-detail w-full border border-amber-300 rounded p-2 text-[14px] outline-none focus:border-amber-500">`;
-    div.querySelector('.adv-member').value = member;
     div.querySelector('.adv-detail').value = detail;
     div.querySelector('.adv-amount').value = amount ? amount : '';
     document.getElementById('exp-advances').appendChild(div);
@@ -1202,6 +1216,12 @@
   }
 
   async function saveExpense() {
+    // 沒選社友的代墊款存進去就再也查不出是誰墊的（後端只認金額，名字空的照收）
+    const nameless = readExpenseForm().advances.filter(a => !a.member).length;
+    if (nameless) {
+      alert(`有 ${nameless} 筆社友代墊款還沒選代墊社友。\n\n請選好社友，或把金額清成 0 讓它不被記入。`);
+      return;
+    }
     const btn = document.getElementById('exp-save');
     btn.disabled = true; btn.textContent = '儲存中…';
     try {
