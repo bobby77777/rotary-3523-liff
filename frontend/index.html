@@ -1636,6 +1636,14 @@ function findClosestUpcomingEvent() {
         .sort((a, b) => new Date(a.date) - new Date(b.date))[0] || null;
 }
 
+// 這場辦完了嗎。當天的還算沒結束（基準是今天 00:00），沒填日期的判斷不了，一律當成沒結束。
+// 首頁的「已結束」那一段與主打卡片共用同一條規則，兩邊各寫一次遲早會不一致。
+function isPastEvent(ev) {
+    if (!ev || !ev.date) return false;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return new Date(ev.date) < today;
+}
+
 function selectEvent(eventId) {
     const ev = getActiveEventsData().find(e => e.id === eventId);
     if (!ev) return;
@@ -1674,7 +1682,11 @@ function renderHomePage() {
                     <span class="mx-1 text-blue-300">·</span><i class="fa-solid fa-tag text-blue-200"></i>${_escHtml(ev.fee || '—')}</p>
             </div>
             <div class="p-3 flex gap-2">
-                ${!myRegisteredEvents.includes(ev.id)
+                ${isPastEvent(ev)
+                    // 辦完的活動不給報名按鈕：從「已結束」或報名紀錄點進來的都會走到這裡，
+                    // 一顆「我要報名」掛在去年的活動上，按下去只會收到一筆沒有人要處理的報名。
+                    ? `<div class="flex-1 min-w-0 min-h-[44px] rounded-lg bg-slate-100 text-slate-500 border border-slate-200 font-bold text-[14px] flex items-center justify-center gap-2"><i class="fa-regular fa-circle-check"></i>活動已結束</div>`
+                    : !myRegisteredEvents.includes(ev.id)
                     ? `<button onclick="triggerMainBannerClick()" class="flex-1 min-w-0 min-h-[44px] rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-colors"><i class="fa-solid fa-pen-to-square"></i>我要報名</button>`
                     : needsGolfInfo(ev)
                     // 從 LINE 泡泡或執秘代報名進來的球友還沒差點，給他一個補填入口，
@@ -1709,6 +1721,12 @@ function renderHomePage() {
             <div id="home-events-list" class="space-y-2"></div>
         </div>
 
+        <!-- 辦完的活動不會消失：議程與公文常常是活動結束之後才有人要看 -->
+        <div id="home-past" class="hidden">
+            <p class="section-title">已結束</p>
+            <div id="home-past-list" class="space-y-2"></div>
+        </div>
+
         <div>
             <p class="section-title">更多</p>
             <div class="card divide-y divide-slate-100 overflow-hidden">
@@ -1724,6 +1742,7 @@ function renderHomePage() {
         </div>`;
 
     renderHomeEvents();
+    renderPastEvents();
 }
 
 // 首頁「近期活動」看多遠。以前是「未來 10 筆」，筆數會被公文洗掉，改成看時間。
@@ -1763,6 +1782,52 @@ function renderHomeEvents() {
             </div>
         </div>`;
     }).join('');
+}
+
+// 已結束的活動：預設只露最近幾筆，其餘收在「顯示更多」後面 —— 一整年的公文攤開來
+// 會把首頁埋掉，但要找去年那場研討會的議程時又非得找得到不可。
+const PAST_PREVIEW = 3;
+let pastExpanded = false;
+
+function togglePastEvents() {
+    pastExpanded = !pastExpanded;
+    renderPastEvents();
+}
+
+function renderPastEvents() {
+    const wrap = document.getElementById('home-past');
+    const box = document.getElementById('home-past-list');
+    if (!wrap || !box) return;
+    // 新到舊：剛辦完的那場最可能是現在要找的
+    const all = getActiveEventsData()
+        .filter(isPastEvent)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (!all.length) { wrap.classList.add('hidden'); box.innerHTML = ''; return; }
+    wrap.classList.remove('hidden');
+
+    const list = pastExpanded ? all : all.slice(0, PAST_PREVIEW);
+    const cards = list.map(ev => {
+        const isCurrent = currentActiveEvent && currentActiveEvent.id === ev.id;
+        return `<div class="card p-3 ${isCurrent ? 'ring-2 ring-blue-500' : ''}">
+            <div class="flex justify-between items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-white text-[12px] font-bold bg-slate-400">已結束</span>
+                <span class="text-slate-500 font-bold text-[13px]">${_escHtml(ev.displayDate || ev.date)}</span>
+            </div>
+            <h3 class="font-bold text-slate-900 text-[15px] leading-snug mt-1.5">${_escHtml(ev.title)}</h3>
+            <p class="text-slate-500 text-[13px] mt-0.5"><i class="fa-solid fa-location-dot text-rose-500 mr-1"></i>${_escHtml(ev.location || '地點未定')}</p>
+            <div class="flex gap-2 mt-2.5">
+                <button onclick="selectEvent(${ev.id})" class="flex-1 min-w-0 min-h-[44px] rounded-lg ${isCurrent ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-700'} font-bold text-[13px] flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-hand-pointer"></i>${isCurrent ? '目前選取中' : '查看'}</button>
+                ${eventPdfButtonHTML(ev)}
+            </div>
+        </div>`;
+    }).join('');
+
+    const more = all.length > PAST_PREVIEW
+        ? `<button onclick="togglePastEvents()" class="card w-full min-h-[44px] text-[13px] font-bold text-slate-600 flex items-center justify-center gap-2">
+               <i class="fa-solid fa-chevron-${pastExpanded ? 'up' : 'down'}"></i>${pastExpanded ? '收合' : `顯示更多（${all.length - PAST_PREVIEW}）`}</button>`
+        : '';
+    box.innerHTML = cards + more;
 }
 
 function openCalendarPage() {
@@ -3836,8 +3901,9 @@ function eventPdfButtonHTML(ev) {
                 </button>`);
     }
     if (buttons.length) return buttons.join('');
+    // 辦完的活動說「準備中」是騙人的，那份議程不會再出現了
     return `<button disabled class="bg-gray-300 text-gray-400 ${base} cursor-not-allowed">
-                <i class="fa-solid fa-file-pdf"></i> 議程準備中
+                <i class="fa-solid fa-file-pdf"></i> ${isPastEvent(ev) ? '無議程檔案' : '議程準備中'}
             </button>`;
 }
 
