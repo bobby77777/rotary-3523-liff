@@ -378,14 +378,38 @@ def list_club_event_registrations(club_name: str, month: str) -> list[dict]:
     )
 
 
+def club_district_registrations(club_name: str) -> list[dict]:
+    """該社社友在地區活動上的所有報名，不分月份，附報名月份。
+
+    代墊帳要的是整個社的歷史（哪個月墊了多少、哪些還沒收回來），一個月一個月查
+    等於把最貴的查詢乘上月份數；上面那支綁月份的留給帳單編輯視窗用。"""
+    return query(
+        """
+        SELECT r.line_user_id, r.event_id, r.course_plan,
+               to_char(r.created_at AT TIME ZONE 'Asia/Taipei', 'YYYY-MM') AS reg_month,
+               e.title, e.date, e.fee, e.golf_plans, e.type
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        JOIN personal_information p ON p.line_user_id = r.line_user_id
+        WHERE p.club_name = %s
+          AND e.scope = 'district'
+        ORDER BY e.date, e.title
+        """,
+        (club_name,),
+    )
+
+
 def list_dues_event_items(club_name: str) -> list[dict]:
     """全社所有帳單裡的活動報名費項目，不分月份 —— 用來判斷某場活動是否已經記過。
 
     範圍是整個社的歷史而不是當月：三月記過的年會報名費，六月不能再被帶入一次。
     customs 是 JSONB，這裡先用文字篩掉沒有 event_id 的帳單，剩下的由呼叫端解析；
-    資料量是社友數 × 月份數，篩完通常只剩個位數列。"""
+    資料量是社友數 × 月份數，篩完通常只剩個位數列。
+
+    帶著 confirmed：報名費記在哪一個月的帳單、那張帳單對過帳沒有，就是「社墊出去
+    的錢收回來了沒」的答案。"""
     return query(
-        "SELECT line_user_id, month, customs FROM club_dues "
+        "SELECT line_user_id, month, customs, confirmed FROM club_dues "
         "WHERE club_name = %s AND customs::text LIKE %s",
         (club_name, '%"event_id"%'),
     )

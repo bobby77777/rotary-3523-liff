@@ -1779,6 +1779,57 @@ async def dues_bulk_save(request: Request):
             "total": total, "notified": notify}
 
 
+@app.post("/dues/bill_event_fees")
+async def dues_bill_event_fees(request: Request):
+    """把這個月還沒記帳的地區活動報名費，一次帶進各社友的帳單（向社友請款）。
+
+    社的帳戶早就把這筆錢墊給地區了，請款只是把它攤回報名的人身上。逐一開帳單也做
+    得到，只是一場年會二十個人就要開二十次，沒有人會做完。
+
+    仍然是「執秘按了才算」—— 自動在報名當下記帳的那一版被 revert 過兩次。已經對過
+    帳的帳單一律跳過：那個月的錢已經結清，事後偷偷加一筆進去，社友收到的數字會跟他
+    當初繳的對不起來。金額讀不出來的（每隊、多種方案）也跳過，回報給執秘自己填。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無社費記帳權限"}
+    body = await request.json()
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
+    month = str(body.get("month", "")).strip()
+    if not (club and _valid_month(month)):
+        return {"status": "invalid", "message": "缺少社別 / 月份"}
+    fees = _event_fees_by_uid(club, month)
+    names = {m["line_user_id"]: (m.get("full_name") or "社友")
+             for m in db.get_club_members(club)}
+    rows = {r["line_user_id"]: r for r in db.list_dues(club, month)}
+    notify = bool(body.get("notify", True))
+    billed, saved, skipped_confirmed, skipped_no_amount = 0, [], [], []
+    for uid, items in fees.items():
+        usable = [f for f in items if f["amount"] > 0]
+        skipped_no_amount += [{"name": names.get(uid, "社友"), "title": f["title"]}
+                              for f in items if not f["amount"]]
+        if not usable:
+            continue
+        row = rows.get(uid)
+        if row and row.get("confirmed"):
+            skipped_confirmed.append({"name": names.get(uid, "社友"), "count": len(usable)})
+            continue
+        customs = list((row or {}).get("customs") or [])
+        customs += [{"name": f["name"], "amount": f["amount"], "event_id": f["event_id"]}
+                    for f in usable]
+        meal, iou, customs = _clean_dues_items({
+            "meal": (row or {}).get("meal") or 0, "iou": (row or {}).get("iou") or 0,
+            "customs": customs})
+        db.upsert_dues(club, month, uid, meal, iou, customs)
+        billed += len(usable)
+        saved.append((uid, _dues_total(meal, iou, customs, *_dues_rates(club, month))))
+    if notify:
+        for uid, total in saved:
+            _push_dues_bill(uid, month, total)
+    return {"status": "ok", "billed": billed, "members": len(saved),
+            "skipped_confirmed": skipped_confirmed, "skipped_no_amount": skipped_no_amount,
+            "notified": notify and bool(saved)}
+
+
 @app.get("/dues/me")
 async def dues_me(request: Request, month: str = ""):
     """A member views their own dues for a month."""
@@ -1919,6 +1970,87 @@ def _event_fees_by_uid(club: str, month: str) -> dict[str, list[dict]]:
     return out
 
 
+def _advance_ledger(club: str) -> dict:
+    """社為社友墊出去的地區報名費，整個社的歷史一次算完。
+
+    地區活動的報名費是社的帳戶先匯給地區，隔月才在社費帳單上向社友收。錢確實出去
+    了，所以那個月就是支出；收回來是社友的帳單對帳的那個月（整張帳單計進「已繳」，
+    報名費就在裡面）。中間那段沒收回來的差額要看得見，否則期末結餘會比銀行裡的多。
+
+    不另存一份代墊記錄：報名清單與帳單本來就是同一筆錢的兩端，存第三份只會多一份
+    對不起來的答案。金額以「帳單上記的」優先 —— 每隊、多種方案這類程式讀不懂的
+    價格，執秘在帳單裡填的數字就是唯一權威，支出面要跟著他走。"""
+    billed: dict[tuple[str, int], dict] = {}
+    for row in db.list_dues_event_items(club):
+        for c in (row.get("customs") or []):
+            if not (isinstance(c, dict) and c.get("event_id")):
+                continue
+            try:
+                key = (row["line_user_id"], int(c["event_id"]))
+            except (TypeError, ValueError):
+                continue
+            billed[key] = {"month": row["month"], "amount": int(c.get("amount") or 0),
+                           "collected": bool(row.get("confirmed"))}
+
+    # 名字一次查完：逐筆去查 personal_information 等於報名筆數乘一次往返
+    names = {m["line_user_id"]: (m.get("full_name") or "社友")
+             for m in db.get_club_members(club)}
+
+    items, unknown = [], []
+    for reg in db.club_district_registrations(club):
+        uid, event_id = reg["line_user_id"], int(reg["event_id"])
+        bill = billed.get((uid, event_id))
+        amount = bill["amount"] if bill else _registration_fee(reg)[0]
+        title = str(reg.get("title") or "").strip() or f"活動 {event_id}"
+        fee_text = str(reg.get("fee") or "")
+        if not amount:
+            # 真的免費的不是代墊；讀不懂的價格是「還不知道墊了多少」，要講出來
+            if fee_text.strip() and not _FEE_FREE.search(fee_text):
+                unknown.append({"uid": uid, "name": names.get(uid, "社友"), "event_id": event_id,
+                                "title": title, "fee": fee_text,
+                                "advance_month": reg.get("reg_month") or ""})
+            continue
+        items.append({
+            "uid": uid, "name": names.get(uid, "社友"), "event_id": event_id, "title": title,
+            "amount": amount, "date": reg["date"].isoformat() if reg.get("date") else "",
+            # 報名當下社就把錢匯給地區了，代墊算在報名的那個月
+            "advance_month": reg.get("reg_month") or "",
+            "bill_month": bill["month"] if bill else "",
+            "collected": bool(bill and bill["collected"]),
+        })
+
+    by_month: dict[str, int] = {}
+    collected_by_month: dict[str, int] = {}
+    for it in items:
+        if it["advance_month"]:
+            by_month[it["advance_month"]] = by_month.get(it["advance_month"], 0) + it["amount"]
+        if it["collected"] and it["bill_month"]:
+            collected_by_month[it["bill_month"]] = \
+                collected_by_month.get(it["bill_month"], 0) + it["amount"]
+    return {"items": items, "unknown": unknown,
+            "by_month": by_month, "collected_by_month": collected_by_month}
+
+
+def _advance_outstanding(ledger: dict, month: str) -> dict:
+    """截至某個月，墊出去還沒收回來的錢。
+
+    用月份比大小而不是時間戳，跟結轉同一套算法：翻回上個月看到的就是上個月當時的
+    狀態，而不是今天的狀態。"""
+    out = [it for it in ledger["items"]
+           if it["advance_month"] and it["advance_month"] <= month
+           and not (it["collected"] and it["bill_month"] and it["bill_month"] <= month)]
+    billed = [it for it in out if it["bill_month"]]
+    return {
+        "total": sum(it["amount"] for it in out),
+        "billed": sum(it["amount"] for it in billed),
+        "unbilled": sum(it["amount"] for it in out if not it["bill_month"]),
+        "count": len(out),
+        "items": sorted(out, key=lambda it: (it["advance_month"], it["name"])),
+        "unknown": [u for u in ledger["unknown"]
+                    if u["advance_month"] and u["advance_month"] <= month],
+    }
+
+
 def _dues_rows(club: str, month: str, members: list[dict]) -> list[dict]:
     """One row per member: what they were billed and how far the money got.
 
@@ -1983,8 +2115,12 @@ def _dues_totals(rows: list[dict]) -> dict:
     }
 
 
-def _expense_summary(data: dict | None) -> dict:
-    """社務對帳表 → 支出面總計。欄位與 /club/finance 存進去的那份一致。"""
+def _expense_summary(data: dict | None, event_advance: int = 0) -> dict:
+    """社務對帳表 → 支出面總計。欄位與 /club/finance 存進去的那份一致。
+
+    地區報名費的代墊（event_advance）不在對帳表裡，是從報名清單算出來的，但錢確實
+    是那個月從社的帳戶出去的，所以一起計進支出總額。三個呼叫端（看板、結轉、趨勢）
+    都要傳同一個數字，否則期初結餘就不再等於每個月淨額的累加。"""
     d = data or {}
     fixed = [f for f in d.get("fixed", []) if isinstance(f, dict)]
     advances = [a for a in d.get("advances", []) if isinstance(a, dict)]
@@ -1993,22 +2129,28 @@ def _expense_summary(data: dict | None) -> dict:
         "rent": rent, "salary": salary, "fixed": fixed, "advances": advances,
         "fixed_total": sum(int(f.get("amount") or 0) for f in fixed),
         "advance_total": sum(int(a.get("amount") or 0) for a in advances),
-        "total": (rent + salary
+        "event_advance": int(event_advance or 0),
+        "total": (rent + salary + int(event_advance or 0)
                   + sum(int(f.get("amount") or 0) for f in fixed)
                   + sum(int(a.get("amount") or 0) for a in advances)),
     }
 
 
-def _carry_months(club: str, month: str) -> tuple[list[str], dict | None, bool]:
-    """要結轉的月份（本月之前、期初之後、且確實有記過帳的），以及期初設定。"""
+def _carry_months(club: str, month: str, ledger: dict | None = None
+                  ) -> tuple[list[str], dict | None, bool]:
+    """要結轉的月份（本月之前、期初之後、且確實有記過帳的），以及期初設定。
+
+    代墊的月份也要算進來：一個月可能沒有任何帳單、也沒填支出表，卻墊了一筆地區
+    報名費出去，跳過它就少算一筆支出。"""
     opening = db.get_opening_balance(club)
     start = opening["month"] if opening else ""
     applies = bool(opening) and month >= start
-    months = [m for m in db.finance_months(club) if m < month and (not start or m >= start)]
+    active = set(db.finance_months(club)) | set((ledger or {}).get("by_month", {}))
+    months = sorted(m for m in active if m < month and (not start or m >= start))
     return months, opening, applies
 
 
-def _carry_forward(club: str, month: str, members: list[dict]) -> dict:
+def _carry_forward(club: str, month: str, members: list[dict], ledger: dict) -> dict:
     """這個月開始時手上有多少 = 期初結餘 + 期初之後、本月之前每個月的淨額，
     外加每位社友從那些月份欠到現在的錢。
 
@@ -2017,14 +2159,16 @@ def _carry_forward(club: str, month: str, members: list[dict]) -> dict:
 
     社的結餘與社友的欠款走同一趟迴圈：兩者都是「把之前每個月再看一遍」，各跑
     一次等於把最貴的部分做兩遍，也給了兩份可能對不起來的答案。"""
-    months, opening, applies = _carry_months(club, month)
+    months, opening, applies = _carry_months(club, month, ledger)
     carry = int(opening["amount"]) if applies else 0
     # uid -> [{month, amount, is_paid}]：欠的是哪幾個月要講得出來，社友被要求補繳
     # 的第一句話一定是「哪一個月？」
     arrears: dict[str, list[dict]] = {}
+    advance_by_month = ledger.get("by_month", {})
     for m in months:
         rows = _dues_rows(club, m, members)
-        carry += _dues_totals(rows)["confirmed"] - _expense_summary(db.get_club_finance(club, m))["total"]
+        expense = _expense_summary(db.get_club_finance(club, m), advance_by_month.get(m, 0))
+        carry += _dues_totals(rows)["confirmed"] - expense["total"]
         for r in rows:
             # 對過帳的才算收到。社友自己回報但還沒對到的仍然掛在他頭上，只是標記
             # 出來，執秘看得出那筆是「在路上」還是真的沒繳。
@@ -2081,9 +2225,12 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
     rows = _dues_rows(club, month, members)
     rows.sort(key=lambda r: (["unpaid", "reported", "confirmed"].index(r["status"]), r["name"]))
     totals = _dues_totals(rows)
-    expense = _expense_summary(db.get_club_finance(club, month))
+    # 代墊帳整個社算一次，看板與結轉共用：一個月一個月去算等於把最貴的查詢乘上月份數
+    ledger = _advance_ledger(club)
+    expense = _expense_summary(db.get_club_finance(club, month),
+                               ledger["by_month"].get(month, 0))
     net = totals["confirmed"] - expense["total"]
-    carry = _carry_forward(club, month, members)
+    carry = _carry_forward(club, month, members, ledger)
     # 每位社友把自己的上期未繳帶在身上：帳單編輯與明細表都要看得到「他還欠哪幾
     # 個月」，逐一去翻舊月份是沒有人會做的事。
     arrears = carry.pop("arrears", {})
@@ -2101,6 +2248,8 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
             "all_districts": db.is_super_admin(uid),
             "clubs": [c["club_name"] for c in db.all_clubs()] if db.is_super_admin(uid) else [],
             "totals": totals, "expense": expense,
+            # 墊出去還沒收回來的：期末結餘裡有多少其實是「在社友身上」的錢
+            "advance_outstanding": _advance_outstanding(ledger, month),
             "net": net,
             # 上期結餘與期末結餘：社的錢是滾過來的，只看單月會以為社裡只有這個月
             # 收到的那些錢。closing 就是下個月的期初。
@@ -2336,10 +2485,11 @@ async def finance_trend(request: Request, months: int = 6, end: str = "", club: 
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     members = db.get_club_members(club)     # 社友名單每個月都一樣，撈一次就好
+    advance_by_month = _advance_ledger(club)["by_month"]
     out = []
     for m in _month_list(max(1, min(int(months or 6), 24)), end):
         totals = _dues_totals(_dues_rows(club, m, members))
-        expense = _expense_summary(db.get_club_finance(club, m))
+        expense = _expense_summary(db.get_club_finance(club, m), advance_by_month.get(m, 0))
         out.append({"month": m, "expected": totals["expected"],
                     "received": totals["confirmed"], "expense": expense["total"],
                     "net": totals["confirmed"] - expense["total"]})
@@ -2642,13 +2792,15 @@ async def awards_club(request: Request, club: str = ""):
 
 
 @app.get("/club/finance")
-async def club_finance_get(request: Request, month: str = ""):
+async def club_finance_get(request: Request, month: str = "", club: str = ""):
     """Load a club's monthly finance sheet (admin). Defaults to the caller's club
-    and the current month; returns empty defaults when nothing is saved yet."""
+    and the current month; returns empty defaults when nothing is saved yet.
+
+    club 跟財務看板同一個規矩（_target_club）：只有跨地區管理員指定得動別的社。"""
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="Not an admin")
-    club = db.get_user_club(uid)
+    club = _target_club(uid, club)
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     month = month or date.today().strftime("%Y-%m")
@@ -2663,10 +2815,11 @@ async def club_finance_save(request: Request):
     uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(uid):
         raise HTTPException(status_code=403, detail="Not an admin")
-    club = db.get_user_club(uid)
+    body = await request.json()
+    # 跨地區管理員切到別社時，支出要寫進他正在看的那個社，不是他自己的
+    club = _target_club(uid, str(body.get("club", "")).strip())
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
-    body = await request.json()
     month = body.get("month") or date.today().strftime("%Y-%m")
     data = {
         "rent": int(body.get("rent") or 0),

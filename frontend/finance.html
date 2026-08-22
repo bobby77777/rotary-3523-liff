@@ -265,6 +265,11 @@
           <button onclick="addAdvanceRow()" class="text-[13px] font-bold text-amber-600 hover:text-amber-800">＋ 新增</button>
         </div>
         <div id="exp-advances" class="space-y-2"></div>
+        <p class="text-[12px] text-slate-500 mt-2 leading-relaxed">
+          這裡填的是<b>社友替社墊的錢</b>（例會茶水之類）。
+          地區活動的報名費不要填在這裡 —— 系統已經從報名清單自動算成
+          <b>地區活動代墊</b>，再填一次同一筆錢會被算兩次。
+        </p>
       </div>
     </div>
     <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
@@ -396,6 +401,40 @@
     </div>
     <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
       <button onclick="closeRoster()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 地區活動代墊 Modal ==================== -->
+<div id="advance-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-5 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+    <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between flex-shrink-0">
+      <span class="font-bold" id="advance-title">地區活動代墊</span>
+      <button onclick="closeAdvances()" class="hover:bg-white/20 p-1 rounded transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-4 overflow-y-auto">
+      <p class="text-[13px] text-slate-500 leading-relaxed">
+        地區活動的報名費是社的帳戶先匯給地區，記在<b>報名的那個月</b>的支出；
+        向社友收回來的是他帳單對帳的那個月。金額直接取自報名清單，
+        <b>不要再手動填進「社友代墊款」</b>，那樣同一筆錢會被算兩次。
+      </p>
+      <div id="advance-summary" class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[15px]"></div>
+      <div>
+        <p class="text-[13px] font-bold text-slate-400 mb-1">未收回 <span id="advance-count"></span></p>
+        <div id="advance-list" class="space-y-1.5"></div>
+      </div>
+      <div id="advance-unknown-wrap" class="hidden">
+        <p class="text-[13px] font-bold text-amber-600 mb-1">抓不到金額，未計入代墊</p>
+        <div id="advance-unknown" class="space-y-1.5"></div>
+        <p class="text-[12px] text-slate-500 mt-1 leading-relaxed">
+          費用寫成「每隊」「每社」或有多種方案時，程式不猜。請進該社友的帳單自己填金額，
+          填完這一筆就會同時出現在代墊裡。
+        </p>
+      </div>
+    </div>
+    <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
+      <button onclick="billAllEventFees()" id="advance-bill" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">全部帶入本月帳單</button>
+      <button onclick="closeAdvances()" class="px-4 py-2 rounded text-base font-medium text-slate-500 hover:bg-slate-200 transition-colors">關閉</button>
     </div>
   </div>
 </div>
@@ -602,6 +641,8 @@
         <span class="font-bold tabular-nums">${money(amt)}</span>
       </div>`;
     const net = board.net, carry = board.carry || 0, closing = board.closing;
+    // 墊出去還沒收回來的：期末結餘裡有一部分其實還在社友身上，不講出來會以為社裡真的少了那些錢
+    const owed = board.advance_outstanding || { total: 0, billed: 0, unbilled: 0, items: [], unknown: [] };
     // 上期結餘怎麼來的要講得出來，否則沒有人敢相信這個數字：期初結餘設了沒、
     // 中間結轉了幾個月。
     const carryNote = board.opening_applies
@@ -627,6 +668,14 @@
       ${line('人事薪資', e.salary, 'text-slate-600 pl-6')}
       ${e.fixed.map(f => line(f.name || '固定支出', f.amount, 'text-slate-600 pl-6')).join('')}
       ${e.advances.length ? line(`社友代墊款（${e.advances.length} 筆）`, e.advance_total, 'text-amber-700 pl-6') : ''}
+      ${e.event_advance ? `
+        <div class="flex justify-between items-center text-indigo-700 pl-6">
+          <span>地區活動報名費（代墊）
+            <button onclick="openAdvances()" class="ml-1 text-[13px] font-bold text-indigo-600 hover:text-indigo-800">明細</button>
+          </span>
+          <span class="font-bold tabular-nums">${money(e.event_advance)}</span>
+        </div>
+        <p class="text-[12px] text-slate-400 -mt-1 pl-6">社的帳戶先墊給地區，向社友收回後回到收入</p>` : ''}
       ${line('支出小計', e.total, 'text-rose-600', true, 'C')}
       <p class="text-[12px] text-slate-400 -mt-1 pl-6">上列支出加總</p>
       <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
@@ -643,6 +692,21 @@
         <b>A</b> ${money(carry)} ＋ <b>D</b> ${money(net)} ＝ <b>E</b> ${money(closing)}
       </p>
       <p class="text-[12px] text-slate-400 -mt-1 pl-6">E 就是下個月的上期結餘（A）。</p>
+      ${owed.total ? `
+        <div class="mt-2 rounded-lg bg-indigo-50 border border-indigo-200 p-2.5 space-y-1">
+          <div class="flex justify-between items-center text-[14px] text-indigo-900">
+            <span class="font-bold">其中代墊未收回</span>
+            <span class="font-black tabular-nums">${money(owed.total)}</span>
+          </div>
+          <p class="text-[12px] text-indigo-700">
+            已開在帳單 ${money(owed.billed)}${owed.unbilled ? `／尚未開帳單 ${money(owed.unbilled)}` : ''}
+            　<button onclick="openAdvances()" class="font-bold underline hover:text-indigo-900">明細</button>
+          </p>
+          <div class="flex justify-between items-center text-[13px] text-slate-600 pt-1 border-t border-indigo-200">
+            <span>全部收回後結餘</span>
+            <span class="font-bold tabular-nums">${money(closing + owed.total)}</span>
+          </div>
+        </div>` : ''}
       ${e.total === 0 ? `<p class="text-[13px] text-slate-400 pt-1">本月尚未填社務對帳表（支出以 0 計）。按右上角「編輯支出」填寫。</p>` : ''}
       ${t.reported > 0 ? `<p class="text-[13px] text-amber-600 pt-1">另有 ${money(t.reported)} 已回報但未對帳，尚未計入收入與結餘。</p>` : ''}`;
   }
@@ -1132,7 +1196,8 @@
     try {
       const data = await apiFetch('/club/finance', {
         method: 'POST',
-        body: JSON.stringify({ month: activeMonth, ...readExpenseForm() }),
+        // 帶上 club：跨地區管理員切到別社時，支出要寫進他正在看的那個社
+        body: JSON.stringify({ club: activeClub, month: activeMonth, ...readExpenseForm() }),
       });
       if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
       closeExpense();
@@ -1422,6 +1487,98 @@
 
   function closeRoster() { hideModal('roster-modal'); }
 
+  // ==================== 地區活動代墊 ====================
+  // 社先把報名費匯給地區、隔月才向社友收，中間這段錢在誰身上要看得見。資料全部來自
+  // 看板已經載好的 advance_outstanding，不再多打一支 API。
+  function openAdvances() {
+    if (!board) return;
+    showModal('advance-modal');
+    renderAdvances();
+  }
+  function closeAdvances() { hideModal('advance-modal'); }
+
+  function renderAdvances() {
+    const owed = board.advance_outstanding || { total: 0, billed: 0, unbilled: 0, items: [], unknown: [] };
+    const e = board.expense;
+    document.getElementById('advance-title').textContent =
+      `地區活動代墊 · ${monthLabel(board.month)}`;
+    document.getElementById('advance-summary').innerHTML = `
+      <div class="flex justify-between"><span class="text-slate-500">本月代墊</span>
+        <span class="font-bold tabular-nums">${money(e.event_advance)}</span></div>
+      <div class="flex justify-between"><span class="text-slate-500">累計未收回</span>
+        <span class="font-black tabular-nums text-indigo-700">${money(owed.total)}</span></div>
+      <p class="text-[12px] text-slate-400 mt-1">
+        已開在帳單 ${money(owed.billed)}／尚未開帳單 ${money(owed.unbilled)}</p>`;
+    document.getElementById('advance-count').textContent =
+      owed.items.length ? `${owed.items.length} 筆` : '';
+    document.getElementById('advance-list').innerHTML = owed.items.length
+      ? owed.items.map(it => {
+          const state = it.bill_month
+            ? `<span class="text-[12px] font-bold text-emerald-700">已開在 ${monthLabel(it.bill_month)} 帳單</span>`
+            : `<span class="text-[12px] font-bold text-rose-600">尚未開帳單</span>`;
+          return `
+            <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
+              <div class="min-w-0">
+                <p class="text-[15px] font-semibold text-slate-800 truncate">${esc(it.name)}</p>
+                <p class="text-[12px] text-slate-500 truncate">${esc(it.title)}　${monthLabel(it.advance_month)}代墊</p>
+                <p>${state}</p>
+              </div>
+              <span class="font-bold tabular-nums whitespace-nowrap">${money(it.amount)}</span>
+            </div>`;
+        }).join('')
+      : `<p class="text-[13px] text-slate-400 italic py-2">沒有未收回的代墊，錢都回來了。</p>`;
+
+    const unknown = owed.unknown || [];
+    document.getElementById('advance-unknown-wrap').classList.toggle('hidden', !unknown.length);
+    document.getElementById('advance-unknown').innerHTML = unknown.map(u => `
+      <div class="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
+        <p class="text-[15px] font-semibold text-slate-800">${esc(u.name)}</p>
+        <p class="text-[12px] text-slate-500">${esc(u.title)}</p>
+        <p class="text-[12px] text-amber-700">費用：${esc(u.fee)}</p>
+      </div>`).join('');
+
+    // 沒有東西可帶入時，按鈕不該還在那裡等著被按
+    const pending = (board.members || []).reduce((n, r) => n + (r.event_fees || []).length, 0);
+    const btn = document.getElementById('advance-bill');
+    btn.disabled = !pending;
+    btn.textContent = pending ? `全部帶入本月帳單（${pending} 筆）` : '本月沒有待帶入的報名費';
+    btn.classList.toggle('opacity-40', !pending);
+    btn.classList.toggle('cursor-not-allowed', !pending);
+  }
+
+  // 一次把這個月還沒記帳的報名費開進各社友的帳單 —— 一場年會二十個人，逐一開帳單
+  // 沒有人做得完。仍然是按了才寫，且已對過帳的帳單不動。
+  async function billAllEventFees() {
+    const pending = (board.members || []).reduce((n, r) => n + (r.event_fees || []).length, 0);
+    if (!pending) return;
+    if (!confirm(`把本月 ${pending} 筆地區活動報名費，帶進各社友的 ${monthLabel(board.month)} 帳單？\n\n`
+      + '會用 LINE 通知這些社友帳單已更新。已經對過帳的帳單不會被更動。')) return;
+    const btn = document.getElementById('advance-bill');
+    btn.disabled = true; btn.textContent = '帶入中…';
+    try {
+      const data = await apiFetch('/dues/bill_event_fees', {
+        method: 'POST',
+        body: JSON.stringify({ club: activeClub, month: activeMonth }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '帶入失敗'); return; }
+      const skipped = (data.skipped_confirmed || [])
+        .map(s => `${s.name}（${s.count} 筆）`).join('、');
+      const noAmount = (data.skipped_no_amount || [])
+        .map(s => `${s.name}：${s.title}`).join('\n');
+      alert(`已帶入 ${data.billed} 筆，共 ${data.members} 位社友。`
+        + (skipped ? `\n\n已對帳、未更動：${skipped}` : '')
+        + (noAmount ? `\n\n抓不到金額、請自行填寫：\n${noAmount}` : ''));
+      await loadBoard();
+      loadTrend();
+      if (board) renderAdvances();
+    } catch (e) {
+      alert('帶入失敗：' + e.message);
+    } finally {
+      btn.disabled = false;
+      renderAdvances();
+    }
+  }
+
   function showModal(id) {
     const m = document.getElementById(id);
     m.classList.remove('hidden'); m.classList.add('flex');
@@ -1435,6 +1592,7 @@
   function printSheet() {
     if (!board) { alert('目前沒有資料可以列印。'); return; }
     const t = board.totals, e = board.expense;
+    const owed = board.advance_outstanding || { total: 0, billed: 0, unbilled: 0 };
     const cell = 'padding:4pt 8pt; border:0.5pt solid #cbd5e1;';
     document.getElementById('print-zone').innerHTML = `
       <div style="font-family: 'Noto Sans TC', sans-serif; color:#0f172a;">
@@ -1488,13 +1646,18 @@
 
         <p style="font-size:9pt; color:#475569; margin-top:12pt;">
           本月支出合計 ${money(e.total)}（場地租金 ${money(e.rent)}、人事薪資 ${money(e.salary)}、
-          固定支出 ${money(e.fixed_total)}、社友代墊款 ${money(e.advance_total)}）；
+          固定支出 ${money(e.fixed_total)}、社友代墊款 ${money(e.advance_total)}、
+          地區活動代墊 ${money(e.event_advance || 0)}）；
           本月結餘 ${money(board.net)}。
         </p>
         <p style="font-size:9pt; color:#0f172a; margin-top:4pt;">
           上期結餘 ${money(board.carry || 0)} ＋ 本月結餘 ${money(board.net)}
           ＝ <b>期末結餘 ${money(board.closing)}</b>
         </p>
+        ${owed.total ? `<p style="font-size:9pt; color:#3730a3; margin-top:4pt;">
+          期末結餘中含代墊未收回 ${money(owed.total)}（已開在帳單 ${money(owed.billed)}、
+          尚未開帳單 ${money(owed.unbilled)}），全部收回後為 ${money(board.closing + owed.total)}。
+        </p>` : ''}
       </div>`;
     window.print();
   }
