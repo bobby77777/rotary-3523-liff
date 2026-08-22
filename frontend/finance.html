@@ -420,7 +420,11 @@
       </p>
       <div id="advance-summary" class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[15px]"></div>
       <div>
-        <p class="text-[13px] font-bold text-slate-400 mb-1">未收回 <span id="advance-count"></span></p>
+        <p class="text-[13px] font-bold text-slate-400 mb-1">本月代墊明細 <span id="advance-month-count"></span></p>
+        <div id="advance-month-list" class="space-y-1.5"></div>
+      </div>
+      <div id="advance-old-wrap" class="hidden">
+        <p class="text-[13px] font-bold text-slate-400 mb-1">之前月份未收回 <span id="advance-count"></span></p>
         <div id="advance-list" class="space-y-1.5"></div>
       </div>
       <div id="advance-unknown-wrap" class="hidden">
@@ -1504,8 +1508,30 @@
   }
   function closeAdvances() { hideModal('advance-modal'); }
 
+  // 一筆代墊的狀態只有三種：錢還在社友身上沒開帳單、開了帳單還沒收到、已經收回來。
+  function advanceRow(it, showMonth) {
+    const state = it.collected
+      ? `<span class="text-[12px] font-bold text-emerald-700">已收回（${monthLabel(it.bill_month)} 帳單已對帳）</span>`
+      : it.bill_month
+        ? `<span class="text-[12px] font-bold text-amber-600">已開在 ${monthLabel(it.bill_month)} 帳單，待收</span>`
+        : `<span class="text-[12px] font-bold text-rose-600">尚未開帳單</span>`;
+    return `
+      <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
+        <div class="min-w-0">
+          <p class="text-[15px] font-semibold text-slate-800 truncate">${esc(it.name)}</p>
+          <p class="text-[12px] text-slate-500 truncate">${esc(it.title)}${
+            showMonth ? `　${monthLabel(it.advance_month)}代墊` : ''}</p>
+          <p>${state}</p>
+        </div>
+        <span class="font-bold tabular-nums whitespace-nowrap ${it.collected ? 'text-slate-400' : ''}">${money(it.amount)}</span>
+      </div>`;
+  }
+
   function renderAdvances() {
-    const owed = board.advance_outstanding || { total: 0, billed: 0, unbilled: 0, items: [], unknown: [] };
+    const owed = board.advance_outstanding
+      || { total: 0, billed: 0, unbilled: 0, items: [], month_items: [], unknown: [] };
+    const mine = owed.month_items || [];
+    const older = owed.items || [];
     const e = board.expense;
     document.getElementById('advance-title').textContent =
       `地區活動代墊 · ${monthLabel(board.month)}`;
@@ -1516,24 +1542,20 @@
         <span class="font-black tabular-nums text-indigo-700">${money(owed.total)}</span></div>
       <p class="text-[12px] text-slate-400 mt-1">
         已開在帳單 ${money(owed.billed)}／尚未開帳單 ${money(owed.unbilled)}</p>`;
+
+    // 本月代墊：支出面那個數字是這幾筆加起來的，已收回的也要列，否則對不起來
+    document.getElementById('advance-month-count').textContent =
+      mine.length ? `${mine.length} 筆 · ${money(owed.month_total || 0)}` : '';
+    document.getElementById('advance-month-list').innerHTML = mine.length
+      ? mine.map(it => advanceRow(it, false)).join('')
+      : `<p class="text-[13px] text-slate-400 italic py-2">這個月沒有代墊。</p>`;
+
+    // 之前月份墊出去、到現在還沒收回來的
+    document.getElementById('advance-old-wrap').classList.toggle('hidden', !older.length);
     document.getElementById('advance-count').textContent =
-      owed.items.length ? `${owed.items.length} 筆` : '';
-    document.getElementById('advance-list').innerHTML = owed.items.length
-      ? owed.items.map(it => {
-          const state = it.bill_month
-            ? `<span class="text-[12px] font-bold text-emerald-700">已開在 ${monthLabel(it.bill_month)} 帳單</span>`
-            : `<span class="text-[12px] font-bold text-rose-600">尚未開帳單</span>`;
-          return `
-            <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
-              <div class="min-w-0">
-                <p class="text-[15px] font-semibold text-slate-800 truncate">${esc(it.name)}</p>
-                <p class="text-[12px] text-slate-500 truncate">${esc(it.title)}　${monthLabel(it.advance_month)}代墊</p>
-                <p>${state}</p>
-              </div>
-              <span class="font-bold tabular-nums whitespace-nowrap">${money(it.amount)}</span>
-            </div>`;
-        }).join('')
-      : `<p class="text-[13px] text-slate-400 italic py-2">沒有未收回的代墊，錢都回來了。</p>`;
+      older.length ? `${older.length} 筆` : '';
+    document.getElementById('advance-list').innerHTML =
+      older.map(it => advanceRow(it, true)).join('');
 
     const unknown = owed.unknown || [];
     document.getElementById('advance-unknown-wrap').classList.toggle('hidden', !unknown.length);

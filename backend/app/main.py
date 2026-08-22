@@ -2040,12 +2040,19 @@ def _advance_outstanding(ledger: dict, month: str) -> dict:
            if it["advance_month"] and it["advance_month"] <= month
            and not (it["collected"] and it["bill_month"] and it["bill_month"] <= month)]
     billed = [it for it in out if it["bill_month"]]
+    # 這個月墊出去的每一筆（含已經收回來的）：支出面那個數字是它們加起來的，
+    # 點開來要對得出是哪幾個人、哪幾場，不然「本月代墊 9,200」沒有人能查證。
+    this_month = [it for it in ledger["items"] if it["advance_month"] == month]
     return {
         "total": sum(it["amount"] for it in out),
         "billed": sum(it["amount"] for it in billed),
         "unbilled": sum(it["amount"] for it in out if not it["bill_month"]),
         "count": len(out),
-        "items": sorted(out, key=lambda it: (it["advance_month"], it["name"])),
+        # 未收回的裡面，這個月才墊的已經列在 month_items，這裡只留更早以前的
+        "items": sorted((it for it in out if it["advance_month"] != month),
+                        key=lambda it: (it["advance_month"], it["name"])),
+        "month_items": sorted(this_month, key=lambda it: (it["name"], it["title"])),
+        "month_total": sum(it["amount"] for it in this_month),
         "unknown": [u for u in ledger["unknown"]
                     if u["advance_month"] and u["advance_month"] <= month],
     }
