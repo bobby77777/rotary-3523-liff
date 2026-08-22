@@ -2538,10 +2538,14 @@ async def events(request: Request, scope: str = "", district: str = "", club: st
         # 兩份文件是不同的東西，活動卡要能各開各的：公文本文是地區網站那份 PDF
         # （notices 同步時存進 pdf_url），議程 PDF 是議程編輯器產生的。以前只有一個 pdf_url，
         # 有議程就把公文連結蓋掉，公文本文就再也點不到了。
+        # 公文優先給「本文那一份 PDF」的直接連結：pdf_url 是地區網站給的 Drive 資料夾，
+        # 點開來是一堆檔案（公文、報名表、附件），社友還要自己認哪一份才是公文。
+        # 解析不出來（新同步的、非公開資料夾）才退回資料夾。
+        notice_url = e.get("notice_file_url") or e.get("pdf_url") or ""
         return {**e,
-                "notice_pdf_url": e.get("pdf_url") or "",
+                "notice_pdf_url": notice_url,
                 "agenda_pdf_url": agenda_url,
-                "pdf_url": agenda_url or e.get("pdf_url") or ""}   # 舊前端只認得這個
+                "pdf_url": agenda_url or notice_url}   # 舊前端只認得這個
 
     evs = [_with_pdfs(e) for e in evs]
     # is_golf 由後端算：報名表、行事曆管理、議程編輯三處都要判斷，規則各寫一份遲早會歪。

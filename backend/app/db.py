@@ -881,7 +881,7 @@ _WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "�
 # Simple scalar text/date fields (agenda is handled separately as a JSON string).
 _EVENT_FIELDS = ("scope", "club_name", "date", "title", "location",
                  "chair", "time", "type", "fee", "pdf_url", "start_time", "mc", "geo",
-                 "source_url", "district")
+                 "source_url", "district", "notice_file_url")
 
 
 def ensure_events_table() -> None:
@@ -919,6 +919,10 @@ def ensure_events_table() -> None:
     # 活動屬於哪一個地區。預設 3523 是因為這張表在只有一個地區的年代就存在了，
     # 既有的每一筆都是 3523 的活動；社內活動也帶著地區，社友看得到什麼一律以此為準。
     execute(f"ALTER TABLE events ADD COLUMN IF NOT EXISTS district TEXT NOT NULL DEFAULT '{DEFAULT_DISTRICT}'")
+    # 公文本文那一份 PDF 的直接連結。pdf_url 存的是地區網站給的 Drive 資料夾（裡面
+    # 還有報名表、附件），點開來要自己找哪一份才是公文；這一欄是解析後的那一份，
+    # 空的話就退回資料夾。兩個都留著：資料夾裡的附件不會因此消失。
+    execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS notice_file_url TEXT NOT NULL DEFAULT ''")
 
 
 # ── 地區（多地區支援） ────────────────────────────────────────────────────────
@@ -1112,6 +1116,7 @@ def _row_to_event(r: dict) -> dict:
         "mc": r.get("mc") or "",
         "geo": r.get("geo") or "",
         "source_url": r.get("source_url") or "",
+        "notice_file_url": r.get("notice_file_url") or "",
         "agenda": agenda,
         "golf_holes": golf_holes,
         "golf_plans": golf_plans,
@@ -1169,6 +1174,17 @@ def notice_events_missing_details() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def notice_events_without_file_link() -> list[dict]:
+    """有資料夾連結、但還沒解析出「公文本文那一份」的公文。notices.py 拿去補。"""
+    rows = query(
+        """
+        SELECT id, title, pdf_url FROM events
+        WHERE type = '公文' AND pdf_url <> '' AND notice_file_url = ''
+        ORDER BY id
+        """)
+    return [dict(r) for r in rows]
+
+
 def create_event(data: dict) -> dict:
     conn = _get_conn()
     try:
@@ -1178,8 +1194,8 @@ def create_event(data: dict) -> dict:
                 INSERT INTO events (scope, club_name, date, title, location,
                                     chair, time, type, fee, pdf_url,
                                     start_time, mc, geo, agenda, golf_plans, source_url,
-                                    district)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                    district, notice_file_url)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING *
                 """,
                 (data.get("scope", "district"), data.get("club_name", ""),
@@ -1191,7 +1207,8 @@ def create_event(data: dict) -> dict:
                  json.dumps(data.get("golf_plans") or []),
                  data.get("source_url", ""),
                  # 欄位漏在這個清單外面的話，活動會靜靜地落到預設地區去
-                 data.get("district") or DEFAULT_DISTRICT),
+                 data.get("district") or DEFAULT_DISTRICT,
+                 data.get("notice_file_url", "")),
             )
             row = cur.fetchone()
         conn.commit()

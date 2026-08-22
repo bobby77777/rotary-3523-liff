@@ -237,6 +237,21 @@ def _notice_pdf_bytes(drive_url: str) -> bytes | None:
     return event_pdfs.download_pdf(file_id)
 
 
+def notice_file_url(drive_url: str) -> str:
+    """公文本文那一份 PDF 的直接連結（Drive 檢視頁），解不出來就回空字串。
+
+    地區網站給的是一個資料夾：公文本身、報名表、附件都在裡面，社友點「公文」看到的
+    是一份檔案清單，還要自己認哪一份才是公文。這裡沿用 _pdf_rank 的規則（有文號的
+    那份排最前）把它挑出來。資料夾連結仍然留在 pdf_url，附件不會因此不見。"""
+    if not drive_url:
+        return ""
+    file_id = _drive_file_id(drive_url)
+    if not file_id:
+        ids = _public_folder_pdf_ids(_drive_folder_id(drive_url) or "")
+        file_id = ids[0] if ids else ""
+    return f"https://drive.google.com/file/d/{file_id}/view" if file_id else ""
+
+
 def _pdf_text(data: bytes, max_pages: int = 4) -> str:
     try:
         from pypdf import PdfReader
@@ -345,6 +360,8 @@ def _build_event(post: dict, district: str = "") -> dict:
         "time": details.get("time", ""),
         "fee": details.get("fee", ""),
         "pdf_url": post.get("drive_url", ""),
+        # 資料夾留著（附件在裡面），另外記住公文本文那一份，社友才能一點就看到公文
+        "notice_file_url": notice_file_url(post.get("drive_url", "")),
         "source_url": post["source_url"],
     }
 
@@ -370,6 +387,29 @@ def refresh_notice_details() -> dict:
         updated += 1
     report = {"checked": len(rows), "updated": updated, "errors": errors}
     logger.info("notices: refresh done %s", report)
+    return report
+
+
+def refresh_notice_file_links() -> dict:
+    """把還停在資料夾連結的舊公文，補上「公文本文那一份 PDF」的直接連結。
+
+    這些公文是在只存資料夾連結的年代同步進來的。每一筆要抓一次 Drive 的資料夾頁，
+    所以只處理還沒有連結的，重跑不會重做。"""
+    rows = db.notice_events_without_file_link()
+    updated = errors = 0
+    for row in rows:
+        try:
+            url = notice_file_url(row.get("pdf_url") or "")
+        except Exception as e:
+            errors += 1
+            logger.warning("notices: file link failed for %r: %s", row["title"], e)
+            continue
+        if not url:
+            continue
+        db.update_event(row["id"], {"notice_file_url": url})
+        updated += 1
+    report = {"checked": len(rows), "updated": updated, "errors": errors}
+    logger.info("notices: file links done %s", report)
     return report
 
 
@@ -414,6 +454,8 @@ def sync_notices(refresh: bool = False) -> dict:
                                            if not (d.get("notices_api") or "").strip()]}
     if refresh:
         report["refreshed"] = refresh_notice_details()
+        # 舊公文只存了資料夾連結，順便補上「公文本文那一份」的直接連結
+        report["file_links"] = refresh_notice_file_links()
     logger.info("notices: sync done %s", report)
     return report
 
