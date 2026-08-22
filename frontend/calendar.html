@@ -87,7 +87,10 @@
   </div>
 
   <!-- ==================== 檢視 2：議程編輯 ==================== -->
-  <div id="view-agenda" class="hidden flex-col md:flex-row h-screen w-full">
+  <!-- 手機是一份由上往下捲的頁面，桌機才是左右兩欄各自捲動。用 h-screen 兩欄一起
+       擠在同一個螢幕高度裡的話，手機上基礎資訊就把整個高度吃光，議程那一欄只剩幾十
+       像素又是 overflow-hidden，等於看不到議程。 -->
+  <div id="view-agenda" class="hidden flex-col md:flex-row md:h-screen w-full">
     <div class="w-full md:w-80 bg-white border-r border-slate-200 flex flex-col shadow-lg z-10 flex-shrink-0">
       <div class="p-5 bg-blue-900 text-white">
         <button onclick="backToList()" class="text-blue-200 hover:text-white flex items-center gap-1 text-sm mb-4 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> 返回年度總表</button>
@@ -96,7 +99,8 @@
           <span id="agenda-role-badge" class="px-2 py-0.5 rounded text-xs bg-red-500 text-white hidden">唯讀</span>
         </div>
       </div>
-      <div class="p-5 border-b border-slate-100 flex-1 overflow-y-auto">
+      <div id="agenda-side-body" class="p-5 border-b border-slate-100 flex-1 md:overflow-y-auto">
+        <div id="basic-info-block">
         <h2 class="font-semibold text-slate-700 mb-4 flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> 基礎資訊</h2>
 
         <div class="space-y-4">
@@ -105,6 +109,7 @@
           <div><label class="block text-xs text-slate-500 mb-1">議程開始時間</label><input type="time" id="input-startTime" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
           <div><label class="block text-xs text-slate-500 mb-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> 地點</label><input type="text" id="input-location" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
           <div><label class="block text-xs text-slate-500 mb-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> 司儀</label><input type="text" id="input-mc" class="w-full p-2 border border-slate-300 rounded text-sm focus:border-blue-500 outline-none event-field" /></div>
+        </div>
         </div>
 
         <!-- 高球賽事才出現：報名表的方案選單與收費就是這裡填的。 -->
@@ -126,39 +131,39 @@
       </div>
     </div>
 
-    <div class="flex-1 flex flex-col h-full overflow-hidden">
-      <div class="bg-white p-6 border-b border-slate-200 shadow-sm z-0">
-        <div class="flex justify-between items-end gap-4">
+    <div class="flex-1 flex flex-col md:h-full md:overflow-hidden">
+      <div class="bg-white p-4 md:p-6 border-b border-slate-200 shadow-sm z-0">
+        <div class="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
           <div>
-            <h2 class="text-2xl font-bold text-slate-800 mb-2" id="display-title">活動名稱</h2>
+            <h2 class="text-xl md:text-2xl font-bold text-slate-800 mb-2 break-words" id="display-title">活動名稱</h2>
             <div class="flex flex-wrap gap-4 text-sm text-slate-600">
               <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-4 h-4"></i> <span id="display-date"></span></span>
               <span class="flex items-center gap-1"><i data-lucide="map-pin" class="w-4 h-4"></i> <span id="display-location"></span></span>
               <span class="flex items-center gap-1"><i data-lucide="user" class="w-4 h-4"></i> 司儀：<span id="display-mc"></span></span>
             </div>
           </div>
-          <div class="flex items-center gap-4">
-            <div class="text-right">
+          <div class="flex items-center gap-3 md:gap-4 flex-wrap">
+            <div id="end-time-block" class="text-right">
               <p class="text-sm text-slate-500 mb-1">預計結束時間</p>
               <p class="text-3xl font-bold text-blue-600" id="end-time-display">--:--</p>
             </div>
-            <button onclick="downloadAgendaPdf()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-colors"><i data-lucide="file-down" class="w-5 h-5"></i> 下載 PDF</button>
+            <button id="btn-agenda-pdf" onclick="downloadAgendaPdf()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-colors"><i data-lucide="file-down" class="w-5 h-5"></i> 下載 PDF</button>
             <button id="btn-save-agenda" onclick="saveAgenda()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-colors"><i data-lucide="save" class="w-5 h-5"></i> 儲存</button>
           </div>
         </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-6 bg-slate-50">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div class="grid grid-cols-12 gap-4 p-4 bg-slate-100/50 border-b border-slate-200 text-sm font-semibold text-slate-600 min-w-[800px]">
+      <div class="flex-1 md:overflow-y-auto p-4 md:p-6 bg-slate-50">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+          <div id="agenda-head" class="hidden md:grid grid-cols-12 gap-4 p-4 bg-slate-100/50 border-b border-slate-200 text-sm font-semibold text-slate-600 md:min-w-[800px]">
             <div class="col-span-2 text-center">時間</div>
             <div class="col-span-1 text-center">分鐘</div>
             <div class="col-span-4">內容 / 主題</div>
             <div class="col-span-3">講者 / 負責人</div>
             <div class="col-span-2 text-center">簡報 / 動作</div>
           </div>
-          <div id="agenda-container" class="divide-y divide-slate-100 min-w-[800px]"></div>
-          <div id="add-agenda-item-section" class="p-4 bg-slate-50 border-t border-slate-200 min-w-[800px]">
+          <div id="agenda-container" class="divide-y divide-slate-100 md:min-w-[800px]"></div>
+          <div id="add-agenda-item-section" class="p-4 bg-slate-50 border-t border-slate-200 md:min-w-[800px]">
             <button onclick="handleAddItem(-1)" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center gap-2 transition-all"><i data-lucide="plus" class="w-5 h-5"></i> 新增議程項目</button>
           </div>
         </div>
@@ -469,6 +474,39 @@
       });
 
       populateAgendaSidebar(); updateTimesAndData(); renderAgenda(); renderGolfPlans();
+      hideEmptyFields(editable);
+      tidyAgendaChrome();
+    }
+
+    // 空的容器就別留在畫面上：唯讀又沒有球場方案時，左欄整塊是空白的；沒有議程時，
+    // 「預計結束時間 00:00」也是算給不存在的東西看的。
+    function tidyAgendaChrome() {
+      const body = document.getElementById('agenda-side-body');
+      const basic = document.getElementById('basic-info-block');
+      const golf = document.getElementById('golf-plans-section');
+      if (body && basic && golf) {
+        const empty = basic.classList.contains('hidden') && golf.classList.contains('hidden');
+        body.classList.toggle('hidden', empty);
+      }
+      const end = document.getElementById('end-time-block');
+      if (end) end.classList.toggle('hidden', !(activeEvent && activeEvent.agenda.length));
+    }
+
+    // 唯讀時整個「基礎資訊」收起來：那五個欄位（標題、日期、時間、地點、司儀）右邊
+    // 的標題列本來就全部再講一次，只能看的人得到的是一排唯讀輸入框——沒填的是空框，
+    // 標題太長的被截掉，手機上又佔掉整個第一屏。能編輯的人才需要那些框。
+    function hideEmptyFields(editable) {
+      const block = document.getElementById('basic-info-block');
+      if (block) block.classList.toggle('hidden', !editable);
+    }
+
+    // 公文本文的連結。新版後端分開送 notice_pdf_url；舊版只有 pdf_url，
+    // /events/{id}/pdf 是系統產的議程，其餘（Drive）就是公文本身。
+    function noticeUrl(ev) {
+      if (!ev) return '';
+      const legacy = ev.pdf_url || '';
+      const isAgenda = /\/events\/\d+\/pdf$/.test(legacy);
+      return ev.notice_pdf_url || (isAgenda ? '' : legacy) || ev.source_url || '';
     }
 
     // ==================== 球場方案（高球賽事）====================
@@ -691,8 +729,27 @@
       if (!activeEvent) return;
       const container = document.getElementById('agenda-container');
       const editable = canEdit();
+      // 空議程不必留 800px 的表格骨架與欄位標題：手機上那會變成一張要橫向捲、
+      // 裡面只有一句話的空表。
+      // 欄位標題只在桌機出現（手機的列是堆疊的，一排欄名對不到任何東西），
+      // 所以這裡切的是 md:hidden，不是 hidden —— hidden 拿掉的話手機上它會冒出來。
+      const head = document.getElementById('agenda-head');
+      if (head) head.classList.toggle('md:hidden', activeEvent.agenda.length === 0);
+      container.classList.toggle('min-w-[800px]', activeEvent.agenda.length > 0);
+      // 沒有議程就沒有東西可印，那顆 PDF 會產出一張空白表
+      const pdfBtn = document.getElementById('btn-agenda-pdf');
+      if (pdfBtn) pdfBtn.classList.toggle('hidden', activeEvent.agenda.length === 0);
       if (activeEvent.agenda.length === 0) {
-        container.innerHTML = '<div class="p-8 text-center text-slate-400">尚無議程資料，按下方「新增議程項目」開始。</div>';
+        // 公文沒有議程，永遠不會有。對只能看的人講「按下方新增」是錯的——那顆按鈕
+        // 他看不到；能給他的是公文原文。
+        const notice = noticeUrl(activeEvent);
+        container.innerHTML = `
+          <div class="p-8 text-center text-slate-400 space-y-3">
+            <p>${editable ? '尚無議程資料，按下方「新增議程項目」開始。' : '這場活動沒有議程。'}</p>
+            ${notice ? `<a href="${escapeHtml(notice)}" target="_blank" rel="noopener"
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-colors">
+              <i data-lucide="file-text" class="w-4 h-4"></i> 開啟公文原文</a>` : ''}
+          </div>`;
         lucide.createIcons(); return;
       }
       let html = '';
@@ -715,16 +772,21 @@
         const inputClass = editable ? "agenda-input hover:border-slate-200 focus:bg-white" : "readonly-input";
         const ro = editable ? "" : "readonly";
         html += `
-          <div class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-blue-50/50 transition-colors group">
-            <div class="col-span-2 text-center font-mono text-slate-700 bg-slate-100 py-1.5 rounded text-sm" data-time-for="${item.id}">${item.startTimeStr || '--:--'} - ${item.endTimeStr || '--:--'}</div>
-            <div class="col-span-1 flex justify-center"><input type="number" min="0" data-id="${item.id}" data-field="duration" value="${item.duration}" class="w-16 p-1.5 text-center border border-transparent rounded outline-none font-bold text-blue-700 bg-transparent ${inputClass}" ${ro}/></div>
-            <div class="col-span-4 flex items-center"><textarea data-id="${item.id}" data-field="content" rows="1" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.content || '')}</textarea></div>
-            <div class="col-span-3 flex items-center"><textarea data-id="${item.id}" data-field="speaker" rows="1" placeholder="無" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.speaker || '')}</textarea></div>
-            <div class="col-span-2 flex items-center justify-between"><div class="flex-1">${pdfHTML}</div>${controlsHTML}</div>
+          <div class="grid grid-cols-[auto_1fr] md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-4 items-center hover:bg-blue-50/50 transition-colors group">
+            <div class="md:col-span-2 text-center font-mono text-slate-700 bg-slate-100 px-2 py-1.5 rounded text-sm whitespace-nowrap" data-time-for="${item.id}">${item.startTimeStr || '--:--'} - ${item.endTimeStr || '--:--'}</div>
+            <div class="md:col-span-1 flex justify-start md:justify-center items-center gap-1"><input type="number" min="0" data-id="${item.id}" data-field="duration" value="${item.duration}" class="w-14 md:w-16 p-1.5 text-center border border-transparent rounded outline-none font-bold text-blue-700 bg-transparent ${inputClass}" ${ro}/><span class="md:hidden text-xs text-slate-400">分</span></div>
+            <div class="col-span-2 md:col-span-4 flex items-center"><textarea data-id="${item.id}" data-field="content" rows="1" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.content || '')}</textarea></div>
+            <div class="col-span-2 md:col-span-3 flex items-center gap-1"><span class="md:hidden text-xs text-slate-400 flex-shrink-0">講者</span><textarea data-id="${item.id}" data-field="speaker" rows="1" placeholder="無" class="w-full p-2 border border-transparent rounded outline-none resize-none overflow-hidden bg-transparent ${inputClass}" ${ro}>${escapeHtml(item.speaker || '')}</textarea></div>
+            <div class="col-span-2 md:col-span-2 flex items-center justify-between">${pdfHTML || controlsHTML ? `<div class="flex-1">${pdfHTML}</div>${controlsHTML}` : ''}</div>
           </div>`;
       });
       container.innerHTML = html;
-      container.querySelectorAll('textarea').forEach(autoGrow);
+      const grow = () => container.querySelectorAll('textarea').forEach(autoGrow);
+      grow();
+      // 第一次量到的寬度不一定是最後的寬度：Tailwind CDN 是看到 class 之後才生出對應
+      // 樣式，字體也還在載。量早了的欄位會少一行——後面那一行就這樣被裁掉。
+      requestAnimationFrame(grow);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(grow);
       lucide.createIcons();
     }
 
