@@ -908,25 +908,12 @@
       return el;
     }
 
-    // 在 LINE 的內建瀏覽器裡嗎？liff 沒載入或還沒 init 時一律當成不是。
-    function inLineApp() {
-      try { return !!(window.liff && liff.isInClient()); } catch (e) { return false; }
-    }
-
-    // 開外部連結：LINE 內建瀏覽器要用 liff.openWindow(external)，window.open 會被吞掉。
-    function openExternal(url) {
-      if (inLineApp()) {
-        try { liff.openWindow({ url, external: true }); return; } catch (e) {}
-      }
-      window.open(url, '_blank');
-    }
-
     // 社員看到的那份：後端從已存檔的議程即時產生的向量 PDF。
     function generateSpecificEventPDF(eventId) {
       const evt = events.find(e => e.id === eventId);
       if (!evt) return;
       if (!(evt.agenda || []).length) { alert('此活動尚無建立任何議程資料，無法匯出。'); return; }
-      openExternal(API_BASE + '/events/' + eventId + '/pdf');
+      window.open(API_BASE + '/events/' + eventId + '/pdf', '_blank');
     }
 
     // 下載「向量」議程 PDF：用瀏覽器原生列印引擎（文字清晰、可選取），請於目的地選「另存為 PDF」。
@@ -934,13 +921,6 @@
     async function downloadAgendaPdf() {
       if (!activeEvent) return;
       if (!(activeEvent.agenda || []).length) { alert('此活動尚無議程資料，無法匯出。'); return; }
-      // LINE 內建瀏覽器沒有列印功能：window.print() 按下去毫無反應，看起來像按鈕壞了。
-      // 那裡改開後端產生的同一份議程 PDF（存檔後的內容），用外部瀏覽器開才存得下來。
-      if (inLineApp()) {
-        // 送出去的是「已存檔」的議程；手機上編輯到一半的內容要先按儲存才會進到 PDF
-        openExternal(API_BASE + '/events/' + activeEvent.id + '/pdf');
-        return;
-      }
       const el = _buildAgendaPrintDom(activeEvent);
       const zone = document.getElementById('agenda-print-zone');
       zone.innerHTML = '';
