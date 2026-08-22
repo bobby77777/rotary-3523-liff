@@ -693,17 +693,13 @@
 
       <div class="border-t border-dashed border-slate-200 pt-2 mt-3"></div>
       ${line('本月結餘', net, net >= 0 ? 'text-slate-700' : 'text-rose-600', true, 'D')}
-      <p class="text-[12px] text-slate-500 tabular-nums -mt-1 pl-6">
-        <b>B</b> ${money(t.confirmed)} － <b>C</b> ${money(e.total)} ＝ <b>D</b> ${money(net)}
-      </p>
+      <p class="text-[12px] text-slate-500 -mt-1 pl-6"><b>B</b> － <b>C</b> ＝ <b>D</b></p>
       <div class="border-t-2 border-slate-800 pt-2 mt-2"></div>
       <div class="flex justify-between items-center">
         <span class="font-black">${tag('E')}期末結餘</span>
         <span class="font-black text-xl tabular-nums ${closing >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${money(closing)}</span>
       </div>
-      <p class="text-[12px] text-slate-500 tabular-nums pl-6">
-        <b>A</b> ${money(carry)} ＋ <b>D</b> ${money(net)} ＝ <b>E</b> ${money(closing)}
-      </p>
+      <p class="text-[12px] text-slate-500 pl-6"><b>A</b> ＋ <b>D</b> ＝ <b>E</b></p>
       <p class="text-[12px] text-slate-400 -mt-1 pl-6">E 就是下個月的上期結餘（A）。</p>
       ${owed.total ? `
         <div class="mt-2 rounded-lg bg-indigo-50 border border-indigo-200 p-2.5 space-y-1">
