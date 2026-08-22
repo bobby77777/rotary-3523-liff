@@ -592,7 +592,8 @@
 
   function renderBalance() {
     const e = board.expense, t = board.totals;
-    // A ＋ B ＝ C：三個結餘欄位掛上代號，最底下那行算式才有東西可以指。
+    // 每個結果都要看得出來是哪兩個數字算出來的：B − C ＝ D、A ＋ D ＝ E。
+    // 只標結餘不標收入與支出的話，「本月結餘」還是憑空冒出來的一個數字。
     const tag = ch => `<span class="inline-flex items-center justify-center w-[18px] h-[18px] mr-1
       rounded-full bg-slate-800 text-white text-[11px] font-black leading-none align-[1px]">${ch}</span>`;
     const line = (label, amt, cls = 'text-slate-600', bold = false, mark = '') => `
@@ -618,25 +619,30 @@
         </span>
         <span class="font-bold tabular-nums ${carry < 0 ? 'text-rose-600' : ''}">${money(carry)}</span>
       </div>
-      <p class="text-[12px] text-slate-400 -mt-1">${esc(carryNote)}</p>
+      <p class="text-[12px] text-slate-400 -mt-1 pl-6">${esc(carryNote)}</p>
       <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
-      ${line('社費收入（已繳）', t.confirmed, 'text-emerald-700', true)}
+      ${line('社費收入（已繳）', t.confirmed, 'text-emerald-700', true, 'B')}
       <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
-      ${line('場地租金', e.rent)}
-      ${line('人事薪資', e.salary)}
-      ${e.fixed.map(f => line(f.name || '固定支出', f.amount)).join('')}
-      ${e.advances.length ? line(`社友代墊款（${e.advances.length} 筆）`, e.advance_total, 'text-amber-700') : ''}
-      ${line('支出小計', e.total, 'text-rose-600', true)}
-      ${line('本月結餘', net, net >= 0 ? 'text-slate-700' : 'text-rose-600', true, 'B')}
+      ${line('場地租金', e.rent, 'text-slate-600 pl-6')}
+      ${line('人事薪資', e.salary, 'text-slate-600 pl-6')}
+      ${e.fixed.map(f => line(f.name || '固定支出', f.amount, 'text-slate-600 pl-6')).join('')}
+      ${e.advances.length ? line(`社友代墊款（${e.advances.length} 筆）`, e.advance_total, 'text-amber-700 pl-6') : ''}
+      ${line('支出小計', e.total, 'text-rose-600', true, 'C')}
+      <p class="text-[12px] text-slate-400 -mt-1 pl-6">上列支出加總</p>
+      <div class="border-t border-dashed border-slate-200 pt-2 mt-2"></div>
+      ${line('本月結餘', net, net >= 0 ? 'text-slate-700' : 'text-rose-600', true, 'D')}
+      <p class="text-[12px] text-slate-500 tabular-nums -mt-1 pl-6">
+        <b>B</b> ${money(t.confirmed)} － <b>C</b> ${money(e.total)} ＝ <b>D</b> ${money(net)}
+      </p>
       <div class="border-t-2 border-slate-800 pt-2 mt-2"></div>
       <div class="flex justify-between items-center">
-        <span class="font-black">${tag('C')}期末結餘</span>
+        <span class="font-black">${tag('E')}期末結餘</span>
         <span class="font-black text-xl tabular-nums ${closing >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${money(closing)}</span>
       </div>
-      <p class="text-[12px] text-slate-500 tabular-nums">
-        <b>A</b> ${money(carry)} ＋ <b>B</b> ${money(net)} ＝ <b>C</b> ${money(closing)}
+      <p class="text-[12px] text-slate-500 tabular-nums pl-6">
+        <b>A</b> ${money(carry)} ＋ <b>D</b> ${money(net)} ＝ <b>E</b> ${money(closing)}
       </p>
-      <p class="text-[12px] text-slate-400 -mt-1">C 就是下個月的上期結餘（A）。</p>
+      <p class="text-[12px] text-slate-400 -mt-1 pl-6">E 就是下個月的上期結餘（A）。</p>
       ${e.total === 0 ? `<p class="text-[13px] text-slate-400 pt-1">本月尚未填社務對帳表（支出以 0 計）。按右上角「編輯支出」填寫。</p>` : ''}
       ${t.reported > 0 ? `<p class="text-[13px] text-amber-600 pt-1">另有 ${money(t.reported)} 已回報但未對帳，尚未計入收入與結餘。</p>` : ''}`;
   }
