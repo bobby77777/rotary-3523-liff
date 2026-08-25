@@ -84,14 +84,27 @@
                 <span id="user-avatar-fallback" class="text-white/70"><i class="fa-solid fa-user"></i></span>
             </button>
         </div>
-        <!-- 視角切換：分段控制，看得出目前在哪一邊 -->
+        <!-- 視角切換：分段控制，看得出目前在哪一邊。
+             跨地區管理員（總部）多一個下拉：右邊那塊蓋著一個透明的原生 select，
+             點它挑別的地區／別的社，點段落其他地方仍然只是換視角。一般社友沒有
+             那個選單 —— 後端也只認他自己的地區與社，給他選單只會讓人以為選得動。 -->
         <div id="scope-switch" class="px-4 pb-3 flex gap-1.5">
-            <button onclick="setScope('district')" data-scope="district" class="scope-seg flex-1 min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
-                <i class="fa-solid fa-globe mr-1"></i><span id="ui-district-label">地區</span>
-            </button>
-            <button onclick="setScope('club')" data-scope="club" class="scope-seg flex-1 min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
-                <i class="fa-solid fa-house-flag mr-1"></i><span id="ui-current-scope">本社</span>
-            </button>
+            <div class="relative flex-1">
+                <button onclick="setScope('district')" data-scope="district" class="scope-seg w-full min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
+                    <i class="fa-solid fa-globe mr-1"></i><span id="ui-district-label">地區</span>
+                    <i class="fa-solid fa-chevron-down ml-1 text-[10px] opacity-70 scope-pick hidden"></i>
+                </button>
+                <select id="scope-pick-district" aria-label="選擇地區" onchange="pickScopeTarget('district', this.value)"
+                    class="scope-pick hidden absolute inset-y-0 right-0 w-11 opacity-0"></select>
+            </div>
+            <div class="relative flex-1">
+                <button onclick="setScope('club')" data-scope="club" class="scope-seg w-full min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
+                    <i class="fa-solid fa-house-flag mr-1"></i><span id="ui-current-scope">本社</span>
+                    <i class="fa-solid fa-chevron-down ml-1 text-[10px] opacity-70 scope-pick hidden"></i>
+                </button>
+                <select id="scope-pick-club" aria-label="選擇社" onchange="pickScopeTarget('club', this.value)"
+                    class="scope-pick hidden absolute inset-y-0 right-0 w-11 opacity-0"></select>
+            </div>
         </div>
     </header>
 
@@ -1233,6 +1246,11 @@ let myClubName = '';          // set from backend /me
 let duesRates = { base: 0, district: 0 };
 let activeTab = 'home';
 let systemScope = 'district'; // 'district' | 'club'
+// 跨地區管理員（總部）才有的「看哪一區／哪一個社」。空字串＝後端的預設：地區視角
+// 是全部地區一起看，社視角是自己的社。一般社友這兩個永遠是空的，後端也只認他自己的。
+let isSuperAdmin = false;     // /me.all_districts
+let viewDistrict = '';
+let viewClub = '';
 let currentActiveEvent = null;
 let needsProfile = false;     // 基本資料還沒填完（後端 /me 說的），一開 App 就請本人補
 let isGolfCheckedIn = false;
@@ -1268,6 +1286,11 @@ async function initLiff() {
                 userRole = me.is_admin ? (me.role && me.role !== 'member' ? me.role : 'chairperson') : 'member';
                 setRole(userRole !== 'member' ? 'chairperson' : 'member');
                 needsProfile = !!me.needs_profile;
+                isSuperAdmin = !!me.all_districts;
+                // 總部預設看自己那一區：不指定地區的話後端會把每一區的活動混在
+                // 一起送來（見 /events），而首頁是拿來報名的，混著別區的場次只會
+                // 報錯。要看全部仍然選得到，就在切換鈕的選單第一個。
+                if (isSuperAdmin) viewDistrict = districtInfo.code || '';
             }
         } catch (e) {
             console.warn('role fetch failed:', e.message);
@@ -1276,6 +1299,7 @@ async function initLiff() {
         await Promise.all([
             loadEvents(systemScope),     // fetch events for the active scope
             loadMyRegistrations(),       // 報名紀錄要從後端還原，不能只靠本次操作
+            loadScopeChoices(),          // 總部的地區／社選單；其餘人是 no-op
         ]);
         hideLiffLoadingScreen();
         initApp();
@@ -1358,6 +1382,7 @@ function renderDistrictList() {
                   : `<p class="text-[11px] text-slate-400 italic px-1">還沒有社屬於這個地區。</p>`}
             </div>
         </div>`).join('');
+    buildScopePickers();   // 這裡剛改過的地區與社，切換鈕的選單要跟著更新
 }
 
 function editDistrict(code) {
@@ -1522,11 +1547,84 @@ function initApp() {
 // ============================================================
 //  SCOPE TOGGLE
 // ============================================================
+// 跨地區管理員（總部）的地區／社選單。一般社友這一段整段不會執行 ——
+// /admin/districts 也只給 admin 看，那是別的地區有哪些社的清單。
+async function loadScopeChoices() {
+    if (!isSuperAdmin) return;
+    try {
+        if (!districtData) districtData = await apiFetch('/admin/districts');
+    } catch (e) {
+        console.warn('地區清單載入失敗:', e.message);   // 載不到就維持原本兩顆切換鈕
+        return;
+    }
+    buildScopePickers();
+}
+
+function buildScopePickers() {
+    const dSel = document.getElementById('scope-pick-district');
+    const cSel = document.getElementById('scope-pick-club');
+    const list = (districtData && districtData.districts) || [];
+    if (!isSuperAdmin || !dSel || !cSel || !list.length) return;
+    // 地區視角不指定地區＝全部地區一起看（後端 /events 對總部就是這個意思）
+    dSel.innerHTML = `<option value="">🌐 全部地區</option>` + list.map(d =>
+        `<option value="${_escHtml(d.code)}">🌐 ${_escHtml(d.short_name || d.name || d.code)}</option>`).join('');
+    cSel.innerHTML = `<option value="">🏠 ${_escHtml(myClubName || '本社')}（本社）</option>` + list.map(d =>
+        `<optgroup label="${_escHtml(d.short_name || d.code)}">` + (d.clubs || []).map(c =>
+            `<option value="${_escHtml(c.name)}">🏠 ${_escHtml(c.name)}</option>`).join('') + `</optgroup>`).join('');
+    dSel.value = viewDistrict;
+    cSel.value = viewClub;
+    document.querySelectorAll('.scope-pick').forEach(el => el.classList.remove('hidden'));
+    renderHeader();
+}
+
+// 目前在看哪一個地區／哪一個社。跨地區管理員看的可能不是自己那一個。
+function viewDistrictInfo() {
+    const list = (districtData && districtData.districts) || [];
+    const d = viewDistrict ? list.find(x => x.code === viewDistrict) : null;
+    if (d) return { name: d.name || `國際扶輪 ${d.code} 地區`, short: d.short_name || `${d.code} 地區` };
+    if (isSuperAdmin && list.length > 1) return { name: '全部地區', short: '全部地區' };
+    return { name: districtInfo.name, short: districtInfo.short_name || '地區' };
+}
+
+function viewClubName() { return viewClub || myClubName || '本社'; }
+
+// /events 的視角參數。後端只認總部帶來的地區／社，其餘人帶什麼都以自己的為準。
+function scopeQuery(scope) {
+    const target = scope === 'club' ? viewClub : viewDistrict;
+    if (!target) return '';
+    return '&' + (scope === 'club' ? 'club=' : 'district=') + encodeURIComponent(target);
+}
+
+// 切視角／換對象的流水號：舊的那一次回來時畫面已經是別人的，不能拿去蓋。
+let scopeRequest = 0;
+
+// 選了別的地區或別的社。兩個視角的快取都是「上一個對象」的活動，一起丟掉。
+async function pickScopeTarget(scope, value) {
+    if (scope !== 'district' && scope !== 'club') return;
+    const before = scope === 'club' ? viewClub : viewDistrict;
+    // 挑的還是同一個對象（只是想換視角）：走原本那條路，快取還能用，不必空一下畫面
+    if (value === before) { await setScope(scope); return; }
+    if (scope === 'club') viewClub = value; else viewDistrict = value;
+    eventsCache = { district: null, club: null };
+    systemScope = scope;
+    const token = ++scopeRequest;
+    renderHeader();
+    const pending = loadEvents(scope);       // eventsLoading 在此同步設定
+    currentActiveEvent = findClosestUpcomingEvent();
+    renderActivePages();                     // 先讓頁面顯示載入中
+    await pending;
+    if (token !== scopeRequest) return;
+    currentActiveEvent = findClosestUpcomingEvent();
+    renderActivePages();
+    showToast(`已切換至：${scope === 'district' ? viewDistrictInfo().short : viewClubName()}`);
+}
+
 // 分段控制直接指定視角；toggleSystemScope 保留給既有呼叫點（切換鈕以外的地方）。
 async function setScope(scope) {
     if (scope !== 'district' && scope !== 'club') return;
     if (scope === systemScope) return;
     systemScope = scope;
+    const token = ++scopeRequest;
 
     // 先把畫面切過去再談網路：頁首、分頁標籤與（快取裡的）活動立刻換掉，
     // 點下去就有反應。以前是先 await /events，整個 UI 會卡在舊視角不動。
@@ -1534,14 +1632,14 @@ async function setScope(scope) {
     renderHeader();
     currentActiveEvent = findClosestUpcomingEvent();
     renderActivePages();
-    showToast(`已切換至：${scope === 'district' ? '地區總部' : (myClubName || '本社') + '專區'}`);
+    showToast(`已切換至：${scope === 'district' ? viewDistrictInfo().short : viewClubName() + '專區'}`);
 
     // 有快取 → 背景更新，內容真的變了才重畫（重畫會把捲動位置歸零）
     // 沒快取 → 得等後端，但先讓頁面顯示「載入中」而不是「目前沒有活動」
     const pending = loadEvents(scope, { background: cached });   // eventsLoading 在此同步設定
     if (!cached) renderActivePages();
     const changed = await pending;
-    if (systemScope !== scope) return;           // 使用者又切回去了，別蓋掉新畫面
+    if (token !== scopeRequest) return;          // 使用者又切走了，別蓋掉新畫面
     if (changed || !cached) {
         currentActiveEvent = findClosestUpcomingEvent();
         renderActivePages();
@@ -1554,21 +1652,24 @@ async function toggleSystemScope() {
 
 // 頁首與分段控制：載入時與切換視角時都要一致
 function renderHeader() {
-    const clubLabel = myClubName || '本社';
+    const clubLabel = viewClubName();
+    const dInfo = viewDistrictInfo();
     updateAdminTabLabel();
     document.getElementById('ui-current-scope').textContent = clubLabel;
-    // 切換鈕上寫的是自己那一個地區，不是泛稱的「地區」
+    // 切換鈕上寫的是正在看的那一個地區，不是泛稱的「地區」
     const dLabel = document.getElementById('ui-district-label');
-    if (dLabel) dLabel.textContent = districtInfo.short_name || '地區';
+    if (dLabel) dLabel.textContent = dInfo.short;
     document.querySelectorAll('#scope-switch .scope-seg').forEach(seg => {
         seg.classList.toggle('scope-active', seg.dataset.scope === systemScope);
     });
     if (systemScope === 'district') {
-        document.getElementById('header-title').innerHTML = _escHtml(districtInfo.name) + ' <i class="fa-solid fa-circle-check text-yellow-400 text-xs"></i>';
+        document.getElementById('header-title').innerHTML = _escHtml(dInfo.name) + ' <i class="fa-solid fa-circle-check text-yellow-400 text-xs"></i>';
         document.getElementById('header-subtitle').textContent = '全年度活動系統';
     } else {
         document.getElementById('header-title').innerHTML = `${_escHtml(clubLabel)} <i class="fa-solid fa-star text-yellow-400 text-xs"></i>`;
-        document.getElementById('header-subtitle').textContent = '社內專區 · 資料獨立';
+        // 看的是別人的社時要講清楚：這裡列的活動不是本社的，底下的名冊、帳單卻是。
+        document.getElementById('header-subtitle').textContent =
+            (viewClub && viewClub !== myClubName) ? '他社活動 · 檢視中' : '社內專區 · 資料獨立';
     }
 }
 
@@ -1607,7 +1708,7 @@ async function loadEvents(scope, { background = false } = {}) {
     if (!background) eventsLoading = true;
     try {
         const before = JSON.stringify(eventsCache[scope] || null);
-        const data = await apiFetch('/events?scope=' + scope);
+        const data = await apiFetch('/events?scope=' + scope + scopeQuery(scope));
         if (data.status === 'ok' && Array.isArray(data.events)) {
             eventsCache[scope] = data.events.map(e => ({ ...e, displayDate: e.displayDate || e.date }));
             return JSON.stringify(eventsCache[scope]) !== before;
