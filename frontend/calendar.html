@@ -125,7 +125,7 @@
       <div id="ai-agent-section" class="p-5 bg-blue-50 border-t border-blue-100">
         <h2 class="font-semibold text-blue-900 mb-3 flex items-center gap-2"><i data-lucide="bot" class="w-5 h-5 text-blue-600"></i> 議程快速工具</h2>
         <div class="space-y-2">
-          <button onclick="runAiCommand('template')" class="w-full bg-white hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 py-2 px-3 rounded text-sm transition-colors text-left flex items-center gap-2"><i data-lucide="play" class="w-3 h-3"></i> 匯入標準例會範本</button>
+          <button id="btn-template" onclick="runAiCommand('template')" class="w-full bg-white hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 py-2 px-3 rounded text-sm transition-colors text-left flex items-center gap-2"><i data-lucide="play" class="w-3 h-3"></i> 匯入標準例會範本</button>
           <button onclick="runAiCommand('addBreak')" class="w-full bg-white hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 py-2 px-3 rounded text-sm transition-colors text-left flex items-center gap-2"><i data-lucide="play" class="w-3 h-3"></i> 加入 10 分鐘中場休息</button>
         </div>
       </div>
@@ -474,6 +474,7 @@
       });
 
       populateAgendaSidebar(); updateTimesAndData(); renderAgenda(); renderGolfPlans();
+      updateTemplateButton();
       hideEmptyFields(editable);
       tidyAgendaChrome();
     }
@@ -618,7 +619,10 @@
           else if (key === 'startTime') { activeEvent.start_time = e.target.value; updateTimesAndData(); }
           else activeEvent[key] = e.target.value;   // date / location / mc
           renderAgendaHeaderInfo();
-          if (key === 'title') renderGolfPlans();   // 改標題可能讓這場變成／不再是高球賽事
+          if (key === 'title') {
+            renderGolfPlans();        // 改標題可能讓這場變成／不再是高球賽事
+            updateTemplateButton();   // 也可能讓它對上／對不上去年那一場
+          }
         });
       });
 
@@ -806,10 +810,78 @@
       updateTimesAndData(); renderAgenda();
     }
 
+    // ==================== 年度活動：去年那一場 ====================
+    // 「2025-26年度總監與社長聯合就職典禮」這種一年辦一次的活動，標準例會範本
+    // （報到、扶輪禮儀、專題演講…）套上去是錯的：要抄的是去年同一場的議程。
+    // 把標題裡的年度標記抽掉之後兩個標題一樣，就當作同一場活動的不同年度。
+    // 認得的寫法：2025-26年度、2025-2026年度、2025年度／2025年、114年度、第31屆。
+    const EDITION_SRC = '(\\d{4})\\s*[-–—~～至]\\s*\\d{2,4}\\s*年度|(\\d{4})\\s*年度?|第\\s*(\\d{1,3})\\s*屆|(\\d{2,3})\\s*年度';
+
+    // 比對用的標題：年度標記換成 #，空白拿掉，【公文】這類前綴也拿掉 ——
+    // 同一場活動有的年度是公文同步進來的（標題帶前綴），有的是手動建的。
+    function annualKey(title) {
+      return String(title || '').replace(/【[^】]*】/g, '')
+        .replace(new RegExp(EDITION_SRC, 'g'), '#').replace(/\s+/g, '');
+    }
+
+    // 這個標題是第幾屆／哪一年度。kind 要一起比：光比數字的話「114年度」會被
+    // 當成早於「2025年度」，抄到不相干的活動。
+    function annualEdition(title) {
+      const m = new RegExp(EDITION_SRC).exec(String(title || ''));
+      if (!m) return null;
+      if (m[1]) return { kind: 'year', value: parseInt(m[1]), text: m[0].trim() };
+      if (m[2]) return { kind: 'year', value: parseInt(m[2]), text: m[0].trim() };
+      if (m[3]) return { kind: 'term', value: parseInt(m[3]), text: m[0].trim() };
+      return { kind: 'year', value: parseInt(m[4]) + 1911, text: m[0].trim() };  // 民國
+    }
+
+    // 同一場活動、年度比這場早、而且真的有議程可抄的那一場；有好幾年就取最近的一年。
+    function lastYearEvent(ev) {
+      const cur = annualEdition(ev && ev.title);
+      if (!cur) return null;
+      const key = annualKey(ev.title);
+      let best = null, bestEd = null;
+      events.forEach(e => {
+        if (!e || e.id === ev.id) return;
+        if (!Array.isArray(e.agenda) || e.agenda.length === 0) return;
+        // 「全部地區總表」看得到別區的活動，各區同名的年會、就職典禮議程並不一樣
+        if (e.district && ev.district && e.district !== ev.district) return;
+        if (annualKey(e.title) !== key) return;
+        const ed = annualEdition(e.title);
+        if (!ed || ed.kind !== cur.kind || ed.value >= cur.value) return;
+        if (!bestEd || ed.value > bestEd.value) { best = e; bestEd = ed; }
+      });
+      return best;
+    }
+
+    // 有去年可抄時這顆按鈕做的事就不是「標準例會範本」了，名字要跟著換 ——
+    // 不然按下去跑出來的是一份跟按鈕上寫的完全不同的議程。
+    function updateTemplateButton() {
+      const btn = document.getElementById('btn-template');
+      if (!btn) return;
+      const src = activeEvent ? lastYearEvent(activeEvent) : null;
+      const ed = src ? annualEdition(src.title) : null;
+      const label = src ? `匯入${(ed && ed.text) || '去年'}議程` : '匯入標準例會範本';
+      btn.innerHTML = `<i data-lucide="play" class="w-3 h-3"></i> ${escapeHtml(label)}`;
+      btn.title = src ? `${src.title}（${src.date || '日期未定'}）` : '';
+      lucide.createIcons();
+    }
+
     function runAiCommand(cmd) {
       if (!activeEvent || !canEdit()) return;
       if (cmd === 'template') {
-        activeEvent.agenda = [
+        const src = lastYearEvent(activeEvent);
+        if (src && activeEvent.agenda.length
+            && !confirm(`要用「${src.title}」的議程覆蓋目前這份議程嗎？`)) return;
+        // 項目、分鐘、負責人照抄；簡報連結不抄——那份 PDF 是去年講者的，
+        // 帶過來只會讓人以為今年的簡報已經綁好了。
+        activeEvent.agenda = src ? src.agenda.map((it, i) => ({
+          id: Date.now() + i + 1,
+          duration: it.duration || 0,
+          content: it.content || '',
+          speaker: it.speaker || '',
+          pdf: null,
+        })) : [
           { id: Date.now() + 1, duration: 30, content: '報到、聯誼', speaker: '糾察/聯誼', pdf: null },
           { id: Date.now() + 2, duration: 10, content: '扶輪禮儀（唱國歌、四大考驗）', speaker: '司儀', pdf: null },
           { id: Date.now() + 3, duration: 5, content: '社長致詞', speaker: '社長', pdf: null },
@@ -821,6 +893,7 @@
         activeEvent.agenda.push({ id: Date.now(), duration: 10, content: '中場休息', speaker: '', pdf: null });
       }
       updateTimesAndData(); renderAgenda();
+      tidyAgendaChrome();   // 空議程變成有議程：「預計結束時間」那一塊要跟著出現
     }
 
     // ==================== LINE 預覽 + 議程 PDF ====================
