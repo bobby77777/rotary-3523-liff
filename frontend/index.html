@@ -85,25 +85,26 @@
             </button>
         </div>
         <!-- 視角切換：分段控制，看得出目前在哪一邊。
-             跨地區管理員（總部）多一個下拉：右邊那塊蓋著一個透明的原生 select，
-             點它挑別的地區／別的社，點段落其他地方仍然只是換視角。一般社友沒有
-             那個選單 —— 後端也只認他自己的地區與社，給他選單只會讓人以為選得動。 -->
+             跨地區管理員（總部）多一個下拉：亮著的那一段整塊蓋著一個透明的原生
+             select，點它挑別的地區／別的社；暗的那一段照舊，點下去只是換視角
+             （見 renderHeader 的 pointer-events）。一般社友兩段都沒有選單 ——
+             後端也只認他自己的地區與社，給他選單只會讓人以為選得動。 -->
         <div id="scope-switch" class="px-4 pb-3 flex gap-1.5">
             <div class="relative flex-1">
                 <button onclick="setScope('district')" data-scope="district" class="scope-seg w-full min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
                     <i class="fa-solid fa-globe mr-1"></i><span id="ui-district-label">地區</span>
-                    <i class="fa-solid fa-chevron-down ml-1 text-[10px] opacity-70 scope-pick hidden"></i>
+                    <i class="fa-solid fa-chevron-down ml-1 text-[10px] opacity-70 scope-caret hidden"></i>
                 </button>
                 <select id="scope-pick-district" aria-label="選擇地區" onchange="pickScopeTarget('district', this.value)"
-                    class="scope-pick hidden absolute inset-y-0 right-0 w-11 opacity-0"></select>
+                    class="scope-pick hidden absolute inset-0 w-full opacity-0"></select>
             </div>
             <div class="relative flex-1">
                 <button onclick="setScope('club')" data-scope="club" class="scope-seg w-full min-h-[38px] rounded-lg text-[13px] font-bold transition-colors">
                     <i class="fa-solid fa-house-flag mr-1"></i><span id="ui-current-scope">本社</span>
-                    <i class="fa-solid fa-chevron-down ml-1 text-[10px] opacity-70 scope-pick hidden"></i>
+                    <i class="fa-solid fa-chevron-down ml-1 text-[10px] opacity-70 scope-caret hidden"></i>
                 </button>
                 <select id="scope-pick-club" aria-label="選擇社" onchange="pickScopeTarget('club', this.value)"
-                    class="scope-pick hidden absolute inset-y-0 right-0 w-11 opacity-0"></select>
+                    class="scope-pick hidden absolute inset-0 w-full opacity-0"></select>
             </div>
         </div>
     </header>
@@ -1547,6 +1548,8 @@ function initApp() {
 // ============================================================
 //  SCOPE TOGGLE
 // ============================================================
+let scopePickersReady = false;   // 選單真的建好了沒（一般社友永遠是 false）
+
 // 跨地區管理員（總部）的地區／社選單。一般社友這一段整段不會執行 ——
 // /admin/districts 也只給 admin 看，那是別的地區有哪些社的清單。
 async function loadScopeChoices() {
@@ -1573,8 +1576,8 @@ function buildScopePickers() {
             `<option value="${_escHtml(c.name)}">🏠 ${_escHtml(c.name)}</option>`).join('') + `</optgroup>`).join('');
     dSel.value = viewDistrict;
     cSel.value = viewClub;
-    document.querySelectorAll('.scope-pick').forEach(el => el.classList.remove('hidden'));
-    renderHeader();
+    scopePickersReady = true;
+    renderHeader();          // 選單蓋在哪一段、箭頭出現在哪一段，由這裡決定
 }
 
 // 目前在看哪一個地區／哪一個社。跨地區管理員看的可能不是自己那一個。
@@ -1660,7 +1663,17 @@ function renderHeader() {
     const dLabel = document.getElementById('ui-district-label');
     if (dLabel) dLabel.textContent = dInfo.short;
     document.querySelectorAll('#scope-switch .scope-seg').forEach(seg => {
-        seg.classList.toggle('scope-active', seg.dataset.scope === systemScope);
+        const active = seg.dataset.scope === systemScope;
+        seg.classList.toggle('scope-active', active);
+        // 選單只蓋在亮著的那一段：點它＝挑別的地區／別的社，點暗的那一段＝換視角。
+        // 兩件事擠在同一塊的話，光是想換個視角也得先開一次選單再挑一次。
+        const caret = seg.querySelector('.scope-caret');
+        const pick = seg.parentElement && seg.parentElement.querySelector('select.scope-pick');
+        if (caret) caret.classList.toggle('hidden', !(scopePickersReady && active));
+        if (pick) {
+            pick.classList.toggle('hidden', !scopePickersReady);
+            pick.classList.toggle('pointer-events-none', !active);
+        }
     });
     if (systemScope === 'district') {
         document.getElementById('header-title').innerHTML = _escHtml(dInfo.name) + ' <i class="fa-solid fa-circle-check text-yellow-400 text-xs"></i>';
