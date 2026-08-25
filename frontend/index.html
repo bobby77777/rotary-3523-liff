@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>國際扶輪 3523 地區</title>
+    <!-- LINE 內建瀏覽器的標題列吃這個。開啟者屬於哪一個地區要等 /me 才知道
+         （之後由 applyDistrict 換成「國際扶輪 XXXX 地區 · 活動系統」），在那之前
+         不能寫死某一區 —— 3481 的社友會先看到 3523，而標題列有可能就停在那裡。 -->
+    <title>扶輪活動系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
@@ -1179,7 +1182,9 @@ function applyDistrict(d) {
         contact_email: d.contact_email || '',
     };
     if (d.website) DISTRICT_WEBSITE = d.website;
-    document.title = districtInfo.name;
+    // 標題列固定寫開啟者本人的地區，不跟著視角換：總部切去看別的社時標題會跟著跳，
+    // 而 LINE 的標題列不見得每次都更新，跳一半停在那裡比不動更難懂。
+    document.title = `${districtInfo.name} · 活動系統`;
     const brand = document.getElementById('brand-district');
     if (brand) brand.textContent = districtInfo.name;
     const badge = document.getElementById('district-badge');
