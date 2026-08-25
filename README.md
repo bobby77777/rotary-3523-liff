@@ -28,6 +28,7 @@ rotary-3523-liff/
 │   ├── ingest.py             # Google Drive → Supabase RAG ingestion (standalone)
 │   ├── reauth_drive.py       # Re-mint Google OAuth token when it expires
 │   └── run.py                # Entry point: uvicorn app.main:app
+├── db.md                     # Every table: what it holds, who writes it, the traps
 ├── requirements.txt          # Python deps for the backend
 └── .github/workflows/pages.yml  # Publishes frontend/ to GitHub Pages
 ```
@@ -165,7 +166,9 @@ Google Drive auth — either:
 
 Tables are created / migrated automatically on startup (`ensure_*` in `db.py`,
 called from the app's `lifespan`) — adding a feature means adding an `ensure_*`
-there, not a manual migration. The RAG tables (`documents`, `document_rows`,
+there, not a manual migration. **[`db.md`](db.md) documents every table**: what
+it holds, who writes it, and the conventions (month keys, the `event_id` marker
+inside `club_dues.customs`, `confirmed` vs `is_paid`, …). The RAG tables (`documents`, `document_rows`,
 `document_metadata`, `personal_information`) still need the SQL from the
 Supabase editor — see the git history for the DDL.
 
