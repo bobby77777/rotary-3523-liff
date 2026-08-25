@@ -817,11 +817,22 @@
     // 認得的寫法：2025-26年度、2025-2026年度、2025年度／2025年、114年度、第31屆。
     const EDITION_SRC = '(\\d{4})\\s*[-–—~～至]\\s*\\d{2,4}\\s*年度|(\\d{4})\\s*年度?|第\\s*(\\d{1,3})\\s*屆|(\\d{2,3})\\s*年度';
 
-    // 比對用的標題：年度標記換成 #，空白拿掉，【公文】這類前綴也拿掉 ——
-    // 同一場活動有的年度是公文同步進來的（標題帶前綴），有的是手動建的。
+    // 比對用的標題：年度標記換成 #，括號與空白拿掉。整組【公文】不能直接刪掉 ——
+    // 標題是人打的，「公文】函請各社…」這種漏掉前括號的寫法照樣存得進去，那時一邊
+    // 的標籤被刪、另一邊留著「公文」，同一場活動就對不上了。
     function annualKey(title) {
-      return String(title || '').replace(/【[^】]*】/g, '')
-        .replace(new RegExp(EDITION_SRC, 'g'), '#').replace(/\s+/g, '');
+      return String(title || '').replace(new RegExp(EDITION_SRC, 'g'), '#')
+        .replace(/[【】〔〕[\]（）()「」『』\s]/g, '');
+    }
+
+    // 兩個標題是不是同一場活動的不同年度。前面掛的標籤（【公文】、【轉知】、
+    // 【測試】）不是每年都一樣，所以一邊是另一邊的結尾也算 —— 年度標記換成的 #
+    // 在中間，剩下的字要一路對到尾，不會把「#年度年會」跟「#第二次年度年會」湊成一對。
+    function sameAnnualTitle(a, b) {
+      if (!a || !b) return false;
+      if (a === b) return true;
+      const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+      return short.length >= 6 && long.endsWith(short);
     }
 
     // 這個標題是第幾屆／哪一年度。kind 要一起比：光比數字的話「114年度」會被
@@ -846,7 +857,7 @@
         if (!Array.isArray(e.agenda) || e.agenda.length === 0) return;
         // 「全部地區總表」看得到別區的活動，各區同名的年會、就職典禮議程並不一樣
         if (e.district && ev.district && e.district !== ev.district) return;
-        if (annualKey(e.title) !== key) return;
+        if (!sameAnnualTitle(annualKey(e.title), key)) return;
         const ed = annualEdition(e.title);
         if (!ed || ed.kind !== cur.kind || ed.value >= cur.value) return;
         if (!bestEd || ed.value > bestEd.value) { best = e; bestEd = ed; }
