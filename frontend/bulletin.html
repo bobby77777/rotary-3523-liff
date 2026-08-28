@@ -452,6 +452,11 @@
             <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5z"/></svg> 例會資料
         </div>
 
+        <!-- 帶入上一次例會的社刊當底稿。只有真的找得到上一份時才出現（見 initPrevBulletin）。 -->
+        <div class="tool-tab hidden-tab" id="tab-prev" onclick="importPrevBulletin()">
+            <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l4 4 4-4H6a7 7 0 1 1 7 7v2a9 9 0 0 0 0-18zm-1 5v5l4 2 .8-1.3-3.3-1.9V8H12z"/></svg> 帶入上次例會
+        </div>
+
         <!-- 縮放：預設「適合頁面」，想看細節就按 ＋（超過視窗高度時中央編輯區會捲動）。 -->
         <div class="zoom-group" id="zoom-group">
             <button class="zoom-btn" onclick="zoomCanvas(-0.1)" title="縮小">－</button>
@@ -1901,6 +1906,39 @@
             }
         }
 
+        // 上一次例會的社刊：每一期的骨架幾乎一樣，只有講題、講者跟相片會換，
+        // 沒有底稿就等於每週把同樣的東西重打一次。抓到了才把按鈕放出來 ——
+        // 按下去才發現「沒有上一份」的按鈕不如不要有。
+        let prevBulletin = null;
+        async function initPrevBulletin() {
+            if (FORCE_VIEW || !EVENT_ID) return;
+            try {
+                const res = await fetch(API_BASE + '/bulletin/previous?event=' + encodeURIComponent(EVENT_ID), {
+                    headers: { 'ngrok-skip-browser-warning': '1', 'X-Line-UserId': EDITOR_UID },
+                });
+                if (!res.ok) return;
+                const d = await res.json();
+                if (d.status !== 'ok' || !d.data) return;
+                prevBulletin = d;
+                const tab = document.getElementById('tab-prev');
+                tab.classList.remove('hidden-tab');
+                tab.title = `帶入「${d.title || '上一次例會'}」${d.date ? '（' + d.date + '）' : ''}的社刊當底稿`;
+            } catch (e) {
+                console.warn('查不到上一次例會的社刊', e);
+            }
+        }
+
+        async function importPrevBulletin() {
+            if (!prevBulletin) return;
+            if (!confirm(`把「${prevBulletin.title || '上一次例會'}」${prevBulletin.date ? '（' + prevBulletin.date + '）' : ''}的社刊帶進來當底稿？\n\n`
+                + '目前編輯中的內容會被覆蓋。期數與日期會自動換成這一場例會的，\n'
+                + '講題、講者與相片記得改成本週的。')) return;
+            loadIntoEditor(prevBulletin.data);
+            // 抬頭一定要在載入之後再帶一次：上一期的期數與日期就存在那份 HTML 裡
+            await applyBulletinHeader();
+            showToast('📄 已帶入上一次例會的社刊，記得更新本週的講題與相片。');
+        }
+
         // 社員唯讀模式：載入主委發布的最新社刊內容。失敗時 loadedPages 維持 null，退回預設範本。
         async function loadBulletinContent() {
             try {
@@ -1991,6 +2029,7 @@
                 // 抬頭在載入舊社刊「之後」才帶入：存檔的抬頭會被這場例會的實際資料蓋掉
                 // （活動資料是唯一來源，見 writeHeaderFields），順便填好「例會資料」面板。
                 await applyBulletinHeader();
+                initPrevBulletin();   // 上一次例會的底稿；抓到才放按鈕出來，不擋開啟
             }
         })();
     </script>

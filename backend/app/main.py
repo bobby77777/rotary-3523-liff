@@ -3547,6 +3547,31 @@ async def get_bulletin_content(request: Request, event: int | None = None, club:
     return Response(content=raw, media_type="application/json")
 
 
+@app.get("/bulletin/previous")
+async def bulletin_previous(request: Request, event: int | None = None):
+    """上一次例會的社刊，給主委當這一期的底稿。
+
+    每一期的骨架幾乎一樣（固定欄目、幹部名單、贊助頁），只有講題、講者與相片會換。
+    以前沒發過社刊的例會只能從空白範本重做一次，那是每週都要重打一遍同樣的東西。
+
+    只回內容本身，不回抬頭 —— 期數與日期是這一場例會的事實，載入之後由
+    applyBulletinHeader 用活動資料蓋掉（見 writeHeaderFields）。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not event:
+        return {"status": "none", "message": "缺少活動 id"}
+    ev = _lookup_event(uid, int(event))
+    if not ev:
+        return {"status": "none", "message": "找不到這場活動"}
+    club = ev.get("club_name") or (db.get_user_club(uid) if uid else "")
+    prev = db.get_prev_bulletin(club, int(event)) if club else None
+    if not prev:
+        return {"status": "none", "message": "這個社還沒有更早的社刊可以帶入"}
+    return {"status": "ok", "event_id": prev["event_id"],
+            "title": prev.get("title") or "",
+            "date": prev["date"].isoformat() if prev.get("date") else "",
+            "data": json.loads(prev["data"])}
+
+
 @app.post("/payment/report")
 async def payment_report(request: Request):
     """Self-register and/or report transfer digits. Stores into registrations.bank_digits."""

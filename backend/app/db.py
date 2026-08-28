@@ -863,6 +863,31 @@ def get_club_latest_bulletin(club_name: str) -> str | None:
     return rows[0]["data"] if rows and rows[0]["data"] is not None else None
 
 
+def get_prev_bulletin(club_name: str, event_id: int) -> dict | None:
+    """這個社在這場例會「之前」最近一場發過社刊的例會，連同那份內容。
+
+    排序看的是例會日期，不是 updated_at：主委上禮拜回頭補改三個月前那一份，
+    那一份不會因此變成「上一次例會」。沒有日期的活動比不出前後，就當作沒有。
+
+    社別兩邊都認：bulletin_content.club_name 存的是「發布的人屬於哪個社」，而
+    events.club_name 才是這場例會是誰的。跨地區管理員幫別的社發布時兩者會不一樣，
+    只認一邊的話那個社就再也找不到自己上一期。"""
+    rows = query(
+        """
+        SELECT b.event_id, b.data, e.title, e.date
+        FROM bulletin_content b
+        JOIN events e ON e.id = b.event_id
+        WHERE (b.club_name = %s OR e.club_name = %s)
+          AND e.date IS NOT NULL
+          AND e.date < (SELECT date FROM events WHERE id = %s)
+        ORDER BY e.date DESC, b.event_id DESC
+        LIMIT 1
+        """,
+        (club_name, club_name, event_id),
+    )
+    return rows[0] if rows and rows[0]["data"] is not None else None
+
+
 # ── Club finance sheet (社務對帳) ─────────────────────────────────────────────────
 # One monthly finance sheet per club: fixed expenses (rent/salary/custom) + 社友代墊款.
 # Stored as a JSON string keyed by (club_name, month 'YYYY-MM').
