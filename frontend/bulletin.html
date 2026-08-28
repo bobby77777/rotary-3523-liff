@@ -1569,25 +1569,141 @@
             });
         }
 
+        // ── P4 溢出續頁 ────────────────────────────────────────────────────────
+        // 第 4 頁的預告放不下時，超出的部分接到下一頁去，而不是被裁掉 —— 這一頁是
+        // 會印給社友看的，少印幾筆比多印一張紙嚴重得多。
+        //
+        // 拆頁只發生在「輸出」的時候（列印、社友閱覽），發布存的仍然是編輯器那四頁
+        // 原稿：存拆好的版本，載回編輯器時第 5 頁以後就沒有地方放，那些項目會不見。
+        //
+        // 量測要有一個跟畫布一樣大的容器才算得準，所以放一個在畫面外量（跟 P2 的
+        // fitAgendaHTML 同一個手法）。
+        const P4_MAX_SPILL_PAGES = 6;      // 保險絲：內容壞掉時不要無限生頁
+
+        function spillP4Page(pageHTML) {
+            const probes = [];
+            const newProbe = () => {
+                const el = document.createElement('div');
+                el.className = 'canvas';
+                el.style.cssText = 'position:absolute; left:-10000px; top:0; display:flex;';
+                el.innerHTML = pageHTML;
+                document.body.appendChild(el);
+                probes.push(el);
+                return el;
+            };
+            try {
+                let current = newProbe();
+                const area = current.querySelector('.p4-scroll-area, .p4-list-scroll');
+                if (!area || !area.clientHeight) return [pageHTML];   // 不是第 4 頁，或量不到
+                const out = [];
+                for (let guard = 0; guard < P4_MAX_SPILL_PAGES; guard++) {
+                    const leftover = takeOverflow(current);
+                    out.push(current.innerHTML);
+                    if (!leftover) break;
+                    // 續頁：沿用同一份骨架（頁首、欄名、頁尾），只換掉裡面的項目
+                    current = newProbe();
+                    fillWithLeftover(current, leftover);
+                }
+                // 續頁的頁碼接在第 4 頁後面（05、06…）。只匯出第 4 頁時也還是對的，
+                // 因為編號是相對於第 4 頁，不是相對於「這次印了幾張」。
+                return out.map((html, i) => (i ? withPageNo(html, 4 + i) : html));
+            } finally {
+                probes.forEach(el => el.remove());
+            }
+        }
+
+        // 把放不下的項目從這一頁末端搬出來，回傳 {cards:[[col1],[col2]]} 或 {items:[…]}；
+        // 全部都放得下就回 null。雙欄版型兩欄各自是一份清單（例會／活動），不能混在
+        // 一起流動 —— 搬的是「比較高的那一欄」的最後一筆。
+        function takeOverflow(root) {
+            const area = root.querySelector('.p4-scroll-area, .p4-list-scroll');
+            if (!area) return null;
+            const fits = () => area.scrollHeight <= area.clientHeight + 1;
+            if (fits()) return null;
+            const cols = [...root.querySelectorAll('.p4-col-body')];
+            if (cols.length) {
+                const spill = cols.map(() => []);
+                for (let guard = 0; guard < 200 && !fits(); guard++) {
+                    // 挑目前最高的那一欄；沒有卡片可搬就停手（避免無限迴圈）
+                    let idx = -1, tallest = -1;
+                    cols.forEach((c, i) => {
+                        const cards = c.querySelectorAll('.p4-card');
+                        if (cards.length && c.scrollHeight > tallest) { tallest = c.scrollHeight; idx = i; }
+                    });
+                    if (idx < 0) break;
+                    const cards = cols[idx].querySelectorAll('.p4-card');
+                    const last = cards[cards.length - 1];
+                    spill[idx].unshift(last.outerHTML);
+                    last.remove();
+                }
+                return spill.some(s => s.length) ? { cards: spill } : null;
+            }
+            const list = root.querySelector('.p4-list-scroll');
+            if (!list) return null;
+            const items = [];
+            for (let guard = 0; guard < 200 && !fits(); guard++) {
+                const last = list.lastElementChild;
+                if (!last) break;
+                items.unshift(last.outerHTML);
+                last.remove();
+            }
+            // 最後留在頁尾的分組標題（下面已經沒有項目了）跟著搬過去，
+            // 不然這一頁會結束在一個空標題上。
+            while (list.lastElementChild && list.lastElementChild.classList.contains('p4-list-group-title')) {
+                items.unshift(list.lastElementChild.outerHTML);
+                list.lastElementChild.remove();
+            }
+            return items.length ? { items } : null;
+        }
+
+        // 續頁：清空項目區，放進搬過來的那些，標題加「（續）」。
+        function fillWithLeftover(root, leftover) {
+            const title = root.querySelector('.p4-main-title');
+            if (title && !/（續）/.test(title.textContent)) title.textContent += '（續）';
+            if (leftover.cards) {
+                [...root.querySelectorAll('.p4-col-body')].forEach((c, i) => {
+                    c.innerHTML = (leftover.cards[i] || []).join('');
+                });
+            } else {
+                const list = root.querySelector('.p4-list-scroll');
+                if (list) list.innerHTML = leftover.items.join('');
+            }
+        }
+
+        function withPageNo(html, n) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            const spans = tmp.querySelectorAll('.page-footer span');
+            if (spans.length) spans[spans.length - 1].textContent = 'PAGE ' + String(n).padStart(2, '0');
+            return tmp.innerHTML;
+        }
+
         // 產生真正的向量 PDF：把選定頁面放進列印專用區，交給瀏覽器原生列印引擎「另存為 PDF」。
         // 相較於點陣截圖，文字可選取、可搜尋、放大不糊，檔案也更小。
         let pdfBusy = false;
         async function printPages(pages) {
+            // 字型要先就緒才量得準：Noto 跟系統替代字的行高不一樣，會影響第 4 頁
+            // 一張紙裝得下幾筆，也會讓列印抓到替代字。
+            if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
             const allPages = currentPagesHTML();
             const zone = document.getElementById('print-zone');
             zone.innerHTML = '';
             pages.forEach(pageNum => {
-                const wrap = document.createElement('div');
-                wrap.className = 'print-page';
-                const cv = document.createElement('div');
-                cv.className = 'canvas';
-                cv.innerHTML = cleanPageHTML(allPages[pageNum - 1] || '');   // 列印用乾淨版
-                wrap.appendChild(cv);
-                zone.appendChild(wrap);
+                // 第 4 頁放不下的預告接到續頁去印，不然社友手上那張就是少了幾筆
+                const htmls = pageNum === 4 ? spillP4Page(allPages[3] || '')
+                                            : [allPages[pageNum - 1] || ''];
+                htmls.forEach(html => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'print-page';
+                    const cv = document.createElement('div');
+                    cv.className = 'canvas';
+                    cv.innerHTML = cleanPageHTML(html);   // 列印用乾淨版
+                    wrap.appendChild(cv);
+                    zone.appendChild(wrap);
+                });
             });
 
-            // 等中文字型與所有圖片就緒，否則列印時會抓到替代字或空白圖
-            if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+            // 圖片也要就緒，否則列印時會抓到空白圖
             const imgs = Array.from(zone.querySelectorAll('img'));
             await Promise.all(imgs.map(img => img.complete ? Promise.resolve()
                 : new Promise(r => { img.onload = img.onerror = r; })));
@@ -1967,10 +2083,15 @@
             const reader = document.getElementById('reader');
             reader.innerHTML = '';
             const headerInfo = await fetchBulletinHeader();
+            // 分頁要在字型就緒後才算：Noto 跟系統替代字的行高不一樣，會影響一張紙
+            // 裝得下幾筆，量早了會在錯的地方斷頁。
+            if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
             // 優先呈現主委發布到雲端的成品；沒有雲端版本時，退回即時組出的預設範本。
             // 存的是「可編輯」版本，閱覽時 clean 掉編輯用的握把與 contenteditable。
             const src = loadedPages || [1, 2, 3, 4].map(n => buildPageInnerHTML(n));
-            const pagesHTML = src.map(cleanPageHTML);
+            // 第 4 頁放不下的預告接到續頁：社友線上看到的、跟他自己下載的 PDF，
+            // 都要跟執秘印出來的那幾張一樣。
+            const pagesHTML = src.flatMap((h, i) => (i === 3 ? spillP4Page(h) : [h])).map(cleanPageHTML);
             pagesHTML.forEach(html => {
                 const item = document.createElement('div');
                 item.className = 'reader-item';
