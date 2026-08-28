@@ -977,10 +977,20 @@
 
   // 欠上個月的錢，在明細那一欄就要看得到 —— 這是催繳時第一個要問的數字。
   function arrearsTag(r) {
-    if (!r.arrears_total) return '';
-    const months = (r.arrears || []).map(a => monthLabel(a.month)).join('、');
-    return `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold bg-rose-100 text-rose-700 border border-rose-200 whitespace-nowrap inline-block"
-      title="${esc(months)}">上期未繳 ${money(r.arrears_total)}</span>`;
+    let html = '';
+    if (r.arrears_total) {
+      const months = (r.arrears || []).filter(a => a.amount).map(a => monthLabel(a.month)).join('、');
+      html += `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold bg-rose-100 text-rose-700 border border-rose-200 whitespace-nowrap inline-block"
+        title="${esc(months)}">上期未繳 ${money(r.arrears_total)}</span>`;
+    }
+    // 補掉的月份要講出來，不然執秘會跑去那個月再按一次「已收」，同一筆錢被算兩次。
+    // 真的要在那個月結案的話，實收要填 0 —— 錢是在多繳的那個月進來的。
+    if (r.arrears_covered) {
+      const months = (r.arrears || []).filter(a => a.covered).map(a => monthLabel(a.month)).join('、');
+      html += `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold bg-teal-100 text-teal-700 border border-teal-200 whitespace-nowrap inline-block"
+        title="${esc(months)}已用他多繳的錢補上；若要在該月份結案，實收請填 0">上期已用溢繳補 ${money(r.arrears_covered)}</span>`;
+    }
+    return html;
   }
 
   // 溢繳：這個月抵掉多少、抵完之後還剩多少留到下個月。短收也走這裡 ——
@@ -1136,10 +1146,11 @@
     document.getElementById('bill-arrears-list').innerHTML = list.map(a => `
       <div class="flex justify-between items-center text-[14px]">
         <button onclick="closeBill(); selectMonthFromArrears('${esc(a.month)}')"
-          class="text-rose-700 hover:text-rose-900 font-bold underline decoration-dotted">
+          class="${a.amount ? 'text-rose-700 hover:text-rose-900' : 'text-teal-700 hover:text-teal-900'} font-bold underline decoration-dotted">
           ${esc(monthLabel(a.month))}</button>
-        <span class="tabular-nums text-rose-700">${money(a.amount)}
-          ${a.is_paid ? '<span class="text-[12px] text-amber-600 font-bold ml-1">已回報待對帳</span>' : ''}</span>
+        <span class="tabular-nums ${a.amount ? 'text-rose-700' : 'text-teal-700'}">${money(a.amount)}
+          ${a.covered ? `<span class="text-[12px] text-teal-600 font-bold ml-1">已用溢繳補 ${money(a.covered)}</span>` : ''}
+          ${a.is_paid && a.amount ? '<span class="text-[12px] text-amber-600 font-bold ml-1">已回報待對帳</span>' : ''}</span>
       </div>`).join('');
   }
 

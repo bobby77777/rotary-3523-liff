@@ -2267,6 +2267,29 @@ def _settle_row(row: dict, credit_in: int) -> dict:
             "cash": 0, "short": net_due, "settled": net_due == 0 and applied > 0}
 
 
+def _retire_arrears(credit: dict, arrears: dict) -> dict:
+    """手上的溢繳先把還掛著的舊月份補掉，剩下的才是「可留抵」。
+
+    社友一次拿一大筆過來的時候，那筆錢裡通常有一部分是補上個月沒繳的。留抵的數字
+    不扣掉欠款的話，畫面會同時說「他欠 2,225」和「他有 20,000 可以留抵」，而那
+    20,000 裡就有那 2,225。
+
+    補掉的月份不從清單上消失，改成標 covered ——「他七月的帳是用八月多繳的錢補的」
+    這件事執秘要看得見，不然他會跑去七月按一次已收，那筆錢就被算進兩個月。"""
+    for uid, left in list(credit.items()):
+        for a in arrears.get(uid, []):          # 已經照月份由舊到新排好
+            if left <= 0:
+                break
+            used = min(left, a["amount"])
+            if not used:
+                continue
+            a["amount"] -= used
+            a["covered"] = a.get("covered", 0) + used
+            left -= used
+        credit[uid] = left
+    return credit
+
+
 def _member_credit(club: str, uid: str, month: str) -> int:
     """這位社友走到 month 之前，累積剩下多少溢繳。
 
@@ -2278,13 +2301,17 @@ def _member_credit(club: str, uid: str, month: str) -> int:
         return 0
     by_month = {r["month"]: r for r in db.list_member_dues(club, uid)}
     book = _tier_book(club)
-    credit = 0
+    credit, owed = 0, 0
     for m in months:
         row = by_month.get(m)
         d = _dues_payload(row, *_dues_rates(club, m, uid, _rates_for_month(club, m, book)))
-        credit = _settle_row({"total": d["total"], "confirmed": d["confirmed"],
-                              "paid_amount": (row or {}).get("paid_amount")},
-                             credit)["credit_left"]
+        s = _settle_row({"total": d["total"], "confirmed": d["confirmed"],
+                         "paid_amount": (row or {}).get("paid_amount")}, credit)
+        credit, owed = s["credit_left"], owed + s["short"]
+        # 跟看板同一條規矩（見 _retire_arrears）：先補還欠著的月份，剩下的才留抵。
+        # 兩邊算出不一樣的餘額，比算不出來更糟。
+        used = min(credit, owed)
+        credit, owed = credit - used, owed - used
     return credit
 
 
@@ -2434,6 +2461,7 @@ def _carry_forward(club: str, month: str, members: list[dict], ledger: dict,
         rows = _dues_rows(club, m, members, book)
         # 上個月剩下的溢繳帶進這個月抵扣，抵完剩下的再帶去下一個月
         credit = _settle_month(rows, credit)
+        _retire_arrears(credit, arrears)
         if m not in billed:
             continue
         expense = _expense_summary(db.get_club_finance(club, m), advance_by_month.get(m, 0))
@@ -2501,21 +2529,27 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
     # 代墊帳整個社算一次，看板與結轉共用：一個月一個月去算等於把最貴的查詢乘上月份數
     ledger = _advance_ledger(club)
     carry = _carry_forward(club, month, members, ledger, book)
-    # 本月要用的溢繳是「本月之前累積剩下的」，所以先結轉再結算這個月
-    _settle_month(rows, carry.pop("credit", {}))
+    # 每位社友把自己的上期未繳帶在身上：帳單編輯與明細表都要看得到「他還欠哪幾
+    # 個月」，逐一去翻舊月份是沒有人會做的事。
+    arrears = carry.pop("arrears", {})
+    # 本月要用的溢繳是「本月之前累積剩下的」，所以先結轉再結算這個月；本月自己多繳
+    # 出來的那部分，同樣要先把還掛著的舊月份補掉才算留抵。
+    left = _retire_arrears(_settle_month(rows, carry.pop("credit", {})), arrears)
+    for r in rows:
+        r["credit_left"] = left.get(r["uid"], 0)
     rows.sort(key=lambda r: (["unpaid", "reported", "credited", "confirmed"]
                              .index(r["status"]), r["name"]))
     totals = _dues_totals(rows)
     expense = _expense_summary(db.get_club_finance(club, month),
                                ledger["by_month"].get(month, 0))
     net = totals["cash"] - expense["total"]
-    # 每位社友把自己的上期未繳帶在身上：帳單編輯與明細表都要看得到「他還欠哪幾
-    # 個月」，逐一去翻舊月份是沒有人會做的事。
-    arrears = carry.pop("arrears", {})
     for r in rows:
         owed = arrears.get(r["uid"], [])
         r["arrears"] = owed
+        # 已經被溢繳補掉的部分不再算進未繳（那一筆留在清單上標 covered，讓執秘看得
+        # 出來是補過的，別再跑去那個月按一次已收）
         r["arrears_total"] = sum(x["amount"] for x in owed)
+        r["arrears_covered"] = sum(x.get("covered", 0) for x in owed)
         # 本月實付 + 上期未繳。刻意不寫進 total：那些月份的帳單本來就還在，
         # 加進來的話應收會把同一筆錢算兩次。用 due_now 而不是 total —— 不該去追
         # 一筆他自己的溢繳已經蓋掉的錢。
