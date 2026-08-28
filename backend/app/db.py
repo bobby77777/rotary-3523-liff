@@ -557,6 +557,15 @@ def ensure_club_dues_tier_tables() -> None:
             PRIMARY KEY (club_name, tier, effective_month)
         )
     """)
+    # 類別除了常年月費，還可以掛幾筆有名字的固定金額（例：理監事的職務捐），每個
+    # 月跟著月費一起收。跟 base 同一個段落，所以改加項＝開新段落＝只往後生效。
+    #
+    # 這些項目「絕對不可以」寫進 club_dues.customs：那會在固定部分之外再算一次、
+    # 把金額凍結在開帳單當下（看板逐月重算的機制就廢了）、讓每個人的 has_bill 都
+    # 變成 true 而清空批次記帳名單，還會被 list_dues_event_items 那條 event_id
+    # 的字串掃描當成活動報名費。
+    execute("ALTER TABLE club_dues_tier_rates "
+            "ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'")
     # line_user_id 不對 personal_information 設外鍵：退社的社友仍然會以「名冊外
     # 但有帳單」的身分出現在舊月份（見 main.py 的 orphan 列），那些月份還要算得
     # 出他當時的類別。
@@ -576,25 +585,29 @@ def ensure_club_dues_tier_tables() -> None:
 # 一個 30 人的社、看 8 個月就是 240 次往返。
 def list_tier_rates(club_name: str) -> list[dict]:
     return query(
-        "SELECT tier, effective_month, base, label, updated_at FROM club_dues_tier_rates "
+        "SELECT tier, effective_month, base, label, items, updated_at "
+        "FROM club_dues_tier_rates "
         "WHERE club_name = %s ORDER BY tier, effective_month DESC",
         (club_name,),
     )
 
 
 def save_tier_rate(club_name: str, tier: str, effective_month: str,
-                   base: int, label: str = "") -> None:
+                   base: int, label: str = "", items: list | None = None) -> None:
+    """items 是整份取代不是合併 —— 存一個段落就是把那個段落的加項重寫一次，
+    跟 base、label 一樣。少傳等於清空，呼叫端要把畫面上現有的項目一起送回來。"""
     execute(
         """
         INSERT INTO club_dues_tier_rates
-            (club_name, tier, effective_month, base, label, updated_at)
-        VALUES (%s, %s, %s, %s, %s, NOW())
+            (club_name, tier, effective_month, base, label, items, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (club_name, tier, effective_month) DO UPDATE SET
             base = EXCLUDED.base,
             label = EXCLUDED.label,
+            items = EXCLUDED.items,
             updated_at = NOW()
         """,
-        (club_name, tier, effective_month, base, label),
+        (club_name, tier, effective_month, base, label, json.dumps(items or [])),
     )
 
 
