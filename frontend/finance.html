@@ -1003,11 +1003,12 @@
       return `<span class="px-2 py-1 rounded text-[13px] font-bold text-teal-700 bg-teal-50 border border-teal-200 whitespace-nowrap"
         title="本月應繳 ${money(r.total)} 已由他自己的溢繳全額抵扣，沒有現金要收">已用溢繳抵扣</span>`;
     }
-    // 實收金額只在已對帳的列出現：還沒對帳就沒有「收到多少」這件事。
-    const paidBtn = r.confirmed
-      ? `<button onclick="${stop} editPaid('${r.uid}')" title="登記實收金額（多繳的會自動留到下個月抵扣）"
-           class="ml-1 px-1.5 py-1 rounded text-[13px] font-bold text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors">$</button>`
-      : '';
+    // 兩種狀態都給 $：還沒對帳的那一列，填金額本身就是「我收到了這些錢」，
+    // 存下去會一併標記已收 —— 不然執秘得先按一次已收、再按一次 $ 改金額。
+    const paidBtn = `<button onclick="${stop} editPaid('${r.uid}')"
+        title="${r.confirmed ? '登記實收金額（多繳的會自動留到下個月抵扣）'
+                             : '收到的金額跟應繳不同時，直接填實收金額並標記已收'}"
+        class="ml-1 px-1.5 py-1 rounded text-[13px] font-bold text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors">$</button>`;
     return (r.confirmed
       ? `<button onclick="${stop} setConfirmed('${r.uid}', false)" title="取消對帳（社友自己回報的繳款紀錄與實收金額都會保留）"
            class="px-2 py-1 rounded text-[13px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">取消對帳</button>`
@@ -1036,17 +1037,34 @@
 
   async function savePaid(uid) {
     const el = document.getElementById(`paid-input-${uid}`);
-    if (!el) return;
+    const r = board.members.find(m => m.uid === uid);
+    if (!el || !r) return;
     const raw = el.value.trim();
     const amount = parseInt(raw);
     if (raw !== '' && (isNaN(amount) || amount < 0)) { alert('實收金額需為 0 以上的數字。'); return; }
+    // 還沒對帳的列：填金額就是「我收到了這些錢」，一併標記已收（社友會收到通知，
+    // 所以先問一次 —— 跟按「標記已收」同一個規矩）。已對帳的列只是改數字，不再通知。
+    const confirming = !r.confirmed;
+    if (confirming) {
+      if (raw === '') { alert('請填實收金額，或直接按「標記已收」。'); return; }
+      if (!confirm(`確定將「${r.name}」${monthLabel(activeMonth)}的實收 ${money(amount)} 標記為已繳？\n`
+        + (amount > r.due_now ? `多出的 ${money(amount - r.due_now)} 會留到之後的月份抵扣。\n` : '')
+        + (amount < r.due_now ? `短收的 ${money(r.due_now - amount)} 會留在本月的未繳。\n` : '')
+        + '本人會收到 LINE 對帳完成通知。')) { renderRows(); return; }
+    }
     try {
-      const data = await apiFetch('/finance/paid_amount', {
-        method: 'POST',
-        body: JSON.stringify(raw === ''
-          ? { club: activeClub, month: activeMonth, uid, clear: true }   // 清空＝就是應繳金額
-          : { club: activeClub, month: activeMonth, uid, amount }),
-      });
+      const data = confirming
+        ? await apiFetch('/finance/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ club: activeClub, month: activeMonth, uid,
+                                   confirmed: true, paid_amount: amount }),
+          })
+        : await apiFetch('/finance/paid_amount', {
+            method: 'POST',
+            body: JSON.stringify(raw === ''
+              ? { club: activeClub, month: activeMonth, uid, clear: true }   // 清空＝就是應繳金額
+              : { club: activeClub, month: activeMonth, uid, amount }),
+          });
       if (data.status !== 'ok') { alert(data.message || '儲存失敗'); renderRows(); return; }
       await loadBoard();
       loadTrend();
