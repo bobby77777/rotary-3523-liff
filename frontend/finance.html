@@ -166,12 +166,13 @@
         </p>
       </div>
 
-      <!-- 固定兩項不在這裡改：全社一致，改了要整批生效，走「月費設定」那條路 -->
+      <!-- 固定兩項不在這裡改：改了要整批生效，走「月費設定」那條路。常年月費是
+           這一位的（可能依會籍類別而不同），分攤金全社一律。 -->
       <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5 text-[15px]">
-        <div class="flex justify-between text-slate-600"><span>常年月費</span><span class="font-bold tabular-nums" id="bill-base">—</span></div>
+        <div class="flex justify-between text-slate-600"><span>常年月費<span id="bill-tier" class="text-[12px] font-black text-indigo-700 ml-1"></span></span><span class="font-bold tabular-nums" id="bill-base">—</span></div>
         <div class="flex justify-between text-slate-600"><span>地區分攤金</span><span class="font-bold tabular-nums" id="bill-district">—</span></div>
         <button onclick="closeBill(); openRates();" class="text-[13px] font-bold text-indigo-600 hover:text-indigo-800">
-          這兩項全社一致 · 前往月費設定 →</button>
+          這兩項在月費設定改 →</button>
       </div>
 
       <div class="space-y-2">
@@ -324,6 +325,39 @@
       <div>
         <p class="text-[13px] font-bold text-slate-400 mb-1">生效歷程</p>
         <div id="rates-history" class="space-y-1.5"></div>
+      </div>
+
+      <!-- 會籍類別：同一個社裡收不同常年月費的人。地區分攤金刻意不出現在這一區 ——
+           那是地區按人頭收的，全社一律，只在上面那一塊改。 -->
+      <div class="border-t border-slate-200 pt-4">
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-[13px] font-bold text-slate-400">會籍類別（常年月費因人而異時才需要）</p>
+          <button onclick="addTierRow()" class="text-[13px] font-bold text-indigo-700 hover:text-indigo-900">＋ 新增類別</button>
+        </div>
+        <div id="tiers-list" class="space-y-1.5"></div>
+        <div id="tier-form" class="hidden border border-indigo-200 bg-indigo-50/50 rounded-lg p-3 space-y-2 mt-2">
+          <div class="flex items-center gap-2">
+            <span class="text-[15px] font-black text-indigo-900 w-7 text-center" id="tier-code">A</span>
+            <input id="tier-label" maxlength="20" placeholder="備註（如：眷屬）僅執秘看得到"
+              class="flex-1 min-w-0 border border-slate-300 rounded p-2 text-[14px] outline-none focus:border-indigo-600">
+          </div>
+          <label class="flex items-center justify-between gap-3">
+            <span class="text-[15px] font-semibold text-slate-700">生效年月起</span>
+            <input id="tier-month" type="month" class="w-1/2 border border-slate-300 rounded p-2 text-base outline-none focus:border-indigo-600">
+          </label>
+          <label class="flex items-center justify-between gap-3">
+            <span class="text-[15px] font-semibold text-slate-700">常年月費</span>
+            <input id="tier-base" type="number" min="0" placeholder="0" onfocus="this.select()"
+              class="w-1/2 border border-slate-300 rounded p-2 text-base text-right font-bold outline-none focus:border-indigo-600">
+          </label>
+          <div class="flex justify-end gap-2">
+            <button onclick="closeTierForm()" class="px-3 py-2 rounded text-base text-slate-500 hover:bg-slate-200 transition-colors">取消</button>
+            <button onclick="saveTierRate()" id="tier-save" class="px-4 py-2 rounded text-base font-bold bg-indigo-950 hover:bg-indigo-900 text-white transition-colors">儲存</button>
+          </div>
+        </div>
+        <p class="text-[13px] text-slate-500 mt-2 leading-relaxed">
+          社友屬於哪一個類別在「社友名冊」裡指定。沒有指定的人一律用上面的全社月費。
+        </p>
       </div>
     </div>
     <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
@@ -592,11 +626,14 @@
     document.getElementById('notice').classList.add('hidden');
     document.getElementById('board').classList.remove('hidden');
     // 副標帶上這個月適用的固定費率：金額突然變了，看板要講得出是哪一段生效。
+    // 有會籍類別時「固定 X 元」是假的：改成講區間，否則副標的數字跟一半的人對不上。
+    const bases = [...new Set(data.members.map(m => m.base))].sort((a, b) => a - b);
+    const fixed = bases.length > 1
+      ? `常年月費 ${money(bases[0])}–${money(bases[bases.length - 1])} 依類別 ＋ 分攤金 ${money(data.district)}`
+      : `月費固定 ${money(data.base + data.district)}`
+        + (data.rates_default ? '（預設）' : `（${monthLabel(data.rates_from)} 起）`);
     document.getElementById('subtitle').textContent =
-      [data.club, monthLabel(data.month),
-       `月費固定 ${money(data.base + data.district)}`
-       + (data.rates_default ? '（預設）' : `（${monthLabel(data.rates_from)} 起）`)]
-      .filter(Boolean).join(' · ');
+      [data.club, monthLabel(data.month), fixed].filter(Boolean).join(' · ');
     renderClubSelector();
     renderCards();
     renderBalance();
@@ -804,6 +841,7 @@
         <td class="px-4 py-2.5 whitespace-nowrap">
           <span class="font-bold text-slate-800">${esc(r.name)}</span>
           ${r.nickname ? `<span class="text-slate-400 text-[14px]">（${esc(r.nickname)}）</span>` : ''}
+          ${r.tier ? `<span class="ml-1 text-[12px] font-black text-indigo-700" title="會籍類別 ${esc(r.tier)}：常年月費 ${money(r.base)}">${esc(r.tier)}</span>` : ''}
           ${r.orphan ? `<span class="ml-1 text-[12px] text-amber-600" title="有帳單，但社友名冊查不到這個人">名冊外</span>` : ''}
         </td>
         <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800 whitespace-nowrap">${money(r.total)}</td>
@@ -930,6 +968,8 @@
     if (!r) return;
     editingUid = uid;
     billTargets = null;
+    billBase = r.base;
+    document.getElementById('bill-tier').textContent = r.tier ? `類別 ${r.tier}` : '';
     document.getElementById('bill-title').textContent = r.has_bill ? '編輯帳單' : '新增費用明細';
     document.getElementById('bill-target').innerHTML =
       `<b>${esc(r.name)}</b>${r.nickname ? '（' + esc(r.nickname) + '）' : ''}　${esc(monthLabel(activeMonth))}`
@@ -971,9 +1011,17 @@
     if (!pending.length) { alert('這個月每位社友都已經登過費用明細了。'); return; }
     editingUid = null;
     billTargets = pending.map(m => m.uid);
+    // 這批人的固定月費不一定一樣（會籍類別）。不一樣的時候不能報一個共用的總計，
+    // 那個數字沒有人真的會收到；只講「變動費用」，固定的部分各人各算。
+    const bases = [...new Set(pending.map(m => m.base))];
+    billBase = bases.length === 1 ? bases[0] : 0;
+    document.getElementById('bill-tier').textContent = bases.length > 1 ? '依各人類別' : '';
     document.getElementById('bill-title').textContent = '批次記帳';
     document.getElementById('bill-target').innerHTML =
       `將替 <b>${pending.length} 位還沒登過費用明細</b>的社友一次記上 ${esc(monthLabel(activeMonth))} 的餐費／IOU，金額相同。`
+      + (bases.length > 1
+          ? `<br><span class="text-amber-700">固定月費依各人的會籍類別，${bases.map(money).join('／')} 不等。</span>`
+          : '')
       + `<br><span class="text-slate-400">已經登過的社友不受影響。個別差異開完之後再逐筆調整。</span>`;
     document.getElementById('bill-notify').checked = true;
     fillBillForm(0, 0, []);
@@ -983,8 +1031,12 @@
     showModal('bill-modal');
   }
 
+  // 這張帳單的常年月費。逐位社友可能不同（會籍類別），所以看的是他自己那一列，
+  // 不是看板層級的 board.base —— 拿看板的來算，modal 的總計會跟列上的應繳打架。
+  let billBase = 0;
+
   function fillBillForm(meal, iou, customs) {
-    document.getElementById('bill-base').textContent = money(board.base);
+    document.getElementById('bill-base').textContent = money(billBase);
     document.getElementById('bill-district').textContent = money(board.district);
     document.getElementById('bill-meal').value = meal ? meal : '';
     document.getElementById('bill-iou').value = iou ? iou : '';
@@ -1087,8 +1139,10 @@
 
   function renderBillTotal() {
     const d = readBillForm();
-    const total = board.base + board.district + d.meal + d.iou
-      + d.customs.reduce((s, c) => s + c.amount, 0);
+    const items = d.meal + d.iou + d.customs.reduce((s, c) => s + c.amount, 0);
+    // 批次記帳而各人固定月費不同時 billBase 是 0：只加得出變動費用那一段，
+    // 標題那一行已經講明固定的部分依各人類別。
+    const total = billBase + (billBase ? board.district : 0) + items;
     document.getElementById('bill-total').textContent = money(total);
     // 累計應繳只在真的有欠款時出現，否則等於在每張帳單上重複本月總計
     const grand = document.getElementById('bill-grand');
@@ -1112,7 +1166,10 @@
       closeBill();
       await loadBoard();
       loadTrend();
-      if (bulk) alert(`已替 ${data.saved} 位社友記帳，每位 ${money(data.total)}。`
+      if (bulk) alert((data.base_varies
+          ? `已替 ${data.saved} 位社友記帳，每位變動費用 ${money(data.items_total)}；`
+            + `固定月費依各人的會籍類別，總額不一。`
+          : `已替 ${data.saved} 位社友記帳，每位 ${money(data.total)}。`)
         + (data.skipped ? `\n（${data.skipped} 位已有帳單，未更動）` : '')
         + (data.notified ? '\n已用 LINE 通知這些社友。' : ''));
     } catch (e) {
@@ -1244,8 +1301,11 @@
   function closeExpense() { hideModal('expense-modal'); }
 
   // ==================== 月費設定 ====================
-  // 常年月費／地區分攤金全社一致，改動一定是「從某月起」，所以編輯的單位是
-  // 生效段落而不是單一數字 —— 直接改一個全域值會把過去開過的帳單金額也一起改掉。
+  // 改動一定是「從某月起」，所以編輯的單位是生效段落而不是單一數字 —— 直接改一個
+  // 全域值會把過去開過的帳單金額也一起改掉。
+  //
+  // 這一塊有兩層：上面是「全社預設」（常年月費 + 地區分攤金），下面是會籍類別
+  // （只有常年月費）。分攤金是地區按人頭收的，不隨類別變，所以類別那一區沒有它。
   let rates = null;
 
   async function openRates() {
@@ -1271,8 +1331,115 @@
     document.getElementById('rate-district').value = rates.district;
     renderRatesCurrent();
     renderRatesHistory();
+    renderTiers();
     renderRatesTotal();
+    closeTierForm();
     lucide.createIcons();
+  }
+
+  // ==================== 會籍類別 ====================
+  const TIER_CODES = 'ABCDEFGH';
+
+  function renderTiers() {
+    const el = document.getElementById('tiers-list');
+    const tiers = rates.tiers || [];
+    if (!tiers.length) {
+      el.innerHTML = `<p class="text-[13px] text-slate-400 italic py-1">尚未設定類別，全社都收上面那一個常年月費。</p>`;
+      return;
+    }
+    el.innerHTML = tiers.map(t => {
+      // rate_from 空的＝這個類別在本月還沒有生效段落，金額是落回全社預設的，
+      // 要講出來，否則執秘看到一個沒有來源的數字會以為設定壞了。
+      const pending = !t.rate_from;
+      return `
+      <div class="flex items-center justify-between gap-2 border rounded-lg px-3 py-2 ${pending ? 'border-slate-200' : 'border-indigo-200 bg-indigo-50/40'}">
+        <div class="min-w-0">
+          <p class="text-[14px] font-bold text-slate-800">
+            <span class="font-black text-indigo-900">${esc(t.tier)}</span>
+            ${t.label ? `<span class="text-slate-500 font-medium ml-1">${esc(t.label)}</span>` : ''}
+            <span class="text-[12px] text-slate-400 ml-1">${t.members} 人</span></p>
+          <p class="text-[13px] ${pending ? 'text-slate-400' : 'text-slate-500'}">
+            ${pending ? `本月尚未生效，沿用全社 ${money(t.base)}`
+                      : `${money(t.base)} ＋ 分攤金 ${money(rates.district)} ＝ <b>${money(t.base + rates.district)}</b>
+                         <span class="text-slate-400">（${esc(monthLabel(t.rate_from))} 起）</span>`}</p>
+        </div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <button onclick="addTierRow('${esc(t.tier)}')" title="新增／修改這個類別的生效段落"
+            class="text-slate-400 hover:text-indigo-700 p-1 transition-colors"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+          ${t.history.map(h => `<button onclick="deleteTierRate('${esc(t.tier)}','${esc(h.effective_month)}')"
+            title="刪除「${esc(monthLabel(h.effective_month))} 起 ${money(h.base)}」這一段"
+            class="text-[12px] text-slate-400 hover:text-rose-600 px-1 transition-colors tabular-nums">${esc(h.effective_month.slice(2))}</button>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // 沒帶 tier 就是新增一個：代碼依順序自動給，跟球場方案同一套規矩。
+  function addTierRow(tier) {
+    const used = (rates.tiers || []).map(t => t.tier);
+    const code = tier || [...TIER_CODES].find(c => !used.includes(c));
+    if (!code) { alert('類別數量已達上限。'); return; }
+    const cur = (rates.tiers || []).find(t => t.tier === code);
+    document.getElementById('tier-code').textContent = code;
+    document.getElementById('tier-label').value = cur ? (cur.label || '') : '';
+    document.getElementById('tier-month').value = activeMonth;
+    document.getElementById('tier-base').value = cur ? cur.base : rates.base;
+    document.getElementById('tier-form').classList.remove('hidden');
+    document.getElementById('tier-base').focus();
+  }
+
+  function closeTierForm() { document.getElementById('tier-form').classList.add('hidden'); }
+
+  async function saveTierRate() {
+    const tier = document.getElementById('tier-code').textContent.trim();
+    const month = document.getElementById('tier-month').value;
+    const base = parseInt(document.getElementById('tier-base').value) || 0;
+    const label = document.getElementById('tier-label').value.trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) { alert('請選擇生效年月。'); return; }
+    if (!confirm(`類別 ${tier}${label ? `（${label}）` : ''}：自 ${monthLabel(month)} 起，`
+      + `常年月費 ${money(base)}，加上地區分攤金 ${money(rates.district)} 共 ${money(base + rates.district)}。\n\n`
+      + `${monthLabel(month)} 之前的帳單不受影響。確定儲存？`)) return;
+    const btn = document.getElementById('tier-save');
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const data = await apiFetch('/dues/tier_rate', {
+        method: 'POST',
+        body: JSON.stringify({ club: activeClub, tier, effective_month: month, base, label }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      // 這一段可能蓋到已經對過帳的月份。存完才講當然太晚了，但擋下來更糟 ——
+      // 執秘本來就有可能是在補登去年的正確金額。至少要讓他知道動到了哪裡。
+      if (data.affected_confirmed) {
+        alert(`提醒：${monthLabel(month)} 起有 ${data.affected_confirmed} 張已對帳的帳單屬於這個類別，`
+          + `金額已跟著改。若是誤改，請把生效年月改成正確的月份重存。`);
+      }
+      await openRates();
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '儲存';
+    }
+  }
+
+  async function deleteTierRate(tier, month) {
+    const t = (rates.tiers || []).find(x => x.tier === tier) || { members: 0 };
+    if (!confirm(`刪除類別 ${tier} 的「${monthLabel(month)} 起」這一段？\n\n`
+      + `這段涵蓋的月份會改用前一段；若沒有前一段，掛在這個類別的 ${t.members} 位社友`
+      + `會回到全社月費 ${money(rates.base)}。`)) return;
+    try {
+      const data = await apiFetch('/dues/tier_rate/delete', {
+        method: 'POST',
+        body: JSON.stringify({ club: activeClub, tier, effective_month: month }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '刪除失敗'); return; }
+      await openRates();
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('刪除失敗：' + e.message);
+    }
   }
 
   function renderRatesCurrent() {
@@ -1422,7 +1589,9 @@
     document.getElementById('roster-list').innerHTML =
       `<p class="text-[13px] text-slate-400 italic py-2">載入中…</p>`;
     try {
-      roster = await apiFetch('/finance/roster' + (activeClub ? '?club=' + encodeURIComponent(activeClub) : ''));
+      // 帶 month：會籍類別是分月段的，「他現在是哪一類」問的是「他在這個月是哪一類」
+      roster = await apiFetch('/finance/roster?month=' + encodeURIComponent(activeMonth)
+        + (activeClub ? '&club=' + encodeURIComponent(activeClub) : ''));
     } catch (e) {
       document.getElementById('roster-list').innerHTML =
         `<p class="text-[13px] text-rose-600 py-2">載入失敗：${esc(e.message)}</p>`;
@@ -1443,6 +1612,7 @@
 
   function renderRoster() {
     document.getElementById('roster-count').textContent = `（${roster.members.length} 位）`;
+    const hasTiers = (roster.tiers || []).length > 0;
     document.getElementById('roster-list').innerHTML = roster.members.map(m => `
       <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
         <div class="min-w-0">
@@ -1454,11 +1624,63 @@
             m.dues_months ? `${m.dues_months} 個月帳單` : '',
           ].filter(Boolean).join(' · ')}</p>
         </div>
-        <button onclick="deleteMember('${esc(m.uid)}')" title="移出名冊"
-          class="text-slate-300 hover:text-rose-600 p-1 transition-colors flex-shrink-0">
-          <i data-lucide="user-minus" class="w-4 h-4"></i></button>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          ${hasTiers ? tierCell(m) : ''}
+          <button onclick="deleteMember('${esc(m.uid)}')" title="移出名冊"
+            class="text-slate-300 hover:text-rose-600 p-1 transition-colors">
+            <i data-lucide="user-minus" class="w-4 h-4"></i></button>
+        </div>
       </div>`).join('');
     lucide.createIcons();
+  }
+
+  // 類別欄跟末5碼那一欄同一套內嵌編輯，只是多一個生效年月：指派是分月段的，
+  // 「從哪個月起是這一類」跟「是哪一類」一樣重要 —— 少了它，改一次類別會把他
+  // 過去每個月的欠款金額一起改掉。
+  function tierCell(m) {
+    const label = m.tier
+      ? `<span class="font-black text-indigo-900">${esc(m.tier)}</span>`
+      : `<span class="text-slate-300">預設</span>`;
+    return `<button id="tier-cell-${esc(m.uid)}" onclick="editTier('${esc(m.uid)}')"
+      title="${m.tier_from ? esc(monthLabel(m.tier_from)) + ' 起' : '未指定，用全社月費'} · ${money(m.base)}"
+      class="text-[14px] px-2 py-1 rounded hover:bg-indigo-50 transition-colors tabular-nums">${label}</button>`;
+  }
+
+  function editTier(uid) {
+    const m = roster.members.find(x => x.uid === uid);
+    if (!m) return;
+    const opts = [`<option value="">預設</option>`]
+      .concat((roster.tiers || []).map(t =>
+        `<option value="${esc(t.tier)}" ${t.tier === m.tier ? 'selected' : ''}>${esc(t.tier)}${t.label ? '·' + esc(t.label) : ''}</option>`))
+      .join('');
+    document.getElementById(`tier-cell-${uid}`).outerHTML = `
+      <span id="tier-cell-${esc(uid)}" class="flex items-center gap-1">
+        <select id="tier-pick-${esc(uid)}" class="border border-indigo-300 rounded p-1 text-[13px] outline-none">${opts}</select>
+        <input id="tier-from-${esc(uid)}" type="month" value="${esc(activeMonth)}"
+          class="border border-indigo-300 rounded p-1 text-[13px] w-[7.5rem] outline-none">
+        <button onclick="saveTier('${esc(uid)}')" class="text-emerald-600 hover:text-emerald-800 p-1"><i data-lucide="check" class="w-4 h-4"></i></button>
+        <button onclick="renderRoster()" class="text-slate-400 hover:text-slate-600 p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </span>`;
+    lucide.createIcons();
+  }
+
+  async function saveTier(uid) {
+    const tier = document.getElementById(`tier-pick-${uid}`).value;
+    const month = document.getElementById(`tier-from-${uid}`).value;
+    if (!/^\d{4}-\d{2}$/.test(month)) { alert('請選擇生效年月。'); return; }
+    try {
+      const data = await apiFetch('/finance/roster/tier', {
+        method: 'POST',
+        body: JSON.stringify({ club: activeClub, uid, tier, effective_month: month }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); return; }
+      // 這一個欄位是真的會動到錢的，名冊與看板都要重讀（末5碼那一欄只補本地狀態就夠）
+      await openRoster();
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+    }
   }
 
   async function addMember() {
@@ -1683,7 +1905,7 @@
               ].filter(Boolean);
               return `
                 <tr>
-                  <td style="${cell}">${esc(r.name)}${r.nickname ? '（' + esc(r.nickname) + '）' : ''}</td>
+                  <td style="${cell}">${esc(r.name)}${r.nickname ? '（' + esc(r.nickname) + '）' : ''}${r.tier ? `<span style="font-size:8pt; color:#3730a3; font-weight:700;"> ${esc(r.tier)}</span>` : ''}</td>
                   <td style="${cell} text-align:right;">${r.has_bill ? money(r.total) : ''}</td>
                   <td style="${cell} font-size:9pt;">${esc(items.join('、'))}</td>
                   <td style="${cell} text-align:center;">${STATUS[r.status].label}</td>

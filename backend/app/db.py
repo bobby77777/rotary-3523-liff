@@ -470,10 +470,14 @@ def confirm_dues(club_name: str, month: str, line_user_id: str, confirmed: bool)
 
 
 # ── 月費費率（常年月費 / 地區分攤金） ──────────────────────────────────────────
-# 這兩筆由社章程與地區訂，全社一致，所以不存在每張帳單裡。但它們會變（換年度、
-# 地區調整分攤金），而且必須「從某個月起」才變：直接改一個全域數字的話，過去
-# 每一張已開立、社友也繳過的帳單金額都會跟著改，帳就對不回去了。因此存成一段
-# 段生效期間，某個月適用的就是「生效月份 <= 該月」之中最新的那一段。
+# 這兩筆由社章程與地區訂，不存在每張帳單裡。但它們會變（換年度、地區調整分攤
+# 金），而且必須「從某個月起」才變：直接改一個全域數字的話，過去每一張已開立、
+# 社友也繳過的帳單金額都會跟著改，帳就對不回去了。因此存成一段段生效期間，某個
+# 月適用的就是「生效月份 <= 該月」之中最新的那一段。
+#
+# 這張表是「全社預設」：地區分攤金一律以它為準（地區按人頭收，不因人而異），
+# 常年月費則是沒有指定會籍類別的社友適用的那一個數字。因人而異的常年月費見下面
+# 的 club_dues_tier_rates。
 
 def ensure_club_dues_settings_table() -> None:
     execute("""
@@ -527,6 +531,122 @@ def save_dues_settings(club_name: str, effective_month: str, base: int, district
 def delete_dues_settings(club_name: str, effective_month: str) -> None:
     execute("DELETE FROM club_dues_settings WHERE club_name = %s AND effective_month = %s",
             (club_name, effective_month))
+
+
+# ── 會籍類別（同一個社裡的不同常年月費） ──────────────────────────────────────
+# 同一個社不是每個人都繳一樣的常年月費（榮譽、眷屬、贊助…）。差別來自「類別」
+# 而不是逐人指定的數字：類別是 A、B、C 這樣的代碼，費率掛在類別上，社友只是被
+# 指到某一個類別。
+#
+# 兩件事都分月段生效，理由跟上面的費率一樣，而且更嚴重：看板的期初結轉與欠款
+# （main.py 的 _carry_forward）是拿現在的設定「重算」過去每一個月的。類別指派若
+# 是一個可變欄位，九月把某人改成 B 類，他一到八月的欠款金額會跟著一起變。
+#
+# 地區分攤金刻意沒有出現在這裡：分攤金是地區按人頭收的，不隨類別變。每個類別各
+# 存一份一模一樣的分攤金，遲早有一份被改到，那等於偷偷改了地區的收入。
+
+def ensure_club_dues_tier_tables() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS club_dues_tier_rates (
+            club_name       TEXT NOT NULL,
+            tier            TEXT NOT NULL,
+            effective_month TEXT NOT NULL,
+            base            INTEGER NOT NULL DEFAULT 0,
+            label           TEXT NOT NULL DEFAULT '',
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (club_name, tier, effective_month)
+        )
+    """)
+    # line_user_id 不對 personal_information 設外鍵：退社的社友仍然會以「名冊外
+    # 但有帳單」的身分出現在舊月份（見 main.py 的 orphan 列），那些月份還要算得
+    # 出他當時的類別。
+    execute("""
+        CREATE TABLE IF NOT EXISTS club_member_tiers (
+            club_name       TEXT NOT NULL,
+            line_user_id    TEXT NOT NULL,
+            effective_month TEXT NOT NULL,
+            tier            TEXT NOT NULL DEFAULT '',
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            PRIMARY KEY (club_name, line_user_id, effective_month)
+        )
+    """)
+
+
+# 下面四個查詢都是「整社一次撈」：看板要逐月、逐人算金額，逐人查一次資料庫的話
+# 一個 30 人的社、看 8 個月就是 240 次往返。
+def list_tier_rates(club_name: str) -> list[dict]:
+    return query(
+        "SELECT tier, effective_month, base, label, updated_at FROM club_dues_tier_rates "
+        "WHERE club_name = %s ORDER BY tier, effective_month DESC",
+        (club_name,),
+    )
+
+
+def save_tier_rate(club_name: str, tier: str, effective_month: str,
+                   base: int, label: str = "") -> None:
+    execute(
+        """
+        INSERT INTO club_dues_tier_rates
+            (club_name, tier, effective_month, base, label, updated_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (club_name, tier, effective_month) DO UPDATE SET
+            base = EXCLUDED.base,
+            label = EXCLUDED.label,
+            updated_at = NOW()
+        """,
+        (club_name, tier, effective_month, base, label),
+    )
+
+
+def delete_tier_rate(club_name: str, tier: str, effective_month: str) -> None:
+    execute("DELETE FROM club_dues_tier_rates "
+            "WHERE club_name = %s AND tier = %s AND effective_month = %s",
+            (club_name, tier, effective_month))
+
+
+def list_member_tiers(club_name: str) -> list[dict]:
+    return query(
+        "SELECT line_user_id, effective_month, tier FROM club_member_tiers "
+        "WHERE club_name = %s ORDER BY line_user_id, effective_month DESC",
+        (club_name,),
+    )
+
+
+def save_member_tier(club_name: str, line_user_id: str, effective_month: str,
+                     tier: str) -> None:
+    """tier 留空 = 從那個月起回到全社預設費率（不是刪掉這一段）。"""
+    execute(
+        """
+        INSERT INTO club_member_tiers
+            (club_name, line_user_id, effective_month, tier, updated_at)
+        VALUES (%s, %s, %s, %s, NOW())
+        ON CONFLICT (club_name, line_user_id, effective_month) DO UPDATE SET
+            tier = EXCLUDED.tier,
+            updated_at = NOW()
+        """,
+        (club_name, line_user_id, effective_month, tier),
+    )
+
+
+def delete_member_tier(club_name: str, line_user_id: str, effective_month: str) -> None:
+    execute("DELETE FROM club_member_tiers "
+            "WHERE club_name = %s AND line_user_id = %s AND effective_month = %s",
+            (club_name, line_user_id, effective_month))
+
+
+def count_tier_confirmed_bills(club_name: str, uids: list[str], from_month: str) -> int:
+    """這些社友在 from_month 之後、已經對過帳的帳單筆數。
+
+    改一個類別的費率是往前生效的，但「往前」可能蓋到已經對帳完的月份。動手之前
+    要講得出會影響幾筆，執秘才知道自己在改的是歷史還是未來。"""
+    if not uids:
+        return 0
+    rows = query(
+        "SELECT COUNT(*) AS n FROM club_dues WHERE club_name = %s AND month >= %s "
+        "AND confirmed AND line_user_id = ANY(%s)",
+        (club_name, from_month, list(uids)),
+    )
+    return int(rows[0]["n"]) if rows else 0
 
 
 def ensure_golf_scores_table() -> None:

@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
     db.ensure_golf_scores_table()
     db.ensure_club_dues_table()
     db.ensure_club_dues_settings_table()
+    db.ensure_club_dues_tier_tables()
     db.ensure_event_surveys_table()
     db.ensure_event_vips_table()
     db.ensure_golf_groups_table()
@@ -1648,10 +1649,60 @@ DUES_BASE = 2100      # 常年月費
 DUES_DISTRICT = 125   # 地區分攤金
 
 
-def _dues_rates(club: str, month: str) -> tuple[int, int]:
-    """(常年月費, 地區分攤金) in force for that club that month."""
-    s = db.get_dues_settings(club, month) if club and month else None
-    return (int(s["base"]), int(s["district"])) if s else (DUES_BASE, DUES_DISTRICT)
+def _tier_book(club: str) -> dict:
+    """整社的會籍類別費率與指派段落，兩個查詢一次撈完。
+
+    看板會把過去每一個月都重算一遍（見 _carry_forward），每個月各查一次的話，看
+    八個月就是十六趟往返。提到迴圈外面撈一次，整趟只多兩個查詢。"""
+    if not club:
+        return {"rates": [], "members": []}
+    return {"rates": db.list_tier_rates(club), "members": db.list_member_tiers(club)}
+
+
+def _rates_for_month(club: str, month: str, book: dict | None = None) -> dict:
+    """某個月的費率全貌：全社預設、各類別的常年月費、誰屬於哪一類。
+
+    「哪一段生效」跟費率設定同一條規則 —— 生效月份 <= 該月之中最新的那一段。兩份
+    清單都已經按月份由新到舊排好，所以第一個對上的就是答案。"""
+    s = db.get_dues_settings(club, month) if (club and month) else None
+    rb = {
+        "district": int(s["district"]) if s else DUES_DISTRICT,
+        "default_base": int(s["base"]) if s else DUES_BASE,
+        "tier_base": {}, "tier_label": {}, "tier_from": {}, "tier_of": {},
+    }
+    if book is None:
+        book = _tier_book(club)
+    for r in book["rates"]:
+        tier = r["tier"]
+        if r["effective_month"] <= month and tier not in rb["tier_base"]:
+            rb["tier_base"][tier] = int(r["base"])
+            rb["tier_label"][tier] = r.get("label") or ""
+            rb["tier_from"][tier] = r["effective_month"]
+    for m in book["members"]:
+        uid = m["line_user_id"]
+        if m["effective_month"] <= month and uid not in rb["tier_of"]:
+            rb["tier_of"][uid] = m["tier"] or ""
+    return rb
+
+
+def _member_rates(rb: dict, uid: str = "") -> tuple[int, int]:
+    """這位社友該月的 (常年月費, 地區分攤金)。
+
+    回退鏈：他的類別 → 那個類別的費率 → 類別在這個月還沒有費率段落就用全社預設
+    （不是 0 —— 還沒設定不等於不用繳）。分攤金永遠是全社那一個，不看類別。"""
+    tier = rb["tier_of"].get(uid, "") if uid else ""
+    base = rb["tier_base"].get(tier, rb["default_base"]) if tier else rb["default_base"]
+    return base, rb["district"]
+
+
+def _dues_rates(club: str, month: str, uid: str = "",
+                rb: dict | None = None) -> tuple[int, int]:
+    """(常年月費, 地區分攤金) in force for that member that month.
+
+    uid 留空 = 全社預設那一組，給沒有指定社友的呼叫端（費率設定畫面）用。"""
+    if rb is None:
+        rb = _rates_for_month(club, month)
+    return _member_rates(rb, uid)
 
 
 def _dues_total(meal: int, iou: int, customs: list, base: int, district: int) -> int:
@@ -1682,7 +1733,10 @@ async def dues_member(request: Request, club: str = "", month: str = "", uid: st
     # 現在只有跨地區管理員指定得動，其餘人一律自己的社。
     club = _target_club(admin_uid, club)
     row = db.get_dues(club, month, uid) if (month and uid) else None
-    return {"status": "ok", **_dues_payload(row, *_dues_rates(club, month))}
+    rb = _rates_for_month(club, month)
+    # tier 給執秘看：他在後台切換社友時，要看得出這個人的常年月費為什麼跟上一位不同
+    return {"status": "ok", "tier": rb["tier_of"].get(uid, ""),
+            **_dues_payload(row, *_member_rates(rb, uid))}
 
 
 def _clean_dues_items(body: dict) -> tuple[int, int, list]:
@@ -1734,7 +1788,7 @@ async def dues_save(request: Request):
         return {"status": "invalid", "message": "缺少社別 / 月份 / 社友"}
     meal, iou, customs = _clean_dues_items(body)
     db.upsert_dues(club, month, uid, meal, iou, customs)
-    total = _dues_total(meal, iou, customs, *_dues_rates(club, month))
+    total = _dues_total(meal, iou, customs, *_dues_rates(club, month, uid))
     notify = bool(body.get("notify", True))     # 預設通知，維持 LIFF 既有行為
     if notify:
         _push_dues_bill(uid, month, total)
@@ -1760,7 +1814,10 @@ async def dues_bulk_save(request: Request):
     # 報名費是逐人逐場的，批次記帳裡不該出現 event_id：留著的話這一場會被標記成
     # 全社每個人都繳過了，真正報名的人反而再也不會被列出來。
     customs = [{k: v for k, v in c.items() if k != "event_id"} for c in customs]
-    total = _dues_total(meal, iou, customs, *_dues_rates(club, month))
+    # 記上去的變動費用是同一份，但總額不是：固定月費隨各人的會籍類別而異，一個
+    # 共用的數字推播出去，B 類的社友收到的會是 A 類的金額。
+    items_total = (meal or 0) + (iou or 0) + sum(int(c.get("amount", 0) or 0) for c in customs)
+    rb = _rates_for_month(club, month)
     notify = bool(body.get("notify", True))
     overwrite = bool(body.get("overwrite", False))
     existing = {r["line_user_id"] for r in db.list_dues(club, month)
@@ -1771,12 +1828,18 @@ async def dues_bulk_save(request: Request):
             skipped += 1
             continue
         db.upsert_dues(club, month, uid, meal, iou, customs)
-        saved.append(uid)
+        saved.append((uid, _dues_total(meal, iou, customs, *_member_rates(rb, uid))))
     if notify:
-        for uid in saved:
+        for uid, total in saved:
             _push_dues_bill(uid, month, total)
+    distinct = {t for _, t in saved}
+    varies = len(distinct) > 1
     return {"status": "ok", "saved": len(saved), "skipped": skipped,
-            "total": total, "notified": notify}
+            # total 只有在每個人都一樣時才給得出來；不一樣時前端要改口說「每位變動
+            # 費用 X」，而不是報一個沒有人真的收到的數字。
+            "total": next(iter(distinct)) if len(distinct) == 1 else 0,
+            "items_total": items_total, "base_varies": varies,
+            "notified": notify}
 
 
 @app.post("/dues/bill_event_fees")
@@ -1801,6 +1864,7 @@ async def dues_bill_event_fees(request: Request):
     names = {m["line_user_id"]: (m.get("full_name") or "社友")
              for m in db.get_club_members(club)}
     rows = {r["line_user_id"]: r for r in db.list_dues(club, month)}
+    rb = _rates_for_month(club, month)   # 推播的總額含固定月費，而那個數字因人而異
     notify = bool(body.get("notify", True))
     billed, saved, skipped_confirmed, skipped_no_amount = 0, [], [], []
     for uid, items in fees.items():
@@ -1821,7 +1885,7 @@ async def dues_bill_event_fees(request: Request):
             "customs": customs})
         db.upsert_dues(club, month, uid, meal, iou, customs)
         billed += len(usable)
-        saved.append((uid, _dues_total(meal, iou, customs, *_dues_rates(club, month))))
+        saved.append((uid, _dues_total(meal, iou, customs, *_member_rates(rb, uid))))
     if notify:
         for uid, total in saved:
             _push_dues_bill(uid, month, total)
@@ -1839,7 +1903,10 @@ async def dues_me(request: Request, month: str = ""):
     month = month or date.today().strftime("%Y-%m")
     club = db.get_user_club(uid)
     row = db.get_dues(club, month, uid)
-    return {"status": "ok", "month": month, **_dues_payload(row, *_dues_rates(club, month))}
+    # 社友只看得到金額，看不到自己的會籍類別 —— 減免、榮譽這種事是社內的安排，
+    # 不掛在本人的帳單上。
+    return {"status": "ok", "month": month,
+            **_dues_payload(row, *_dues_rates(club, month, uid))}
 
 
 @app.post("/dues/pay")
@@ -2058,32 +2125,38 @@ def _advance_outstanding(ledger: dict, month: str) -> dict:
     }
 
 
-def _dues_rows(club: str, month: str, members: list[dict]) -> list[dict]:
+def _dues_rows(club: str, month: str, members: list[dict],
+               book: dict | None = None) -> list[dict]:
     """One row per member: what they were billed and how far the money got.
 
     Members with no bill are listed too — "執秘 hasn't billed 王大明 yet" is a hole
     in the month's takings just as much as "王大明 hasn't paid", and only this view
     can show it."""
     by_uid = {r["line_user_id"]: r for r in db.list_dues(club, month)}
-    rates = _dues_rates(club, month)     # 全社同一組費率，每個月查一次就好
+    # 這個月的費率查一次，逐人取值是純字典查找 —— 常年月費會因會籍類別而異，但
+    # 那份對照表整社共用一份。
+    rb = _rates_for_month(club, month, book)
     fees = _event_fees_by_uid(club, month)
     rows = []
     for m in members:
         uid = m["line_user_id"]
         rows.append(_dues_row(uid, m.get("full_name") or "", m.get("nickname") or "",
-                              by_uid.pop(uid, None), rates=rates,
+                              by_uid.pop(uid, None), rates=_member_rates(rb, uid),
+                              tier=rb["tier_of"].get(uid, ""),
                               event_fees=fees.get(uid, [])))
     # 有帳單、但 personal_information 裡查不到的人（已退社、資料未建）不能就這樣消失，
     # 否則看板的應收總額會對不上帳。
     for uid, row in by_uid.items():
-        rows.append(_dues_row(uid, _member_name(uid), "", row, orphan=True, rates=rates,
+        rows.append(_dues_row(uid, _member_name(uid), "", row, orphan=True,
+                              rates=_member_rates(rb, uid),
+                              tier=rb["tier_of"].get(uid, ""),
                               event_fees=fees.get(uid, [])))
     return rows
 
 
 def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
               orphan: bool = False, rates: tuple[int, int] = (DUES_BASE, DUES_DISTRICT),
-              event_fees: list[dict] | None = None) -> dict:
+              tier: str = "", event_fees: list[dict] | None = None) -> dict:
     """狀態只看錢收到哪一步：未繳 → 待對帳 → 已繳。
 
     沒有費用明細的社友一樣是「未繳」，金額算固定月費 —— 常年月費與地區分攤金
@@ -2094,6 +2167,9 @@ def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
     return {
         "uid": uid, "name": name or "（未建資料）", "nickname": nickname,
         "has_bill": d["has_bill"], "total": d["total"],
+        # 常年月費逐人給：同一個社裡不同會籍類別的人金額不一樣，帳單畫面不能再
+        # 拿看板層級的那一個數字去算總計（分攤金全社一律，仍然放在看板層級）。
+        "base": d["base"], "tier": tier,
         "meal": d["meal"], "iou": d["iou"], "customs": d["customs"],
         "is_paid": d["is_paid"], "confirmed": d["confirmed"],
         "bank_digits": (row or {}).get("bank_digits") or "",
@@ -2157,7 +2233,8 @@ def _carry_months(club: str, month: str, ledger: dict | None = None
     return months, opening, applies
 
 
-def _carry_forward(club: str, month: str, members: list[dict], ledger: dict) -> dict:
+def _carry_forward(club: str, month: str, members: list[dict], ledger: dict,
+                   book: dict | None = None) -> dict:
     """這個月開始時手上有多少 = 期初結餘 + 期初之後、本月之前每個月的淨額，
     外加每位社友從那些月份欠到現在的錢。
 
@@ -2172,8 +2249,10 @@ def _carry_forward(club: str, month: str, members: list[dict], ledger: dict) -> 
     # 的第一句話一定是「哪一個月？」
     arrears: dict[str, list[dict]] = {}
     advance_by_month = ledger.get("by_month", {})
+    if book is None:
+        book = _tier_book(club)     # 每個月都要用同一份類別對照表，別在迴圈裡各查一次
     for m in months:
-        rows = _dues_rows(club, m, members)
+        rows = _dues_rows(club, m, members, book)
         expense = _expense_summary(db.get_club_finance(club, m), advance_by_month.get(m, 0))
         carry += _dues_totals(rows)["confirmed"] - expense["total"]
         for r in rows:
@@ -2229,7 +2308,8 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
         return {"status": "no_club", "message": "找不到您的社別"}
     month = month if _valid_month(month) else _this_month()
     members = db.get_club_members(club)      # 結轉每個月都要用同一份名單，撈一次就好
-    rows = _dues_rows(club, month, members)
+    book = _tier_book(club)                  # 會籍類別的費率與指派，同樣整趟共用一份
+    rows = _dues_rows(club, month, members, book)
     rows.sort(key=lambda r: (["unpaid", "reported", "confirmed"].index(r["status"]), r["name"]))
     totals = _dues_totals(rows)
     # 代墊帳整個社算一次，看板與結轉共用：一個月一個月去算等於把最貴的查詢乘上月份數
@@ -2237,7 +2317,7 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
     expense = _expense_summary(db.get_club_finance(club, month),
                                ledger["by_month"].get(month, 0))
     net = totals["confirmed"] - expense["total"]
-    carry = _carry_forward(club, month, members, ledger)
+    carry = _carry_forward(club, month, members, ledger, book)
     # 每位社友把自己的上期未繳帶在身上：帳單編輯與明細表都要看得到「他還欠哪幾
     # 個月」，逐一去翻舊月份是沒有人會做的事。
     arrears = carry.pop("arrears", {})
@@ -2262,7 +2342,10 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
             # 收到的那些錢。closing 就是下個月的期初。
             **carry,
             "closing": carry["carry"] + net,
-            # 帳單編輯要顯示固定的兩項，金額由後端給，前端不自己抄一份常數
+            # 會籍類別：有在用的社才會是非空的，畫面照這個決定要不要顯示類別欄
+            "tiers": _tiers_payload(club, month),
+            # 帳單編輯要顯示固定的兩項，金額由後端給，前端不自己抄一份常數。
+            # base 是「全社預設」那一個；逐位社友的常年月費在他自己那一列上。
             **_rates_payload(club, month)}
 
 
@@ -2289,7 +2372,35 @@ async def dues_settings_get(request: Request, month: str = "", club: str = ""):
     return {"status": "ok", "club": club, "month": month,
             "default_base": DUES_BASE, "default_district": DUES_DISTRICT,
             "history": db.list_dues_settings(club),
+            "tiers": _tiers_payload(club, month),
             **_rates_payload(club, month)}
+
+
+def _tiers_payload(club: str, month: str) -> list[dict]:
+    """各會籍類別在這個月的常年月費、人數，以及它自己的生效歷程。
+
+    沒有任何類別的社回傳空陣列，畫面就跟以前一模一樣 —— 這個功能不該讓沒在用的
+    社多看到一塊東西。"""
+    book = _tier_book(club)
+    rb = _rates_for_month(club, month, book)
+    counts: dict[str, int] = {}
+    for uid, tier in rb["tier_of"].items():
+        if tier:
+            counts[tier] = counts.get(tier, 0) + 1
+    history: dict[str, list] = {}
+    for r in book["rates"]:
+        history.setdefault(r["tier"], []).append(
+            {"effective_month": r["effective_month"], "base": int(r["base"]),
+             "label": r.get("label") or ""})
+    return [{"tier": t,
+             # 這個月還沒有生效段落的類別：金額落回全社預設，畫面要講得出來，
+             # 不然執秘看到的是一個沒有來源的數字。
+             "base": rb["tier_base"].get(t, rb["default_base"]),
+             "label": rb["tier_label"].get(t, ""),
+             "rate_from": rb["tier_from"].get(t, ""),
+             "members": counts.get(t, 0),
+             "history": history.get(t, [])}
+            for t in sorted(history.keys() | counts.keys())]
 
 
 @app.post("/dues/settings")
@@ -2337,6 +2448,114 @@ async def dues_settings_delete(request: Request):
         return {"status": "invalid", "message": "生效月份格式需為 YYYY-MM"}
     db.delete_dues_settings(club, month)
     return {"status": "ok", "effective_month": month}
+
+
+# ── 會籍類別 ──────────────────────────────────────────────────────────────────
+# 類別是 A、B、C 這樣的代碼，社友被指到某一個類別，費率掛在類別上。單一字母是
+# 刻意的：這個社目前只有三種，取名字反而要多一套建檔、改名、停用的流程。
+_TIER_CODES = "ABCDEFGH"
+
+
+def _clean_tier(value) -> str | None:
+    """類別代碼：單一大寫字母，或空字串（＝全社預設）。認不出來的回 None。"""
+    t = str(value or "").strip().upper()
+    if t == "":
+        return ""
+    return t if len(t) == 1 and t in _TIER_CODES else None
+
+
+@app.post("/dues/tier_rate")
+async def dues_tier_rate_save(request: Request):
+    """設定某個會籍類別從哪個月起收多少常年月費。
+
+    跟全社費率同一個規矩：只往後生效，要更正舊的就存那一段自己的月份。回傳
+    affected_confirmed —— 這一段往後有幾張帳單已經對過帳了，畫面要先講清楚。
+
+    這裡沒有地區分攤金：分攤金是地區按人頭收的，全社一律，只在 /dues/settings 改。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        return {"status": "forbidden", "message": "無社費設定權限"}
+    body = await request.json()
+    club = _target_club(uid, str(body.get("club", "")).strip())
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    tier = _clean_tier(body.get("tier"))
+    if not tier:
+        return {"status": "invalid", "message": "會籍類別需為單一代碼（A、B、C…）"}
+    month = str(body.get("effective_month", "")).strip()
+    if not _valid_month(month):
+        return {"status": "invalid", "message": "生效月份格式需為 YYYY-MM"}
+    try:
+        base = int(body.get("base", 0) or 0)
+    except (TypeError, ValueError):
+        return {"status": "invalid", "message": "金額需為數字"}
+    if base < 0:
+        return {"status": "invalid", "message": "金額不可為負數"}
+    label = str(body.get("label", "")).strip()[:20]
+    db.save_tier_rate(club, tier, month, base, label)
+    book = _tier_book(club)
+    rb = _rates_for_month(club, month, book)
+    # 會被這一段影響的人：生效月當下就在這一類的，加上生效月之後才被指進來的。
+    # 只看當下的話，「十一月才改成 B 類」的那位不會被算到，但他從十一月起收的
+    # 正是這一段的錢。
+    members = {u for u, t in rb["tier_of"].items() if t == tier}
+    members |= {m["line_user_id"] for m in book["members"]
+                if m["tier"] == tier and m["effective_month"] >= month}
+    return {"status": "ok", "tier": tier, "effective_month": month, "base": base,
+            "label": label, "members": len(members),
+            "affected_confirmed": db.count_tier_confirmed_bills(club, sorted(members), month)}
+
+
+@app.post("/dues/tier_rate/delete")
+async def dues_tier_rate_delete(request: Request):
+    """刪掉某個類別的一段費率。它涵蓋的月份會落回前一段，沒有前一段就落回全社
+    預設 —— 也就是說掛在這個類別上的人金額會變，前端刪之前要先問。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        return {"status": "forbidden", "message": "無社費設定權限"}
+    body = await request.json()
+    club = _target_club(uid, str(body.get("club", "")).strip())
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    tier = _clean_tier(body.get("tier"))
+    month = str(body.get("effective_month", "")).strip()
+    if not tier or not _valid_month(month):
+        return {"status": "invalid", "message": "缺少類別 / 生效月份"}
+    db.delete_tier_rate(club, tier, month)
+    return {"status": "ok", "tier": tier, "effective_month": month}
+
+
+@app.post("/finance/roster/tier")
+async def finance_roster_tier(request: Request):
+    """把一位社友指到某個會籍類別，從某個月起算。
+
+    指派本身也是分月段的：七月才改成 B 類的人，一到六月的帳仍然要用他當時的類別
+    算。看板的欠款與期初結轉都是把舊月份重算一遍的，少了這一層，改一次類別會把
+    他過去每個月的欠款金額一起改掉。
+
+    tier 留空 = 從那個月起回到全社預設；clear=true 則是把那一段整個拿掉（指派記
+    錯月份時用的）。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(uid):
+        return {"status": "forbidden", "message": "無社費設定權限"}
+    body = await request.json()
+    club = _target_club(uid, str(body.get("club", "")).strip())
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    member = str(body.get("uid", "")).strip()
+    month = str(body.get("effective_month", "")).strip()
+    if not member or not _valid_month(month):
+        return {"status": "invalid", "message": "缺少社友 / 生效月份"}
+    if bool(body.get("clear", False)):
+        db.delete_member_tier(club, member, month)
+        return {"status": "ok", "uid": member, "effective_month": month, "cleared": True}
+    tier = _clean_tier(body.get("tier"))
+    if tier is None:
+        return {"status": "invalid", "message": "會籍類別需為單一代碼（A、B、C…）"}
+    db.save_member_tier(club, member, month, tier)
+    base, district = _dues_rates(club, month, member)
+    return {"status": "ok", "uid": member, "tier": tier, "effective_month": month,
+            "base": base, "district": district}
 
 
 @app.post("/finance/confirm")
@@ -2404,15 +2623,27 @@ def _is_line_bound(uid: str) -> bool:
 
 
 @app.get("/finance/roster")
-async def finance_roster(request: Request, club: str = ""):
-    """執秘自己社的名冊，附上刪除前該知道的事：有沒有綁 LINE、有幾個月的帳單。"""
+async def finance_roster(request: Request, club: str = "", month: str = ""):
+    """執秘自己社的名冊，附上刪除前該知道的事：有沒有綁 LINE、有幾個月的帳單。
+
+    會籍類別也在這裡指派，所以要帶 month —— 「這個人現在是哪一類」問的其實是
+    「他在這個月是哪一類」，指派是分月段的。"""
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         raise HTTPException(status_code=403, detail="無社友名冊管理權限")
     club = _target_club(admin_uid, club)
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
+    month = month if _valid_month(month) else _this_month()
     dues_months = db.dues_month_counts(club)
+    book = _tier_book(club)
+    rb = _rates_for_month(club, month, book)
+    # 這一位的指派是從哪個月起生效的：畫面要寫「B（2026-09 起）」，否則執秘看不出
+    # 眼前這個類別是本來就這樣，還是他上禮拜才改的。
+    tier_from: dict[str, str] = {}
+    for m in book["members"]:
+        if m["effective_month"] <= month and m["line_user_id"] not in tier_from:
+            tier_from[m["line_user_id"]] = m["effective_month"]
     members = []
     for m in db.club_member_rows(club):
         uid = m["line_user_id"]
@@ -2423,8 +2654,12 @@ async def finance_roster(request: Request, club: str = ""):
             "diet_type": m.get("diet_type") or "",
             "line_bound": _is_line_bound(uid),
             "dues_months": dues_months.get(uid, 0),
+            "tier": rb["tier_of"].get(uid, ""),
+            "tier_from": tier_from.get(uid, ""),
+            "base": _member_rates(rb, uid)[0],
         })
-    return {"status": "ok", "club": club, "members": members,
+    return {"status": "ok", "club": club, "month": month, "members": members,
+            "tiers": _tiers_payload(club, month),
             "diet_types": list(_DIET_TYPES)}
 
 
@@ -2456,9 +2691,20 @@ async def finance_roster_add(request: Request):
     left = db.find_left_member(club, name)
     if left:
         db.restore_club_member(club, left["line_user_id"], nickname, diet)
+        _assign_new_member_tier(club, left["line_user_id"], body)
         return {"status": "ok", "uid": left["line_user_id"], "name": name, "restored": True}
     uid = db.create_club_member(club, name, nickname, diet)
+    _assign_new_member_tier(club, uid, body)
     return {"status": "ok", "uid": uid, "name": name, "restored": False}
+
+
+def _assign_new_member_tier(club: str, uid: str, body: dict) -> None:
+    """入社就順手歸類。沒指定類別就不寫 —— 不寫等於走全社預設，跟以前一樣。"""
+    tier = _clean_tier(body.get("tier"))
+    if not tier:
+        return
+    month = str(body.get("effective_month", "")).strip()
+    db.save_member_tier(club, uid, month if _valid_month(month) else _this_month(), tier)
 
 
 @app.post("/finance/roster/delete")
@@ -2492,10 +2738,11 @@ async def finance_trend(request: Request, months: int = 6, end: str = "", club: 
     if not club:
         return {"status": "no_club", "message": "找不到您的社別"}
     members = db.get_club_members(club)     # 社友名單每個月都一樣，撈一次就好
+    book = _tier_book(club)                 # 會籍類別也是，別在月份迴圈裡各查一次
     advance_by_month = _advance_ledger(club)["by_month"]
     out = []
     for m in _month_list(max(1, min(int(months or 6), 24)), end):
-        totals = _dues_totals(_dues_rows(club, m, members))
+        totals = _dues_totals(_dues_rows(club, m, members, book))
         expense = _expense_summary(db.get_club_finance(club, m), advance_by_month.get(m, 0))
         out.append({"month": m, "expected": totals["expected"],
                     "received": totals["confirmed"], "expense": expense["total"],

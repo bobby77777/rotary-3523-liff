@@ -1247,8 +1247,9 @@ let userRole = 'member';      // 'member' | 'chairperson'
 // 壓成粗略的兩種，但「地區管理」這種只給最高管理員的功能得看原本的角色。
 let systemRole = 'member';
 let myClubName = '';          // set from backend /me
-// 常年月費／地區分攤金：本社該月生效的費率，由 /dues/member 帶回來。這裡不放
-// 預設數字——寫死一份就會跟後端的費率設定各走各的，帳單總計算出來會對不上。
+// 常年月費／地區分攤金：目前選到的那位社友該月適用的費率，由 /dues/member 帶回來
+// （常年月費會因會籍類別而異，不是全社一個數字）。這裡不放預設數字——寫死一份就會
+// 跟後端的費率設定各走各的，帳單總計算出來會對不上。
 let duesRates = { base: 0, district: 0 };
 let activeTab = 'home';
 let systemScope = 'district'; // 'district' | 'club'
@@ -3247,16 +3248,20 @@ async function loadDuesData() {
     const uid = document.getElementById('dues-member').value;
     const badge = document.getElementById('dues-payment-status');
     if (!uid) { badge.innerHTML = ''; return; }
-    // 撈不到就沿用上一次的費率，歸零反而會算出錯的總計
-    let d = { meal: 0, iou: 0, customs: [], is_paid: false, ...duesRates };
+    // 撈不到就把費率歸零、金額顯示 —— 常年月費會因會籍類別而異，沿用上一位社友
+    // 的數字等於在這一位的帳單上寫別人的月費。
+    let d = { meal: 0, iou: 0, customs: [], is_paid: false, base: 0, district: 0 };
+    let ok = false;
     try {
         const r = await apiFetch(`/dues/member?club=${encodeURIComponent(myClubName)}&month=${month}&uid=${uid}`);
-        if (r.status === 'ok') d = r;
+        if (r.status === 'ok') { d = r; ok = true; }
     } catch (e) { /* keep defaults */ }
-    // 常年月費／地區分攤金由後端按該月生效的費率給，前端不留第二份數字
+    // 常年月費／地區分攤金由後端按該月、該人適用的費率給，前端不留第二份數字
     duesRates = { base: Number(d.base) || 0, district: Number(d.district) || 0 };
-    document.getElementById('dues-base-amount').innerText = `NT$ ${Number(d.base).toLocaleString()}`;
-    document.getElementById('dues-district-amount').innerText = `NT$ ${Number(d.district).toLocaleString()}`;
+    const amount = v => ok ? `NT$ ${Number(v).toLocaleString()}` : '—';
+    document.getElementById('dues-base-amount').innerText = amount(d.base)
+        + (ok && d.tier ? `（${d.tier} 類）` : '');
+    document.getElementById('dues-district-amount').innerText = amount(d.district);
     badge.innerHTML = d.is_paid
         ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-black border border-emerald-200 shadow-sm"><i class="fa-solid fa-check"></i> 已收繳費</span>`
         : `<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px] font-black border border-rose-200 shadow-sm"><i class="fa-solid fa-triangle-exclamation"></i> 尚未繳費</span>`;
