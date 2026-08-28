@@ -153,10 +153,6 @@
            而且那些列在 PDF 裡會被裁掉。 */
         #canvas .timeline-container.overflowing { box-shadow: inset 0 -18px 14px -14px rgba(198,40,40,0.55); }
         #canvas .rotary-creed-footer.overflowing { box-shadow: inset 0 -14px 10px -10px rgba(198,40,40,0.55); }
-        /* P4 兩種版型的內容區也是 overflow:auto：編輯時捲得到，列印時卻是直接裁掉。
-           跟 P2 同一個紅色下緣，告訴主委「這裡以下印不出來」。 */
-        #canvas .p4-scroll-area.overflowing,
-        #canvas .p4-list-scroll.overflowing { box-shadow: inset 0 -18px 14px -14px rgba(198,40,40,0.55); }
         .timeline-container::-webkit-scrollbar { width: 5px; }
         .timeline-container::-webkit-scrollbar-track { background: transparent; }
         .timeline-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
@@ -254,27 +250,6 @@
 
         /* --- P4 --- */
         .layout-p4 { padding: 40px 50px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
-
-        /* 滿版（封底海報）：整張 A4 只有一張圖，四邊不留白。
-           頁首與頁尾要一起讓開 —— 留著就不叫滿版了；用 :has() 而不是在 canvas 上加
-           class，因為發布出去的是 .canvas 的「內容」，外層那個 div 是閱覽器現組的，
-           class 帶不過去。編輯器、社友閱覽、列印三邊因此走同一條規則。
-           所有尺寸都用 % 與 object-fit: cover：圖片再大也只會被裁掉，不會把版面撐開
-           ——超出 A4 的那部分列印時就是不見了，而執秘要到印出來才會發現。 */
-        .canvas:has(.layout-p4-bleed) > .page-header,
-        .canvas:has(.layout-p4-bleed) > .page-footer { display: none; }
-        .layout-p4-bleed { position: relative; width: 100%; height: 100%; overflow: hidden; background: #111; }
-        .layout-p4-bleed > img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        /* 疊字區塊：底部一條漸層，白字壓在圖上仍然讀得到。不要就整塊刪掉（－）。 */
-        .p4-bleed-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 50px;
-            background: linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,.35) 60%, rgba(0,0,0,0));
-            color: #fff; box-sizing: border-box; max-height: 60%; overflow: hidden; }
-        .p4-bleed-title { font-family: var(--font-head); font-size: 34px; font-weight: bold; line-height: 1.25;
-            text-shadow: 0 2px 12px rgba(0,0,0,.5); }
-        .p4-bleed-sub { font-family: var(--font-body); font-size: 15px; margin-top: 10px; opacity: .92;
-            text-shadow: 0 1px 8px rgba(0,0,0,.5); }
-        .p4-bleed-tag { display: inline-block; font-family: var(--font-body); font-size: 12px; font-weight: bold;
-            background: var(--c-secondary); color: #000; padding: 4px 12px; margin-bottom: 14px; }
         .p4-main-title { font-family: var(--font-head); font-size: 32px; color: var(--c-primary); margin-bottom: 20px; text-align: center; font-weight: bold; border-bottom: 2px solid var(--c-secondary); padding-bottom: 15px; flex-shrink: 0; }
         .p4-dual-headers { display: flex; gap: 30px; flex-shrink: 0; padding-right: 15px; margin-bottom: 15px; }
         .p4-col-title { flex: 1; font-size: 20px; color: #fff; background: var(--c-primary); padding: 8px 15px; border-radius: 4px; font-weight: bold; display: flex; align-items: center; justify-content: space-between; border-left: 6px solid var(--c-secondary); margin: 0; }
@@ -670,8 +645,7 @@
             1: { variants: [{ id: 'A', name: '雜誌封面型' }, { id: 'B', name: '權威雙欄型' }] },
             2: { variants: [{ id: 'A', name: '時間軸型' }] },
             3: { variants: [] },
-            4: { variants: [{ id: 'A', name: '雙欄資訊卡 (正式菁英感)' }, { id: 'B', name: '現代行事曆 (清晰俐落)' },
-                            { id: 'F', name: '滿版海報 (整頁一張圖)' }] }
+            4: { variants: [{ id: 'A', name: '雙欄資訊卡 (正式菁英感)' }, { id: 'B', name: '現代行事曆 (清晰俐落)' }] }
         };
 
         let globalZIndex = 100;
@@ -729,16 +703,11 @@
             const item = btn.closest('.p4-card') || btn.closest('.p4-list-item');
             const clone = item.cloneNode(true);
             item.parentNode.insertBefore(clone, item.nextSibling);
-            // 多加一筆很容易就超出一頁，而超出的部分是安靜被裁掉的
-            showToast(checkP4() ? P4_FULL_MSG : '✅ 已新增一筆預告事項！');
+            showToast('✅ 已新增一筆預告事項！');
         };
         window.delItem = function(btn) {
-            // 滿版海報的疊字是整塊刪掉（刪完剩純圖片的封底），所以它也算一種 item
-            const item = btn.closest('.p4-card') || btn.closest('.p4-list-item')
-                || btn.closest('.p4-bleed-overlay');
-            if (!item) return;
+            const item = btn.closest('.p4-card') || btn.closest('.p4-list-item');
             item.remove();
-            checkP4();          // 刪掉之後可能就放得下了，紅線要跟著收掉
             showToast('🗑️ 已刪除該項目。');
         };
 
@@ -1070,22 +1039,6 @@
                                 </div>
                             </div>
                         </div>`;
-                } else if (layout === 'F') {
-                    // 滿版海報：整頁一張圖，四邊出血。圖點一下換掉；文字疊在下緣的
-                    // 漸層上，不需要的話按「－」整塊刪掉，就是純圖片的封底。
-                    return `
-                        <div class="layout-p4-bleed">
-                            <img class="editable-image" onclick="uploadImage(this)"
-                                 src="https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=1200&q=80">
-                            <div class="p4-bleed-overlay">
-                                <div class="p4-bleed-tag" contenteditable="true">SAVE THE DATE</div>
-                                <div class="p4-bleed-title resize-x" contenteditable="true">2025-26 年度<br>社長交接暨授證典禮</div>
-                                <div class="p4-bleed-sub resize-x" contenteditable="true">2025/09/26 (五) 18:00　台北喜來登飯店 B2 宴會廳<br>敬請著正式服裝，攜眷參加</div>
-                                <div class="item-add-del" contenteditable="false">
-                                    <button onclick="delItem(this)" title="刪除整塊文字，只留滿版圖">－</button>
-                                </div>
-                            </div>
-                        </div>`;
                 }
             }
             return '';
@@ -1124,8 +1077,6 @@
             // 切到第 2 頁或載入舊社刊時重新適配：舊社刊是在還沒有密度層級的年代存的，
             // 列數多的那幾份載進來就會自己縮好。
             if (page === 2) { fitTimeline(); refitWhenFontsReady(); }
-            // 第 4 頁：切過來或載入舊社刊時先量一次，放不下的話紅線當場就在
-            if (page === 4) { checkP4(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(checkP4).catch(() => {}); }
             addTouchHandles();
 
             // 重新綁定 P3 動態拼接的拖曳事件
@@ -1421,29 +1372,6 @@
             return overflowing || creedCut;
         }
 
-        const P4_FULL_MSG = '⚠️ 第 4 頁已經放不下了：紅線以下在社員閱覽與列印會被裁掉，'
-            + '請刪掉幾筆，或改用「滿版海報」版型。';
-
-        // P4 的內容區是 overflow:auto —— 編輯時捲得到，列印與社員閱覽卻是直接裁掉，
-        // 執秘要到印出來才會發現少了幾筆。量一次、標紅、發布前問一聲，跟 P2 同一套。
-        // 滿版海報版型沒有這個問題（圖片是 object-fit: cover，只會被裁不會撐開），
-        // 所以那一版根本沒有 .layout-p4，這裡自然就跳過。
-        function checkP4Overflow(root, mark) {
-            const layout = root && root.querySelector('.layout-p4');
-            if (!layout) return false;
-            const areas = [...layout.querySelectorAll('.p4-scroll-area, .p4-list-scroll')];
-            let over = false;
-            areas.forEach(a => {
-                // 量不到（還沒排版的容器高度是 0）就當作沒事，不要憑空標紅
-                const cut = !!a.clientHeight && a.scrollHeight > a.clientHeight + 1;
-                over = over || cut;
-                if (mark) a.classList.toggle('overflowing', cut);
-            });
-            return over;
-        }
-
-        function checkP4() { return checkP4Overflow(document.getElementById('canvas'), true); }
-
         // 量測要在字型載入後才算數：Noto 跟系統替代字的行高不一樣，會選到不同的密度，
         // 而選到哪一級是會跟著存進發布版本的。
         function refitWhenFontsReady() {
@@ -1542,7 +1470,7 @@
         function scheduleFit() {
             if (fitPending) return;
             fitPending = true;
-            requestAnimationFrame(() => { fitPending = false; fitTimeline(); checkP4(); });
+            requestAnimationFrame(() => { fitPending = false; fitTimeline(); });
         }
 
         function showToast(msg) {
@@ -1592,10 +1520,6 @@
                 showToast("⚠️ 請至少選擇一頁進行匯出！");
                 return;
             }
-            // 印出來才發現少了幾筆是最貴的一種發現方式 —— 先問。
-            // 只有第 4 頁真的在這一批裡才問，而且只有正在編第 4 頁時量得到。
-            if (pagesToExport.includes(4) && state.page === 4 && checkP4()
-                && !confirm(P4_FULL_MSG.replace('⚠️ ', '') + '\n\n仍要匯出嗎？')) return;
 
             hideExportModal();
             downloadPDF(pagesToExport);
@@ -1687,13 +1611,6 @@
             // 不能只靠新增當下那則會消失的提示。
             if (fitTimeline()) {
                 if (!confirm(TIMELINE_FULL_MSG.replace('⚠️ ', '') + '\n\n仍要發布嗎？')) {
-                    publishBusy = false;
-                    return;
-                }
-            }
-            // 第 4 頁同理：超出的那幾筆社員看不到、也印不出來
-            if (checkP4()) {
-                if (!confirm(P4_FULL_MSG.replace('⚠️ ', '') + '\n\n仍要發布嗎？')) {
                     publishBusy = false;
                     return;
                 }
