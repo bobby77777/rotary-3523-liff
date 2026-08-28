@@ -1620,36 +1620,42 @@
             if (!area) return null;
             const fits = () => area.scrollHeight <= area.clientHeight + 1;
             if (fits()) return null;
+            // 這一頁的「可見底線」。比的是每個項目的實際位置，不是容器高度：
+            // 兩欄是 flex 子元素，會互相拉成一樣高，拿 scrollHeight 比高低永遠平手，
+            // 結果每次都從同一欄搬 —— 那一欄會被搬光，另一欄卻還空著半頁。
+            const limit = area.getBoundingClientRect().top + area.clientHeight;
+            // 超出底線的第一個項目，以及它後面的全部，搬到續頁。
+            // 回傳的第一個項目若是整頁都裝不下的巨無霸（cut 為 0），就留著讓它被裁 ——
+            // 搬到下一頁還是一樣裝不下，只會一直生新頁。
+            const cutFrom = (nodes) => {
+                for (let i = 0; i < nodes.length; i++) {
+                    if (nodes[i].getBoundingClientRect().bottom > limit + 1) return i || 1;
+                }
+                return -1;
+            };
             const cols = [...root.querySelectorAll('.p4-col-body')];
             if (cols.length) {
-                const spill = cols.map(() => []);
-                for (let guard = 0; guard < 200 && !fits(); guard++) {
-                    // 挑目前最高的那一欄；沒有卡片可搬就停手（避免無限迴圈）
-                    let idx = -1, tallest = -1;
-                    cols.forEach((c, i) => {
-                        const cards = c.querySelectorAll('.p4-card');
-                        if (cards.length && c.scrollHeight > tallest) { tallest = c.scrollHeight; idx = i; }
-                    });
-                    if (idx < 0) break;
-                    const cards = cols[idx].querySelectorAll('.p4-card');
-                    const last = cards[cards.length - 1];
-                    spill[idx].unshift(last.outerHTML);
-                    last.remove();
-                }
+                // 兩欄各自是一份清單（例會／活動），所以各自量到頁底為止，
+                // 兩欄都會填滿才換頁。
+                const spill = cols.map(c => {
+                    const cards = [...c.querySelectorAll('.p4-card')];
+                    const cut = cutFrom(cards);
+                    if (cut < 0) return [];
+                    return cards.slice(cut).map(card => { const h = card.outerHTML; card.remove(); return h; });
+                });
                 return spill.some(s => s.length) ? { cards: spill } : null;
             }
             const list = root.querySelector('.p4-list-scroll');
             if (!list) return null;
-            const items = [];
-            for (let guard = 0; guard < 200 && !fits(); guard++) {
-                const last = list.lastElementChild;
-                if (!last) break;
-                items.unshift(last.outerHTML);
-                last.remove();
-            }
+            const kids = [...list.children];
+            const cut = cutFrom(kids);
+            const items = cut < 0 ? []
+                : kids.slice(cut).map(el => { const h = el.outerHTML; el.remove(); return h; });
             // 最後留在頁尾的分組標題（下面已經沒有項目了）跟著搬過去，
-            // 不然這一頁會結束在一個空標題上。
-            while (list.lastElementChild && list.lastElementChild.classList.contains('p4-list-group-title')) {
+            // 不然這一頁會結束在一個空標題上。真的有東西被搬走時才做 ——
+            // 整頁都放得下的時候，尾巴的標題本來就該留在原地。
+            while (items.length && list.lastElementChild
+                && list.lastElementChild.classList.contains('p4-list-group-title')) {
                 items.unshift(list.lastElementChild.outerHTML);
                 list.lastElementChild.remove();
             }
