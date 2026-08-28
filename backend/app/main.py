@@ -1788,11 +1788,10 @@ async def dues_member(request: Request, club: str = "", month: str = "", uid: st
     # club 是呼叫端給的，之前照單全收 —— 任何一位管理員都能讀別的社的帳單。
     # 現在只有跨地區管理員指定得動，其餘人一律自己的社。
     club = _target_club(admin_uid, club)
-    row = db.get_dues(club, month, uid) if (month and uid) else None
     rb = _rates_for_month(club, month)
     # tier 給執秘看：他在後台切換社友時，要看得出這個人的常年月費為什麼跟上一位不同
     return {"status": "ok", "tier": rb["tier_of"].get(uid, ""),
-            **_dues_payload(row, *_member_rates(rb, uid))}
+            **_member_month(club, uid, month, rb)}
 
 
 def _clean_dues_items(body: dict) -> tuple[int, int, list]:
@@ -1958,11 +1957,9 @@ async def dues_me(request: Request, month: str = ""):
         return {"status": "no_user"}
     month = month or date.today().strftime("%Y-%m")
     club = db.get_user_club(uid)
-    row = db.get_dues(club, month, uid)
     # 社友只看得到金額，看不到自己的會籍類別 —— 減免、榮譽這種事是社內的安排，
-    # 不掛在本人的帳單上。
-    return {"status": "ok", "month": month,
-            **_dues_payload(row, *_dues_rates(club, month, uid))}
+    # 不掛在本人的帳單上。溢繳餘額則要看得到：不然他會照著總計再匯一次全額。
+    return {"status": "ok", "month": month, **_member_month(club, uid, month)}
 
 
 @app.post("/dues/pay")
@@ -2230,28 +2227,129 @@ def _dues_row(uid: str, name: str, nickname: str, row: dict | None,
         "meal": d["meal"], "iou": d["iou"], "customs": d["customs"],
         "is_paid": d["is_paid"], "confirmed": d["confirmed"],
         "bank_digits": (row or {}).get("bank_digits") or "",
+        "paid_amount": (row or {}).get("paid_amount"),
         "status": status, "orphan": orphan,
         # 這個月報名的地區活動裡，還沒記進任何一張帳單的那些
         "event_fees": event_fees or [],
+        # 溢繳結算的欄位先用「沒有溢繳」預設好：沒經過 _settle_month 的呼叫端
+        # （單月查詢、舊的路徑）才會拿到跟以前一模一樣的數字。
+        **_settle_row({"total": d["total"], "confirmed": d["confirmed"],
+                       "paid_amount": (row or {}).get("paid_amount")}, 0),
     }
 
 
+def _settle_row(row: dict, credit_in: int) -> dict:
+    """一位社友、一個月的結算：先用溢繳抵，再看實際收到多少。
+
+        抵扣 = min(帶進來的溢繳, 帳單金額)
+        還要付的現金 = 帳單金額 － 抵扣
+        對過帳的話，實收 = paid_amount（NULL 就是「剛好繳完該付的」）
+        實收比該付的多 → 多的留到下個月；少 → 短的留在這個月當欠款
+
+    短收刻意不變成「負的溢繳」：負餘額會把債務悄悄搬離它發生的月份，而執秘追繳
+    的第一句話就是「哪一個月？」。被溢繳抵光的月份 settled 為真但沒有 confirmed
+    —— 沒有現金要確認，不該掛在未繳名單上等人去按一顆沒有意義的按鈕。"""
+    billed = int(row.get("total") or 0)
+    applied = min(max(credit_in, 0), billed)
+    net_due = billed - applied
+    left = max(credit_in, 0) - applied
+    if row.get("confirmed"):
+        paid = row.get("paid_amount")
+        paid = net_due if paid is None else int(paid)
+        return {"credit_available": credit_in, "credit_applied": applied,
+                "due_now": net_due, "credit_left": left + max(0, paid - net_due),
+                "credit_earned": max(0, paid - net_due),
+                "cash": paid, "short": max(0, net_due - paid), "settled": True}
+    # 沒對帳的月份只有「真的被溢繳抵掉」才算結清。金額本來就是 0 的帳單不算 ——
+    # 那不是收到了錢，是根本沒有帳，人數統計要跟以前一樣把它留在未繳那一欄。
+    return {"credit_available": credit_in, "credit_applied": applied,
+            "due_now": net_due, "credit_left": left, "credit_earned": 0,
+            "cash": 0, "short": net_due, "settled": net_due == 0 and applied > 0}
+
+
+def _member_credit(club: str, uid: str, month: str) -> int:
+    """這位社友走到 month 之前，累積剩下多少溢繳。
+
+    折疊逐人獨立（A 的餘額不會讀到 B 的任何一列），所以社友自己開帳單、或執秘在
+    後台查單一社友時，不必把整個社每個月重算一遍。走的月份清單與抵扣規則跟看板
+    的結轉完全相同 —— 兩邊算出不一樣的餘額比算不出來更糟。"""
+    months, _opening, _applies = _carry_months(club, month)
+    if not (club and uid and months):
+        return 0
+    by_month = {r["month"]: r for r in db.list_member_dues(club, uid)}
+    book = _tier_book(club)
+    credit = 0
+    for m in months:
+        row = by_month.get(m)
+        d = _dues_payload(row, *_dues_rates(club, m, uid, _rates_for_month(club, m, book)))
+        credit = _settle_row({"total": d["total"], "confirmed": d["confirmed"],
+                              "paid_amount": (row or {}).get("paid_amount")},
+                             credit)["credit_left"]
+    return credit
+
+
+def _member_month(club: str, uid: str, month: str, rb: dict | None = None) -> dict:
+    """一位社友某個月的帳單：金額、繳款狀態，加上溢繳抵扣後真正要付多少。"""
+    row = db.get_dues(club, month, uid) if (club and month and uid) else None
+    rb = rb if rb is not None else _rates_for_month(club, month)
+    d = _dues_payload(row, *_member_rates(rb, uid))
+    s = _settle_row({"total": d["total"], "confirmed": d["confirmed"],
+                     "paid_amount": (row or {}).get("paid_amount")},
+                    _member_credit(club, uid, month))
+    return {**d, **s, "paid_amount": (row or {}).get("paid_amount"),
+            "bank_digits": (row or {}).get("bank_digits") or ""}
+
+
+def _settle_month(rows: list[dict], credit_in: dict) -> dict:
+    """把一個月的每一列結算掉，回傳下個月要帶過去的 uid -> 溢繳餘額。
+
+    狀態在這裡才細化：_dues_row 手上沒有溢繳的上下文，它只知道對帳與否。"""
+    credit_out: dict[str, int] = {}
+    for r in rows:
+        s = _settle_row(r, int(credit_in.get(r["uid"], 0)))
+        r.update(s)
+        if not r["confirmed"] and s["settled"] and s["credit_applied"]:
+            r["status"] = "credited"
+        if s["credit_left"]:
+            credit_out[r["uid"]] = s["credit_left"]
+    return credit_out
+
+
 def _dues_totals(rows: list[dict]) -> dict:
-    """應收 = 全社每個人的應繳，含只有固定月費的人。收繳率看的是「已繳」，
-    社友自己回報但執秘還沒對到的錢還沒真的進帳。"""
+    """應收 = 全社每個人的應繳，含只有固定月費的人。
+
+    這裡有兩個長得很像、但絕對不能混用的數字：
+
+      settled = 帳單結清了多少（收繳率、應收看板看這個）
+      cash    = 實際進了多少錢（社的結餘、趨勢圖看這個）
+
+    沒有人溢繳時兩者相等，那正是以前只用一個 confirmed 也不會出錯的原因。有人
+    一次匯一整年之後就不等了：那個月現金多收、但只結清了一個月的帳單，而結轉要
+    的是現金，收繳率要的是帳單。
+
+        cash = Σ已對帳的帳單金額 － Σ抵扣 ＋ Σ新產生的溢繳 － Σ短收
+    """
     expected = sum(r["total"] for r in rows)
-    confirmed = sum(r["total"] for r in rows if r["confirmed"])
-    reported = sum(r["total"] for r in rows if r["is_paid"] and not r["confirmed"])
+    settled = sum(r["total"] for r in rows if r["settled"])
+    cash = sum(r["cash"] for r in rows)
+    reported = sum(r["total"] for r in rows if r["is_paid"] and not r["settled"])
     return {
         "members": len(rows),
         # 還沒登過餐費／IOU 的人數：不是狀態，是「批次記帳」的對象
         "no_bill": sum(1 for r in rows if not r["has_bill"]),
-        "expected": expected, "confirmed": confirmed, "reported": reported,
-        "outstanding": expected - confirmed - reported,
-        "confirmed_count": sum(1 for r in rows if r["confirmed"]),
-        "reported_count": sum(1 for r in rows if r["is_paid"] and not r["confirmed"]),
-        "unpaid_count": sum(1 for r in rows if not r["is_paid"]),
-        "rate": round(confirmed / expected * 100) if expected else 0,
+        "expected": expected, "settled": settled, "cash": cash, "reported": reported,
+        # confirmed 留著是資料庫事實（有幾筆被按過對帳），沒有人再拿它算錢
+        "confirmed": sum(r["total"] for r in rows if r["confirmed"]),
+        "outstanding": expected - settled - reported,
+        "credit_applied": sum(r["credit_applied"] for r in rows),
+        "credit_earned": sum(r["credit_earned"] for r in rows),
+        "credit_outstanding": sum(r["credit_left"] for r in rows),
+        "shortfall": sum(r["short"] for r in rows if r["confirmed"]),
+        "confirmed_count": sum(1 for r in rows if r["settled"]),
+        "credited_count": sum(1 for r in rows if r["status"] == "credited"),
+        "reported_count": sum(1 for r in rows if r["is_paid"] and not r["settled"]),
+        "unpaid_count": sum(1 for r in rows if not r["is_paid"] and not r["settled"]),
+        "rate": round(settled / expected * 100) if expected else 0,
     }
 
 
@@ -2290,6 +2388,25 @@ def _carry_months(club: str, month: str, ledger: dict | None = None
     return months, opening, applies
 
 
+def _months_between(start: str, end_exclusive: str) -> list[str]:
+    """start 到 end_exclusive（不含）之間每一個月，含中間沒有任何紀錄的月份。
+
+    溢繳要逐月抵下去，而「執秘還沒開過帳的月份」在 club_dues 裡是一列都沒有的。
+    只走有紀錄的月份，那些空月份就不會把餘額吃掉，同一筆溢繳會在之後每一個月都
+    被當成還能用 —— 一筆錢抵兩次。固定月費本來就不存在帳單列裡（見 db.md），
+    月份是不是「有帳」跟他要不要繳這個月無關。"""
+    if not (start and end_exclusive):
+        return []
+    y, m = int(start[:4]), int(start[5:7])
+    out: list[str] = []
+    while f"{y:04d}-{m:02d}" < end_exclusive:
+        out.append(f"{y:04d}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+        if len(out) > 240:          # 二十年的保險絲，資料壞掉時不要無限跑
+            break
+    return out
+
+
 def _carry_forward(club: str, month: str, members: list[dict], ledger: dict,
                    book: dict | None = None) -> dict:
     """這個月開始時手上有多少 = 期初結餘 + 期初之後、本月之前每個月的淨額，
@@ -2298,28 +2415,42 @@ def _carry_forward(club: str, month: str, members: list[dict], ledger: dict,
     逐月累加而不是存一個數字：任何一個舊月份被更正（補記一筆餐費、改對帳狀態），
     往後每一個月的期初都要跟著變，存起來的快照只會慢慢跟事實脫節。
 
-    社的結餘與社友的欠款走同一趟迴圈：兩者都是「把之前每個月再看一遍」，各跑
-    一次等於把最貴的部分做兩遍，也給了兩份可能對不起來的答案。"""
+    社的結餘、社友的欠款與溢繳餘額走同一趟迴圈：三者都是「把之前每個月再看一遍」，
+    各跑一次等於把最貴的部分做三遍，也給了三份可能對不起來的答案。"""
     months, opening, applies = _carry_months(club, month, ledger)
     carry = int(opening["amount"]) if applies else 0
     # uid -> [{month, amount, is_paid}]：欠的是哪幾個月要講得出來，社友被要求補繳
     # 的第一句話一定是「哪一個月？」
     arrears: dict[str, list[dict]] = {}
+    credit: dict[str, int] = {}
     advance_by_month = ledger.get("by_month", {})
     if book is None:
         book = _tier_book(club)     # 每個月都要用同一份類別對照表，別在迴圈裡各查一次
-    for m in months:
+    # 走的是連續的月份，中間沒開過帳的月份也要走過去把溢繳抵掉（見 _months_between）。
+    # 但欠款只列有紀錄的那些月份 —— 「上期未繳只列執秘開過帳的月份」是本來就有的
+    # 規矩，這次不動它。
+    billed = set(months)
+    for m in (_months_between(months[0], month) if months else []):
         rows = _dues_rows(club, m, members, book)
+        # 上個月剩下的溢繳帶進這個月抵扣，抵完剩下的再帶去下一個月
+        credit = _settle_month(rows, credit)
+        if m not in billed:
+            continue
         expense = _expense_summary(db.get_club_finance(club, m), advance_by_month.get(m, 0))
-        carry += _dues_totals(rows)["confirmed"] - expense["total"]
+        # 結轉看的是真的進來的錢，不是結清了多少帳單：社友一次匯一整年時，那個月
+        # 的現金比帳單多，而銀行裡的數字是現金。
+        carry += _dues_totals(rows)["cash"] - expense["total"]
         for r in rows:
-            # 對過帳的才算收到。社友自己回報但還沒對到的仍然掛在他頭上，只是標記
-            # 出來，執秘看得出那筆是「在路上」還是真的沒繳。
-            if not r["confirmed"] and r["total"]:
+            # 收到的錢不夠付的那部分掛在他頭上（完全沒對帳＝整筆都掛著）。社友自己
+            # 回報但還沒對到的一樣掛著，只是標記出來，執秘看得出那筆是「在路上」
+            # 還是真的沒繳。
+            if r["short"]:
                 arrears.setdefault(r["uid"], []).append(
-                    {"month": m, "amount": r["total"], "is_paid": r["is_paid"]})
+                    {"month": m, "amount": r["short"], "is_paid": r["is_paid"],
+                     "partial": bool(r["confirmed"])})
     return {"carry": carry,
             "arrears": arrears,
+            "credit": credit,
             "opening_month": opening["month"] if opening else "",
             "opening_amount": int(opening["amount"]) if opening else 0,
             "has_opening": opening is not None,
@@ -2367,14 +2498,17 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
     members = db.get_club_members(club)      # 結轉每個月都要用同一份名單，撈一次就好
     book = _tier_book(club)                  # 會籍類別的費率與指派，同樣整趟共用一份
     rows = _dues_rows(club, month, members, book)
-    rows.sort(key=lambda r: (["unpaid", "reported", "confirmed"].index(r["status"]), r["name"]))
-    totals = _dues_totals(rows)
     # 代墊帳整個社算一次，看板與結轉共用：一個月一個月去算等於把最貴的查詢乘上月份數
     ledger = _advance_ledger(club)
+    carry = _carry_forward(club, month, members, ledger, book)
+    # 本月要用的溢繳是「本月之前累積剩下的」，所以先結轉再結算這個月
+    _settle_month(rows, carry.pop("credit", {}))
+    rows.sort(key=lambda r: (["unpaid", "reported", "credited", "confirmed"]
+                             .index(r["status"]), r["name"]))
+    totals = _dues_totals(rows)
     expense = _expense_summary(db.get_club_finance(club, month),
                                ledger["by_month"].get(month, 0))
-    net = totals["confirmed"] - expense["total"]
-    carry = _carry_forward(club, month, members, ledger, book)
+    net = totals["cash"] - expense["total"]
     # 每位社友把自己的上期未繳帶在身上：帳單編輯與明細表都要看得到「他還欠哪幾
     # 個月」，逐一去翻舊月份是沒有人會做的事。
     arrears = carry.pop("arrears", {})
@@ -2382,9 +2516,10 @@ async def finance_board(request: Request, month: str = "", club: str = ""):
         owed = arrears.get(r["uid"], [])
         r["arrears"] = owed
         r["arrears_total"] = sum(x["amount"] for x in owed)
-        # 本月應繳 + 上期未繳。刻意不寫進 total：那些月份的帳單本來就還在，
-        # 加進來的話應收會把同一筆錢算兩次。
-        r["due_with_arrears"] = r["total"] + r["arrears_total"]
+        # 本月實付 + 上期未繳。刻意不寫進 total：那些月份的帳單本來就還在，
+        # 加進來的話應收會把同一筆錢算兩次。用 due_now 而不是 total —— 不該去追
+        # 一筆他自己的溢繳已經蓋掉的錢。
+        r["due_with_arrears"] = r["due_now"] + r["arrears_total"]
     totals["arrears"] = sum(r["arrears_total"] for r in rows)
     totals["arrears_members"] = sum(1 for r in rows if r["arrears_total"])
     return {"status": "ok", "club": club, "month": month, "members": rows,
@@ -2635,7 +2770,12 @@ async def finance_roster_tier(request: Request):
 
 @app.post("/finance/confirm")
 async def finance_confirm(request: Request):
-    """執秘 ticks a member's dues off against the bank statement (or unticks it)."""
+    """執秘 ticks a member's dues off against the bank statement (or unticks it).
+
+    paid_amount 是選填的：沒帶就是「收到的正是他該付的」，也就是那顆一鍵「標記
+    已收」原本的意思。金額不一樣時才帶，多的自動變成他的溢繳。
+
+    取消對帳不會清掉已經登記的實收金額 —— 按錯一顆按鈕不該把記過的數字也弄丟。"""
     admin_uid = request.headers.get("X-Line-UserId", "")
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "message": "無財務管理權限"}
@@ -2645,11 +2785,19 @@ async def finance_confirm(request: Request):
     if not (_valid_month(month) and uid):
         return {"status": "invalid", "message": "缺少月份或社友"}
     confirmed = bool(body.get("confirmed", True))
+    has_amount = confirmed and body.get("paid_amount") is not None
+    if has_amount:
+        if _bad_amount(body.get("paid_amount")):
+            return {"status": "invalid", "message": "實收金額需為 0 以上的數字"}
+        if int(body.get("paid_amount")) > _MAX_PAID_AMOUNT:
+            return {"status": "invalid", "message": "實收金額看起來不合理，請確認"}
     club = _target_club(admin_uid, str(body.get("club", "")).strip())
     # 只有固定月費、還沒登過餐費／IOU 的社友也會繳錢，看板上他就是「未繳」。
     # 這種人還沒有 club_dues 那一列，先補一列空的明細，才有東西可以標記已收。
     if not db.get_dues(club, month, uid):
         db.upsert_dues(club, month, uid, 0, 0, [])
+    if has_amount:
+        db.set_dues_paid_amount(club, month, uid, int(body.get("paid_amount")))
     db.confirm_dues(club, month, uid, confirmed)
     if confirmed:
         try:
@@ -2685,6 +2833,44 @@ async def finance_bank_digits(request: Request):
         return {"status": "no_club", "message": "找不到您的社別"}
     db.set_dues_bank_digits(club, month, uid, digits)
     return {"status": "ok", "month": month, "uid": uid, "bank_digits": digits}
+
+
+# 實收金額的上限：最大的一張帳單也就幾萬塊，手滑多按一個 0 不該把社的結餘搬走。
+_MAX_PAID_AMOUNT = 1_000_000
+
+
+@app.post("/finance/paid_amount")
+async def finance_paid_amount(request: Request):
+    """登記某位社友某個月實際收到多少錢。
+
+    帳單上每一個數字都是「他該繳多少」，只有這一個是「錢」。社友一次匯一整年、
+    或匯款湊個整數的時候，多的部分會自動變成他的溢繳留到之後幾個月抵扣。
+
+    跟末 5 碼同一個規矩：不碰 confirmed／is_paid，也不推播 —— 登記一個數字不是
+    對帳，改一個打錯的數字更不該再通知社友一次。clear=true 是清回「就是應繳金額」。"""
+    admin_uid = request.headers.get("X-Line-UserId", "")
+    if not db.is_admin(admin_uid):
+        return {"status": "forbidden", "message": "無財務管理權限"}
+    body = await request.json()
+    month = str(body.get("month", "")).strip()
+    uid = str(body.get("uid", "")).strip()
+    if not (_valid_month(month) and uid):
+        return {"status": "invalid", "message": "缺少月份或社友"}
+    club = _target_club(admin_uid, str(body.get("club", "")).strip())
+    if not club:
+        return {"status": "no_club", "message": "找不到您的社別"}
+    amount = None
+    if not bool(body.get("clear", False)):
+        if _bad_amount(body.get("amount")):
+            return {"status": "invalid", "message": "實收金額需為 0 以上的數字"}
+        amount = int(body.get("amount") or 0)
+        if amount > _MAX_PAID_AMOUNT:
+            return {"status": "invalid", "message": "實收金額看起來不合理，請確認"}
+    # 只有固定月費、還沒有帳單列的人也要記得到實收，跟 /finance/confirm 同一個理由
+    if not db.get_dues(club, month, uid):
+        db.upsert_dues(club, month, uid, 0, 0, [])
+    db.set_dues_paid_amount(club, month, uid, amount)
+    return {"status": "ok", "month": month, "uid": uid, "paid_amount": amount}
 
 
 # ── 社友名冊（財務看板的「社友名冊」） ─────────────────────────────────────────
@@ -2816,13 +3002,27 @@ async def finance_trend(request: Request, months: int = 6, end: str = "", club: 
     members = db.get_club_members(club)     # 社友名單每個月都一樣，撈一次就好
     book = _tier_book(club)                 # 會籍類別也是，別在月份迴圈裡各查一次
     advance_by_month = _advance_ledger(club)["by_month"]
+    window = _month_list(max(1, min(int(months or 6), 24)), end)
+    # 溢繳是逐月折疊出來的：某個月能抵多少，要看它之前發生過什麼。所以從有紀錄的
+    # 第一個月開始跑，只吐出要顯示的那幾個月 —— 直接從視窗第一個月起算的話，趨勢
+    # 圖的「收」會跟看板的本月結餘對不起來。
+    active = sorted(set(db.finance_months(club)) | set(advance_by_month))
+    earlier = (_months_between(active[0], window[0])
+               if active and window and active[0] < window[0] else [])
+    shown = set(window)
+    credit: dict[str, int] = {}
     out = []
-    for m in _month_list(max(1, min(int(months or 6), 24)), end):
-        totals = _dues_totals(_dues_rows(club, m, members, book))
+    for m in earlier + window:
+        rows = _dues_rows(club, m, members, book)
+        credit = _settle_month(rows, credit)
+        if m not in shown:
+            continue                    # 只是為了把溢繳帶過來，不畫這一個月
+        totals = _dues_totals(rows)
         expense = _expense_summary(db.get_club_finance(club, m), advance_by_month.get(m, 0))
         out.append({"month": m, "expected": totals["expected"],
-                    "received": totals["confirmed"], "expense": expense["total"],
-                    "net": totals["confirmed"] - expense["total"]})
+                    # received 一直叫這個名字，現在它才真的是「收到的錢」
+                    "received": totals["cash"], "expense": expense["total"],
+                    "net": totals["cash"] - expense["total"]})
     return {"status": "ok", "club": club, "months": out}
 
 

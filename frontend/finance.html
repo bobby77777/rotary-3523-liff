@@ -166,6 +166,21 @@
         </p>
       </div>
 
+      <!-- 溢繳：他之前多繳的錢，這個月自動抵掉一部分。跟上期未繳一樣是顯示用的，
+           不會改到帳單金額 —— 帳單就是帳單，抵扣是收款那一端的事。 -->
+      <div id="bill-credit" class="hidden bg-teal-50 border border-teal-200 rounded-lg p-3 text-[15px] space-y-1">
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-teal-800">可用溢繳</span>
+          <span class="font-black tabular-nums text-teal-700" id="bill-credit-available">—</span>
+        </div>
+        <div class="flex justify-between items-center text-[14px] text-teal-700">
+          <span>本月抵扣</span><span class="tabular-nums" id="bill-credit-applied">—</span>
+        </div>
+        <div class="flex justify-between items-center text-[14px] text-slate-600 pt-1 border-t border-teal-200">
+          <span>抵扣後實付</span><span class="font-bold tabular-nums" id="bill-credit-due">—</span>
+        </div>
+      </div>
+
       <!-- 固定兩項不在這裡改：改了要整批生效，走「月費設定」那條路。常年月費是
            這一位的（可能依會籍類別而不同），分攤金全社一律。 -->
       <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5 text-[15px]">
@@ -540,9 +555,10 @@
   // 錢收到哪一步就三種：未繳 → 待對帳 → 已繳。「還沒登餐費」不是狀態，
   // 那種人一樣要繳固定月費，就是未繳。
   const STATUS = {
-    confirmed: { label: '已繳',   cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-    reported:  { label: '待對帳', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
-    unpaid:    { label: '未繳',   cls: 'bg-rose-100 text-rose-700 border-rose-200' },
+    confirmed: { label: '已繳',     cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    credited:  { label: '溢繳抵扣', cls: 'bg-teal-100 text-teal-700 border-teal-200' },
+    reported:  { label: '待對帳',   cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+    unpaid:    { label: '未繳',     cls: 'bg-rose-100 text-rose-700 border-rose-200' },
   };
 
   function esc(v) {
@@ -664,17 +680,21 @@
       </div>`;
     document.getElementById('cards').innerHTML = [
       card('應收', t.expected, `${t.members} 位社友`
-        + (t.no_bill ? `（${t.no_bill} 位僅固定月費）` : ''), 'text-slate-800'),
-      card('已繳', t.confirmed, `${t.confirmed_count} 位已對帳`, 'text-emerald-700'),
+        + (t.no_bill ? `（${t.no_bill} 位僅固定月費）` : '')
+        + (t.credit_applied ? `　${money(t.credit_applied)} 由溢繳抵扣` : ''), 'text-slate-800'),
+      // 已繳看的是「帳單結清了多少」，跟實際進來多少錢是兩件事：有人一次匯一整年
+      // 的月份，現金會比結清的帳單多。
+      card('已繳', t.settled, `${t.confirmed_count} 位已對帳`
+        + (t.cash !== t.settled ? `　實收現金 ${money(t.cash)}` : ''), 'text-emerald-700'),
       card('待對帳', t.reported, `${t.reported_count} 位已回報匯款`, 'text-amber-600'),
       card('未繳', t.outstanding, `${t.unpaid_count} 位尚未回報`, 'text-rose-600'),
     ].join('');
 
     const pct = v => t.expected ? (v / t.expected * 100).toFixed(1) + '%' : '0%';
-    document.getElementById('bar-confirmed').style.width = pct(t.confirmed);
+    document.getElementById('bar-confirmed').style.width = pct(t.settled);
     document.getElementById('bar-reported').style.width = pct(t.reported);
     document.getElementById('rate-label').textContent =
-      `${t.rate}%　${money(t.confirmed)} / ${money(t.expected)}`;
+      `${t.rate}%　${money(t.settled)} / ${money(t.expected)}`;
 
     // 還沒開帳單的人才是這個月最該處理的事，按鈕就只在有人沒開時出現。
     document.getElementById('btn-bulk').classList.toggle('hidden', t.no_bill === 0);
@@ -721,10 +741,14 @@
       <p class="text-[12px] text-slate-400 -mt-1 pl-6">${esc(carryNote)}</p>
 
       ${section('收入', 'text-emerald-700', 'border-emerald-200')}
-      ${line('社費收入（已繳）', t.confirmed, 'text-slate-600 pl-6')}
+      ${/* 收入是「實際進來的錢」，不是「結清了多少帳單」：有人一次匯一整年時，
+            那個月的現金比帳單多，而銀行裡的數字是現金。 */''}
+      ${line('社費收入（實收）', t.cash, 'text-slate-600 pl-6')}
+      ${t.cash !== t.settled ? `<p class="text-[12px] text-slate-400 -mt-1 pl-6">
+        本月結清帳單 ${money(t.settled)}${t.credit_earned ? `，其中 ${money(t.credit_earned)} 是多繳留抵` : ''}${t.shortfall ? `；另有 ${money(t.shortfall)} 短收` : ''}。</p>` : ''}
       ${t.reported > 0 ? `<p class="text-[12px] text-amber-600 -mt-1 pl-6">
         另有 ${money(t.reported)} 已回報但未對帳，尚未計入。</p>` : ''}
-      ${line('收入合計', t.confirmed, 'text-emerald-700', true, 'B')}
+      ${line('收入合計', t.cash, 'text-emerald-700', true, 'B')}
 
       ${section('支出', 'text-rose-600', 'border-rose-200')}
       ${line('場地租金', e.rent, 'text-slate-600 pl-6')}
@@ -766,6 +790,20 @@
           <div class="flex justify-between items-center text-[13px] text-slate-600 pt-1 border-t border-indigo-200">
             <span>全部收回後結餘</span>
             <span class="font-bold tabular-nums">${money(closing + owed.total)}</span>
+          </div>
+        </div>` : ''}
+      ${/* 代墊的鏡像：代墊是結餘裡「還在社友身上」的資產，溢繳是結餘裡「已經
+            在社帳上、但屬於社友」的負債。結餘沒算錯，但財務長要看得到。 */''}
+      ${t.credit_outstanding ? `
+        <div class="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2.5 space-y-1">
+          <div class="flex justify-between items-center text-[14px] text-amber-900">
+            <span class="font-bold">其中社友溢繳</span>
+            <span class="font-black tabular-nums">${money(t.credit_outstanding)}</span>
+          </div>
+          <p class="text-[12px] text-amber-700">這筆錢已經收進來了，但會在之後的月份自動抵掉社友的帳單。</p>
+          <div class="flex justify-between items-center text-[13px] text-slate-600 pt-1 border-t border-amber-200">
+            <span>扣除溢繳後結餘</span>
+            <span class="font-bold tabular-nums">${money(closing - t.credit_outstanding)}</span>
           </div>
         </div>` : ''}`;
   }
@@ -811,6 +849,8 @@
       ['reported', '待對帳', t.reported_count],
       ['confirmed', '已繳', t.confirmed_count],
     ];
+    // 沒在用溢繳的社不該多一個永遠是 0 的籤
+    if (t.credited_count) chips.splice(3, 0, ['credited', '溢繳抵扣', t.credited_count]);
     document.getElementById('filters').innerHTML = chips.map(([key, label, n]) => `
       <button onclick="setFilter('${key}')"
         class="px-2.5 py-1 rounded text-[13px] font-bold border transition-colors ${
@@ -857,14 +897,16 @@
           ${r.tier ? `<span class="ml-1 text-[12px] font-black text-indigo-700" title="會籍類別 ${esc(r.tier)}：常年月費 ${money(r.base)}${(r.extras || []).map(i => `＋${i.name} ${money(i.amount)}`).join('')}">${esc(r.tier)}</span>` : ''}
           ${r.orphan ? `<span class="ml-1 text-[12px] text-amber-600" title="有帳單，但社友名冊查不到這個人">名冊外</span>` : ''}
         </td>
-        <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800 whitespace-nowrap">${money(r.total)}</td>
+        <td class="px-4 py-2.5 text-right font-bold tabular-nums text-slate-800 whitespace-nowrap">${money(r.total)}
+          ${r.credit_applied ? `<div class="text-[12px] font-medium text-teal-700">抵 ${money(r.credit_applied)} → 實付 ${money(r.due_now)}</div>` : ''}
+          ${r.paid_amount != null && r.paid_amount !== r.due_now ? `<div class="text-[12px] font-medium text-slate-400">實收 ${money(r.paid_amount)}</div>` : ''}</td>
         <td class="px-4 py-2.5 text-[13px] text-slate-500">
           ${items.length ? esc(items.join('、')) : '<span class="text-slate-400">僅固定月費</span>'}
-          ${arrearsTag(r)}${pendingFeeTag(r)}</td>
+          ${arrearsTag(r)}${creditTag(r)}${pendingFeeTag(r)}</td>
         <td class="px-4 py-2.5 text-center whitespace-nowrap">
           <span class="px-2 py-0.5 rounded text-[13px] font-black border ${s.cls}">${s.label}</span></td>
         <td class="px-4 py-2.5 text-center whitespace-nowrap" id="digits-cell-${esc(r.uid)}">${digitsCell(r)}</td>
-        <td class="px-4 py-2.5 text-center whitespace-nowrap">${confirmBtn(r)}</td>
+        <td class="px-4 py-2.5 text-center whitespace-nowrap" id="confirm-cell-${esc(r.uid)}">${confirmBtn(r)}</td>
       </tr>`;
   }
 
@@ -941,21 +983,87 @@
       title="${esc(months)}">上期未繳 ${money(r.arrears_total)}</span>`;
   }
 
+  // 溢繳：這個月抵掉多少、抵完之後還剩多少留到下個月。短收也走這裡 ——
+  // 執秘看到「已繳」卻只收到一半時，差額要當場看得到，不必開帳單去比對。
+  function creditTag(r) {
+    const tag = (text, tone) => `<span class="ml-1 px-1.5 py-0.5 rounded text-[12px] font-bold ${tone} whitespace-nowrap inline-block">${text}</span>`;
+    let html = '';
+    if (r.credit_applied) html += tag(`溢繳抵 ${money(r.credit_applied)}`, 'bg-teal-100 text-teal-700 border border-teal-200');
+    if (r.credit_left) html += tag(`可留抵 ${money(r.credit_left)}`, 'bg-teal-50 text-teal-600 border border-teal-200');
+    if (r.confirmed && r.short) html += tag(`短收 ${money(r.short)}`, 'bg-amber-100 text-amber-700 border border-amber-200');
+    return html;
+  }
+
   // 每位社友都可以標記已收 —— 只有固定月費的人也會繳錢，後端會在對帳時
   // 幫他補一列空明細。
   function confirmBtn(r) {
     const stop = 'event.stopPropagation();';   // 不要順手把帳單編輯也打開
-    return r.confirmed
-      ? `<button onclick="${stop} setConfirmed('${r.uid}', false)" title="取消對帳（社友自己回報的繳款紀錄會保留）"
+    // 被溢繳抵光的月份沒有現金可以確認：按下去只會寫一列意義不明的對帳紀錄。
+    if (r.status === 'credited') {
+      return `<span class="px-2 py-1 rounded text-[13px] font-bold text-teal-700 bg-teal-50 border border-teal-200 whitespace-nowrap"
+        title="本月應繳 ${money(r.total)} 已由他自己的溢繳全額抵扣，沒有現金要收">已用溢繳抵扣</span>`;
+    }
+    // 實收金額只在已對帳的列出現：還沒對帳就沒有「收到多少」這件事。
+    const paidBtn = r.confirmed
+      ? `<button onclick="${stop} editPaid('${r.uid}')" title="登記實收金額（多繳的會自動留到下個月抵扣）"
+           class="ml-1 px-1.5 py-1 rounded text-[13px] font-bold text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors">$</button>`
+      : '';
+    return (r.confirmed
+      ? `<button onclick="${stop} setConfirmed('${r.uid}', false)" title="取消對帳（社友自己回報的繳款紀錄與實收金額都會保留）"
            class="px-2 py-1 rounded text-[13px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">取消對帳</button>`
       : `<button onclick="${stop} setConfirmed('${r.uid}', true)"
-           class="px-2.5 py-1 rounded text-[13px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm">標記已收</button>`;
+           class="px-2.5 py-1 rounded text-[13px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm">標記已收</button>`)
+      + paidBtn;
+  }
+
+  // 就地登記實收金額。跟末 5 碼那一格同一套寫法，但存完一定要整頁重載：這個欄位
+  // 會動到社的現金、結轉與之後每一個月的溢繳，只補本地狀態一定會跟後端對不上。
+  function editPaid(uid) {
+    const r = board.members.find(m => m.uid === uid);
+    if (!r) return;
+    const cell = document.getElementById(`confirm-cell-${uid}`);
+    cell.innerHTML = `
+      <span class="inline-flex items-center gap-1" onclick="event.stopPropagation();">
+        <input id="paid-input-${esc(uid)}" type="number" min="0" value="${r.paid_amount != null ? r.paid_amount : r.due_now}"
+          onkeydown="if(event.key==='Enter')savePaid('${uid}'); if(event.key==='Escape')renderRows();"
+          class="w-24 border border-emerald-400 rounded px-1.5 py-1 text-[13px] text-right font-bold outline-none">
+        <button onclick="savePaid('${uid}')" class="text-emerald-600 hover:text-emerald-800 p-1"><i data-lucide="check" class="w-4 h-4"></i></button>
+        <button onclick="renderRows()" class="text-slate-400 hover:text-slate-600 p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </span>`;
+    lucide.createIcons();
+    document.getElementById(`paid-input-${uid}`).focus();
+  }
+
+  async function savePaid(uid) {
+    const el = document.getElementById(`paid-input-${uid}`);
+    if (!el) return;
+    const raw = el.value.trim();
+    const amount = parseInt(raw);
+    if (raw !== '' && (isNaN(amount) || amount < 0)) { alert('實收金額需為 0 以上的數字。'); return; }
+    try {
+      const data = await apiFetch('/finance/paid_amount', {
+        method: 'POST',
+        body: JSON.stringify(raw === ''
+          ? { club: activeClub, month: activeMonth, uid, clear: true }   // 清空＝就是應繳金額
+          : { club: activeClub, month: activeMonth, uid, amount }),
+      });
+      if (data.status !== 'ok') { alert(data.message || '儲存失敗'); renderRows(); return; }
+      await loadBoard();
+      loadTrend();
+    } catch (e) {
+      alert('儲存失敗：' + e.message);
+      renderRows();
+    }
   }
 
   async function setConfirmed(uid, confirmed) {
     const r = board.members.find(m => m.uid === uid);
     if (!r) return;
-    if (confirmed && !confirm(`確定將「${r.name}」${monthLabel(activeMonth)}的 ${money(r.total)} 標記為已繳？\n本人會收到 LINE 對帳完成通知。`)) return;
+    const note = r.credit_applied
+      ? `應繳 ${money(r.total)} －溢繳 ${money(r.credit_applied)} ＝ 實收 ${money(r.due_now)}`
+      : money(r.due_now);
+    if (confirmed && !confirm(`確定將「${r.name}」${monthLabel(activeMonth)}的 ${note} 標記為已繳？\n`
+      + `（金額不同的話，對帳後按旁邊的 $ 登記實收）\n本人會收到 LINE 對帳完成通知。`)) return;
     try {
       const data = await apiFetch('/finance/confirm', {
         method: 'POST',
@@ -992,6 +1100,7 @@
     // 已經開過帳單的人，預設不再推播；新開的帳單社友需要知道。
     document.getElementById('bill-notify').checked = !r.has_bill;
     renderArrears(r);
+    renderCredit(r);
     fillBillForm(r.meal, r.iou, r.customs || []);
     renderEventFees(r.event_fees);
     showModal('bill-modal');
@@ -1014,6 +1123,17 @@
         <span class="tabular-nums text-rose-700">${money(a.amount)}
           ${a.is_paid ? '<span class="text-[12px] text-amber-600 font-bold ml-1">已回報待對帳</span>' : ''}</span>
       </div>`).join('');
+  }
+
+  let billCredit = 0;
+  function renderCredit(r) {
+    billCredit = r ? (r.credit_applied || 0) : 0;
+    const show = !!(r && r.credit_available);
+    document.getElementById('bill-credit').classList.toggle('hidden', !show);
+    if (!show) return;
+    document.getElementById('bill-credit-available').textContent = money(r.credit_available);
+    document.getElementById('bill-credit-applied').textContent = '− ' + money(r.credit_applied);
+    document.getElementById('bill-credit-due').textContent = money(r.due_now);
   }
 
   async function selectMonthFromArrears(m) {
@@ -1046,6 +1166,7 @@
     // 報名費與上期未繳都是逐人不同的，批次記帳一律不碰
     renderEventFees([]);
     renderArrears(null);
+    renderCredit(null);
     showModal('bill-modal');
   }
 
@@ -1170,10 +1291,13 @@
       : 0;
     const total = fixed + items;
     document.getElementById('bill-total').textContent = money(total);
-    // 累計應繳只在真的有欠款時出現，否則等於在每張帳單上重複本月總計
+    // 累計應繳只在真的有欠款或溢繳時出現，否則等於在每張帳單上重複本月總計
     const grand = document.getElementById('bill-grand');
-    grand.classList.toggle('hidden', !billArrears);
-    if (billArrears) grand.textContent = `連同上期未繳共 ${money(total + billArrears)}`;
+    grand.classList.toggle('hidden', !billArrears && !billCredit);
+    if (billArrears || billCredit) {
+      grand.textContent = (billCredit ? `扣掉溢繳 ${money(billCredit)} 後實付 ${money(total - billCredit)}` : '')
+        + (billArrears ? `${billCredit ? '，' : ''}連同上期未繳共 ${money(total - billCredit + billArrears)}` : '');
+    }
   }
 
   async function saveBill() {
@@ -1941,11 +2065,13 @@
             <th style="${cell} text-align:left;">收繳率</th>
           </tr>
           <tr>
-            <td style="${cell}">${money(t.expected)}</td><td style="${cell}">${money(t.confirmed)}</td>
+            <td style="${cell}">${money(t.expected)}</td><td style="${cell}">${money(t.settled)}</td>
             <td style="${cell}">${money(t.reported)}</td><td style="${cell}">${money(t.outstanding)}</td>
             <td style="${cell}">${t.rate}%</td>
           </tr>
         </table>
+        ${t.cash !== t.settled ? `<p style="font-size:9pt; color:#475569; margin:-6pt 0 12pt;">
+          本月實收現金 ${money(t.cash)}${t.credit_earned ? `（含社友多繳 ${money(t.credit_earned)}，留作日後抵扣）` : ''}${t.shortfall ? `，另有 ${money(t.shortfall)} 短收` : ''}。</p>` : ''}
 
         <table style="width:100%; border-collapse:collapse; font-size:10pt;">
           <thead>
@@ -1968,7 +2094,7 @@
                   <td style="${cell}">${esc(r.name)}${r.nickname ? '（' + esc(r.nickname) + '）' : ''}${r.tier ? `<span style="font-size:8pt; color:#3730a3; font-weight:700;"> ${esc(r.tier)}</span>` : ''}</td>
                   <!-- 只有固定費用的人也要印金額：應收本來就把他算進去了，空一格
                        在執秘帶去開會的那張表上讀起來是「不用繳」。 -->
-                  <td style="${cell} text-align:right;">${money(r.total)}</td>
+                  <td style="${cell} text-align:right;">${money(r.total)}${r.credit_applied ? `<div style="font-size:8pt; color:#0f766e;">抵 ${money(r.credit_applied)} → 實付 ${money(r.due_now)}</div>` : ''}</td>
                   <td style="${cell} font-size:9pt;">${esc(items.join('、'))}</td>
                   <td style="${cell} text-align:center;">${STATUS[r.status].label}</td>
                   <td style="${cell} text-align:center;">${esc(r.bank_digits)}</td>

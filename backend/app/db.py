@@ -329,12 +329,22 @@ def ensure_club_dues_table() -> None:
     # 拿對帳單核對過的「已收訖」——收繳看板要分得出這兩者，才知道還有誰要追。
     execute("ALTER TABLE club_dues ADD COLUMN IF NOT EXISTS confirmed BOOLEAN NOT NULL DEFAULT FALSE")
     execute("ALTER TABLE club_dues ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ")
+    # 實際收到多少錢。這張表裡其他每一個數字都是「他該繳多少」，只有這一欄是「錢」。
+    # 沒有它就表達不出社友多繳或少繳 —— 以前「已收金額」是拿應繳金額乘上 confirmed
+    # 算出來的，社友一次匯一整年的話，社的現金結餘會比銀行少掉那一筆。
+    #
+    #   NULL = 沒有另外登記，收到的正是他這個月該付的（既有每一列都是這個意思）
+    #   0    = 一毛現金都沒進來（整筆用溢繳抵掉）—— 跟 NULL 是不同的兩件事
+    #   > 0  = 實收金額；比應付多的留成溢繳，比應付少的留在那個月當欠款
+    #
+    # 只有 confirmed 為真時才讀，跟 is_paid／bank_digits 同一個分工。
+    execute("ALTER TABLE club_dues ADD COLUMN IF NOT EXISTS paid_amount INTEGER")
 
 
 def get_dues(club_name: str, month: str, line_user_id: str) -> dict | None:
     rows = query(
-        "SELECT meal, iou, customs, is_paid, bank_digits, confirmed FROM club_dues "
-        "WHERE club_name = %s AND month = %s AND line_user_id = %s",
+        "SELECT meal, iou, customs, is_paid, bank_digits, confirmed, paid_amount "
+        "FROM club_dues WHERE club_name = %s AND month = %s AND line_user_id = %s",
         (club_name, month, line_user_id),
     )
     return rows[0] if rows else None
@@ -344,9 +354,21 @@ def list_dues(club_name: str, month: str) -> list[dict]:
     """Every dues row a club has for one month, in one query — the 收繳看板 shows all
     members at once, and asking per member would be one round trip each."""
     return query(
-        "SELECT line_user_id, meal, iou, customs, is_paid, bank_digits, confirmed "
+        "SELECT line_user_id, meal, iou, customs, is_paid, bank_digits, confirmed, paid_amount "
         "FROM club_dues WHERE club_name = %s AND month = %s",
         (club_name, month),
+    )
+
+
+def list_member_dues(club_name: str, line_user_id: str) -> list[dict]:
+    """一位社友的每一個月，照月份排好。
+
+    社友自己看帳單時要算他的溢繳餘額，而餘額是逐月折疊出來的。整社重算一次太貴，
+    但折疊逐人獨立（A 的餘額不會讀到 B 的任何一列），所以一個人一個查詢就夠。"""
+    return query(
+        "SELECT month, meal, iou, customs, is_paid, bank_digits, confirmed, paid_amount "
+        "FROM club_dues WHERE club_name = %s AND line_user_id = %s ORDER BY month",
+        (club_name, line_user_id),
     )
 
 
@@ -1898,6 +1920,24 @@ def set_dues_bank_digits(club_name: str, month: str, line_user_id: str,
             updated_at = NOW()
         """,
         (club_name, month, line_user_id, bank_digits or None),
+    )
+
+
+def set_dues_paid_amount(club_name: str, month: str, line_user_id: str,
+                         amount: int | None) -> None:
+    """登記該月帳單的實收金額。amount 傳 None 是清回「就是應繳金額」。
+
+    跟末 5 碼同一個規矩：完全不碰 is_paid／confirmed —— 登記一個數字不是對帳。
+    0 是有意義的值（整筆用溢繳抵掉，沒有現金進來），所以不能拿 0 當「沒填」。"""
+    execute(
+        """
+        INSERT INTO club_dues (club_name, month, line_user_id, paid_amount, updated_at)
+        VALUES (%s, %s, %s, %s, NOW())
+        ON CONFLICT (club_name, month, line_user_id) DO UPDATE SET
+            paid_amount = EXCLUDED.paid_amount,
+            updated_at = NOW()
+        """,
+        (club_name, month, line_user_id, amount),
     )
 
 

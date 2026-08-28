@@ -3350,8 +3350,9 @@ async function openMyDuesModal() {
 
     // has_bill 的意思是「執秘登過變動費用沒有」。會籍類別的固定加項（職務捐這種）
     // 不會讓它變成 true，但那筆錢確實要收，帳單得看得到 —— 只靠 has_bill 擋的話，
-    // 有加項的人反而永遠只看到「本月尚無帳單」。
-    if (!d.has_bill && !(d.extras || []).length) {
+    // 有加項的人反而永遠只看到「本月尚無帳單」。有溢繳可抵的人同理 —— 他最需要
+    // 知道的就是「這個月不用再匯了」。
+    if (!d.has_bill && !(d.extras || []).length && !d.credit_available) {
         content.innerHTML = `<div class="text-center py-8"><i class="fa-regular fa-face-smile-wink text-4xl text-gray-300 mb-3"></i><p class="text-gray-500 font-bold text-sm">本月尚無帳單，或執秘尚未產出</p></div>`;
         return;
     }
@@ -3371,8 +3372,20 @@ async function openMyDuesModal() {
         </div>
         <div class="bg-gray-900 p-3 flex justify-between items-center text-white mt-1"><span class="font-bold text-xs">本月總計</span><span class="font-black text-lg">NT$ ${Number(d.total).toLocaleString()}</span></div>
     </div>`;
-    if (d.is_paid) {
-        html += `<div class="bg-emerald-50 border-2 border-emerald-200 p-4 rounded-2xl text-center shadow-sm"><p class="text-emerald-700 font-black text-sm"><i class="fa-solid fa-circle-check text-lg mb-1 block"></i> 已收到您 ${parseInt(ym[1])} 月社費<br>NT$ ${Number(d.total).toLocaleString()}<br><span class="text-xs font-semibold">感謝您的繳納！</span></p></div>`;
+    // 之前多繳的錢會自動抵掉這個月的帳單。不講的話，社友會照著總計再匯一次全額。
+    if (d.credit_available) {
+        html += `<div class="bg-teal-50 border-2 border-teal-200 rounded-2xl p-3 mb-4 text-xs space-y-1">
+            <div class="flex justify-between items-center text-teal-800"><span class="font-bold">可用溢繳</span><span class="font-bold">NT$ ${Number(d.credit_available).toLocaleString()}</span></div>
+            <div class="flex justify-between items-center text-teal-700"><span>本月抵扣</span><span class="font-bold">− NT$ ${Number(d.credit_applied).toLocaleString()}</span></div>
+            <div class="flex justify-between items-center text-gray-800 border-t border-teal-200 pt-1"><span class="font-bold">本月實付</span><span class="font-black text-base">NT$ ${Number(d.due_now).toLocaleString()}</span></div>
+            ${d.credit_left ? `<p class="text-[10px] text-teal-600">抵扣後還有 NT$ ${Number(d.credit_left).toLocaleString()} 留到下個月。</p>` : ''}
+        </div>`;
+    }
+    if (!d.is_paid && d.settled && d.credit_applied && d.due_now === 0) {
+        // 整筆被自己的溢繳抵掉：這種月份不該再叫他去匯 0 元
+        html += `<div class="bg-teal-50 border-2 border-teal-200 p-4 rounded-2xl text-center shadow-sm"><p class="text-teal-700 font-black text-sm"><i class="fa-solid fa-circle-check text-lg mb-1 block"></i> 本月已由您的溢繳全額抵扣<br><span class="text-xs font-semibold">不需匯款</span></p></div>`;
+    } else if (d.is_paid) {
+        html += `<div class="bg-emerald-50 border-2 border-emerald-200 p-4 rounded-2xl text-center shadow-sm"><p class="text-emerald-700 font-black text-sm"><i class="fa-solid fa-circle-check text-lg mb-1 block"></i> 已收到您 ${parseInt(ym[1])} 月社費<br>NT$ ${Number(d.paid_amount != null ? d.paid_amount : d.due_now).toLocaleString()}<br><span class="text-xs font-semibold">感謝您的繳納！</span></p></div>`;
     } else {
         paySection.classList.remove('hidden'); footer.classList.remove('hidden');
         document.getElementById('my-dues-digits').value = '';

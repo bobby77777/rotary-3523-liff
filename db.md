@@ -162,15 +162,25 @@ player with a `jsonb` array of hole scores.
 | `meal`, `iou` | 餐費 / IOU for that month |
 | `customs` | jsonb `[{name, amount, event_id?}]` — 臨時費用. **`event_id` marks "this registration fee has already been billed"**; `_charged_events()` scans it so the same event is never offered twice, and `/dues/bulk_save` deliberately strips it (batch-billing everyone would mark a whole club as charged for an event a handful attended) |
 | `is_paid` | The member reported a transfer |
-| `confirmed` / `confirmed_at` | 執秘 matched it against the bank statement. **Only `confirmed` counts as income**; `confirmed_at` is written but never read |
+| `confirmed` / `confirmed_at` | 執秘 matched it against the bank statement. **`confirmed` settles the bill**; `confirmed_at` is written but never read |
 | `bank_digits` | Last 5 digits of the transfer |
+| `paid_amount` | **The only column here that is money received** — every other integer is money owed. `NULL` = 收到的正是他該付的(what every pre-existing row means); `0` = no cash at all this month (the bill was covered by credit) — deliberately different from `NULL`; `> 0` = what 執秘 actually banked. Read only when `confirmed` |
 
 The month on the row is the month the money belongs to. A January bill
 confirmed in April books as **January** income — every finance aggregate filters
 `WHERE month = %s`.
 
-Fixed monthly dues (常年月費 + 地區分攤金) are **not** stored here: a member with
-no row still owes them, which is why 應收 counts people, not rows.
+Fixed monthly dues (常年月費 + 地區分攤金 + 會籍類別的固定加項) are **not** stored
+here: a member with no row still owes them, which is why 應收 counts people, not rows.
+
+**應收 and 現金 are two different numbers.** `settled` (Σ billed of settled rows)
+drives the collection rate; `cash` (Σ `paid_amount`) drives the club's carry-forward
+and the trend. They are equal until someone over- or under-pays. An overpayment
+becomes that member's **溢繳**, folded forward month by month in `_carry_forward`
+and applied to later bills automatically (`_settle_row` / `_settle_month`) — never
+stored as a balance, because the board recomputes every past month from live data
+and a stored snapshot would drift. A month covered entirely by credit gets
+`status: "credited"`: settled, no cash, nothing to confirm.
 
 ### `club_dues_settings` — 月費費率
 `(club_name, effective_month)` PK · `base` · `district`. Rate segments; a bill
