@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from . import agenda_pdf, db, event_pdfs, line_api, notices
+from . import agenda_pdf, checkin_qr, db, event_pdfs, line_api, notices
 from urllib.parse import quote
 from .config import (APP_BASE_URL, CALENDAR_BASE_URL, FINANCE_BASE_URL, GOLF_BASE_URL,
                      LINE_CHANNEL_SECRET, LIFF_URL)
@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
     db.ensure_clubs_table()
     db.ensure_events_table()
     db.ensure_event_pdf_table()
+    db.ensure_event_checkin_qr_table()
     # First run: migrate the previously-hardcoded schedule into the editable table.
     if db.events_count() == 0:
         db.seed_events(list(_EVENT_SCHEDULE) + _club_events("本社"))
@@ -1485,34 +1486,84 @@ def _member_name(uid: str) -> str:
     return "社友"
 
 
+def _checkin_result(ev: dict, uid: str, result: str, message: str = "") -> dict:
+    """兩個報到方向共用的回覆形狀，前端只要認得這一種。"""
+    resp = {
+        "status": result,
+        "name": _member_name(uid),
+        "event_id": ev["id"],
+        "event_title": ev["title"],
+        "checked_in": db.get_event_checkin_count(ev["id"]),
+        "total": db.get_event_registration_count(ev["id"]),
+    }
+    if message:
+        resp["message"] = message
+    return resp
+
+
+def _checkin_by_event_qr(uid: str, token: str) -> dict:
+    """社友自己掃現場那張活動報到碼 —— 掃的人就是要報到的人，不需要管理員權限。
+
+    活動由 token 決定，前端不必（也不能）指定是哪一場：現場貼的是哪一張碼，就報
+    到哪一場。"""
+    if not uid:
+        return {"status": "no_user", "message": "尚未登入，請在 LINE App 內開啟後再試。"}
+    ev = db.get_event_by_checkin_token(token)
+    if ev is None:
+        return {"status": "invalid", "message": "這張報到碼無效或已被重新產生，請洽現場工作人員。"}
+    # 別區社友撿到碼也不能報進本區名單（見 _lookup_event）。
+    ev = _lookup_event(uid, ev["id"])
+    if ev is None:
+        return {"status": "no_event", "message": "找不到對應活動"}
+
+    # 碼是印出來的、會被拍照外流；限當天才能用，外流的照片隔天就沒有用處。
+    today = datetime.now(_TPE).date().isoformat()
+    if (ev.get("date") or "") != today:
+        return {"status": "wrong_day",
+                "message": f"【{ev['title']}】只能在活動當天（{ev.get('date') or '日期未定'}）報到。",
+                "event_id": ev["id"], "event_title": ev["title"]}
+
+    result = db.check_in(uid, ev["id"])
+    message = "您尚未報名本活動，請先完成報名再報到。" if result == "not_registered" else ""
+    resp = _checkin_result(ev, uid, result, message)
+    if result == "ok":
+        _push_receipt(uid, f"✅ 已完成【{ev['title']}】報到，歡迎蒞臨！"
+                           f"（{resp['checked_in']}/{resp['total']}）")
+    return resp
+
+
 @app.post("/checkin")
 async def checkin(request: Request):
-    """Admin scans an attendee's report QR (its value is the attendee's LINE userId).
-    Header X-Line-UserId = the scanning admin. Body: {qr, event_id?}."""
-    admin_uid = request.headers.get("X-Line-UserId", "")
+    """現場報到。同一條路收兩種掃描方向，靠 QR 內容的前綴分辨：
+
+    1. 社友掃現場貼的活動報到碼（RC3523-CHECKIN:token）→ 幫掃描者本人報到。
+    2. 主委掃社友的報到條碼（內容是社友的 LINE userId）→ 幫那位社友報到。
+
+    Header X-Line-UserId 一律是「操作的人」。Body: {qr, event_id?}。"""
+    uid = request.headers.get("X-Line-UserId", "")
     body = await request.json()
-    attendee_uid = str(body.get("qr", "")).strip()
+    qr = str(body.get("qr", "")).strip()
     event_id = body.get("event_id")
 
+    if not qr:
+        return {"status": "invalid", "message": "QR 內容為空"}
+
+    token = checkin_qr.token_from_payload(qr)
+    if token is not None:
+        return _checkin_by_event_qr(uid, token)
+
+    # ── 主委掃社友條碼（原有行為）──
+    admin_uid, attendee_uid = uid, qr
     if not db.is_admin(admin_uid):
         return {"status": "forbidden", "message": "無報到掃描權限"}
-    if not attendee_uid:
-        return {"status": "invalid", "message": "QR 內容為空"}
 
     ev = _lookup_event(admin_uid, int(event_id)) if event_id else _current_event(admin_uid)
     if ev is None:
         return {"status": "no_event", "message": "找不到對應活動"}
 
     result = db.check_in(attendee_uid, ev["id"])
-    name = _member_name(attendee_uid)
-    resp = {
-        "status": result,
-        "name": name,
-        "event_id": ev["id"],
-        "event_title": ev["title"],
-        "checked_in": db.get_event_checkin_count(ev["id"]),
-        "total": db.get_event_registration_count(ev["id"]),
-    }
+    resp = _checkin_result(ev, attendee_uid, result)
+    name = resp["name"]
     # Notify the attendee in their own chat when check-in succeeds, and leave the
     # scanning admin a running tally in theirs.
     if result == "ok":
@@ -1527,9 +1578,23 @@ async def checkin(request: Request):
 
 @app.get("/my_qr")
 async def my_qr(request: Request):
-    """Return the payload the LIFF should encode into the member's report QR."""
+    """社友報到條碼要編碼的內容，外加「這一場報到了沒」——畫面才說得出他掃的是哪
+    一場，不必讓他自己對照行事曆。"""
     uid = request.headers.get("X-Line-UserId", "")
-    return {"payload": uid, "name": _member_name(uid) if uid else ""}
+    if not uid:
+        return {"payload": "", "name": ""}
+    resp = {"payload": uid, "name": _member_name(uid)}
+    ev = _current_event(uid)
+    if ev:
+        reg = db.get_registration(uid, ev["id"])
+        resp.update({
+            "event_id": ev["id"],
+            "event_title": ev["title"],
+            "event_date": ev.get("date") or "",
+            "registered": reg is not None,
+            "checked_in": bool(reg and reg.get("checked_in")),
+        })
+    return resp
 
 
 @app.post("/golf/scores")
@@ -3247,6 +3312,76 @@ async def admin_delete_event(event_id: int, request: Request):
         raise HTTPException(status_code=404, detail="Event not found")
     db.delete_event(event_id)
     return {"status": "ok"}
+
+
+# ── 活動報到 QR ───────────────────────────────────────────────────────────────
+# 執秘在議程編輯頁產生、下載列印，貼在報到處給社友掃（見 checkin_qr）。
+# 三條都要管理員權限：這張碼就是報到的鑰匙，不能像議程 PDF 那樣公開。
+
+def _checkin_qr_event(uid: str, event_id: int) -> dict:
+    if not db.is_admin(uid):
+        raise HTTPException(status_code=403, detail="Not an admin")
+    ev = _same_district_event(uid, event_id)
+    if ev is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return ev
+
+
+@app.get("/admin/events/{event_id}/checkin_qr")
+async def admin_get_checkin_qr(event_id: int, request: Request):
+    """這場活動有沒有報到碼、是什麼時候產生的。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    _checkin_qr_event(uid, event_id)
+    row = db.get_event_checkin_qr(event_id)
+    if row is None:
+        return {"status": "ok", "exists": False, "payload": "", "created_at": None}
+    return {
+        "status": "ok",
+        "exists": True,
+        "payload": checkin_qr.payload_for(row["token"]),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
+
+
+@app.post("/admin/events/{event_id}/checkin_qr")
+async def admin_make_checkin_qr(event_id: int, request: Request):
+    """產生報到碼。已經有的沿用同一組 token（重印出來的紙本仍然有效）；
+    body {"rotate": true} 才換新的 —— 那會讓已經印出去的舊碼立刻失效。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    ev = _checkin_qr_event(uid, event_id)
+    raw = await request.body()
+    try:
+        body = json.loads(raw) if raw else {}
+    except ValueError:
+        body = {}
+    rotate = bool(body.get("rotate"))
+
+    row = db.get_event_checkin_qr(event_id)
+    token = checkin_qr.new_token() if (row is None or rotate) else row["token"]
+    payload = checkin_qr.payload_for(token)
+    subtitle = " · ".join(x for x in [ev.get("date") or "", ev.get("location") or ""] if x)
+    png = await run_in_threadpool(checkin_qr.render_png, payload, ev.get("title") or "", subtitle)
+    db.save_event_checkin_qr(event_id, token, png)
+    return {"status": "ok", "exists": True, "payload": payload, "rotated": rotate}
+
+
+@app.get("/admin/events/{event_id}/checkin_qr.png")
+async def admin_checkin_qr_png(event_id: int, request: Request):
+    """下載那張報到碼圖片（DB 裡存的就是這一張，重下載不會變成另一張）。"""
+    uid = request.headers.get("X-Line-UserId", "")
+    _checkin_qr_event(uid, event_id)
+    png = db.get_event_checkin_qr_png(event_id)
+    if png is None:
+        raise HTTPException(status_code=404, detail="尚未產生報到 QR")
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "Content-Disposition": f'attachment; filename="checkin-qr-{event_id}.png"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.post("/admin/events/sync-notices")

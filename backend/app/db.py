@@ -1418,6 +1418,8 @@ def update_event(event_id: int, data: dict) -> dict | None:
 def delete_event(event_id: int) -> None:
     execute("DELETE FROM events WHERE id = %s", (event_id,))
     execute("DELETE FROM event_pdf WHERE event_id = %s", (event_id,))
+    # 留著的話，token 會一直佔著那組 unique 值，而它指向的活動已經不存在了。
+    execute("DELETE FROM event_checkin_qr WHERE event_id = %s", (event_id,))
 
 
 # ── Per-event stored PDF ─────────────────────────────────────────────────────────
@@ -1451,6 +1453,61 @@ def get_event_pdf(event_id: int) -> bytes | None:
 
 def event_pdf_ids() -> set[int]:
     return {r["event_id"] for r in query("SELECT event_id FROM event_pdf")}
+
+
+# ── 活動報到 QR ──────────────────────────────────────────────────────────────
+# 現場貼出來的那一張報到碼：執秘在議程編輯頁產生、下載列印，社友到場掃它就報到。
+# token 是這張碼的全部內容（見 checkin_qr.payload_for），所以它綁定活動，社友掃
+# 的時候不必再猜是哪一場。png 存的是已經畫好的那張圖 —— 印出去的、螢幕上的、下次
+# 再下載的，永遠是同一張；重畫一次就換一張圖，紙本與螢幕會對不起來。
+# 換 token（rotate）等於作廢已印出的紙本，這是它唯一的用途：碼外流了就換一張。
+def ensure_event_checkin_qr_table() -> None:
+    execute("""
+        CREATE TABLE IF NOT EXISTS event_checkin_qr (
+            event_id   INT PRIMARY KEY,
+            token      TEXT NOT NULL UNIQUE,
+            png        BYTEA,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+
+def get_event_checkin_qr(event_id: int) -> dict | None:
+    """這場活動的報到碼（不含圖）。查狀態的地方不必每次都把圖片拖出來。"""
+    rows = query(
+        "SELECT event_id, token, created_at, updated_at FROM event_checkin_qr WHERE event_id = %s",
+        (event_id,),
+    )
+    return rows[0] if rows else None
+
+
+def get_event_checkin_qr_png(event_id: int) -> bytes | None:
+    rows = query("SELECT png FROM event_checkin_qr WHERE event_id = %s", (event_id,))
+    return bytes(rows[0]["png"]) if rows and rows[0]["png"] is not None else None
+
+
+def save_event_checkin_qr(event_id: int, token: str, png: bytes | None) -> None:
+    execute(
+        """
+        INSERT INTO event_checkin_qr (event_id, token, png, updated_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (event_id) DO UPDATE
+            SET token = EXCLUDED.token, png = EXCLUDED.png, updated_at = NOW()
+        """,
+        (event_id, token, psycopg2.Binary(png) if png is not None else None),
+    )
+
+
+def get_event_by_checkin_token(token: str) -> dict | None:
+    """掃到的那張碼是哪一場活動。找不到 = 這張碼不是我們發的，或已經被換掉了。"""
+    if not token:
+        return None
+    rows = query(
+        "SELECT e.* FROM events e JOIN event_checkin_qr q ON q.event_id = e.id WHERE q.token = %s",
+        (token,),
+    )
+    return _row_to_event(rows[0]) if rows else None
 
 
 def ensure_user_state_table() -> None:

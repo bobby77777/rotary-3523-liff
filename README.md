@@ -107,7 +107,11 @@ FastAPI service backing the LIFF app and the LINE bot.
 - **議程 PDF** — `/events/{id}/pdf` renders the saved agenda into a real **vector** PDF on the fly (`agenda_pdf.py`, fpdf2 + an embedded CJK font): selectable, searchable text and working attachment links, instead of the old browser screenshot. Needs one font covering Traditional Chinese — auto-detected from `backend/assets/fonts/*.ttf` or the usual system paths, or set `AGENDA_FONT_PATH`. Without one the endpoint falls back to whatever was stored/uploaded before.
 - **Event PDFs** — non-例會 events link a PDF that 執秘 drops in a Google Drive folder; the same `/events/{id}/pdf` streams it when the event has no agenda.
 - **Admin back-office** — see the table below; every tool is backed by real tables and LINE pushes.
-- **Check-in** — QR scan (`/checkin`) marks attendance and notifies both the member and the scanning admin. Events carrying a venue coordinate (`events.geo`, set in 行事曆管理 as `緯度,經度`) also gate check-in on being within 100 m; events without one skip the check entirely.
+- **Check-in** — one endpoint (`/checkin`), two scan directions, told apart by the QR's content:
+  - a member scans the **event's** check-in QR posted at the door (`RC3523-CHECKIN:<token>`) and is checked in themselves — the token identifies the event, so nobody has to pick one;
+  - an admin scans a **member's** report QR (its value is that member's LINE userId) and checks that member in.
+
+  The event QR is generated per event in the agenda editor (`/admin/events/{id}/checkin_qr`, admin-only) and stored in `event_checkin_qr` — token *and* the printable PNG, so the sheet on the wall and every later download are the same image. Re-generating rotates the token and voids anything already printed. Because that sheet can be photographed, self check-in is accepted **only on the event's own date**; and events carrying a venue coordinate (`events.geo`, set in 行事曆管理 as `緯度,經度`) additionally gate check-in on being within 100 m. Both directions notify the member, and admin scans leave the scanner a running tally.
 - **RAG ingestion** — `ingest.py` watches a Google Drive folder and re-embeds changed files into Supabase (pgvector).
 
 ### Admin tools (後台)

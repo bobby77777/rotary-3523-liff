@@ -148,6 +148,7 @@
               <p class="text-3xl font-bold text-blue-600" id="end-time-display">--:--</p>
             </div>
             <button id="btn-agenda-pdf" onclick="downloadAgendaPdf()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-colors"><i data-lucide="file-down" class="w-5 h-5"></i> 下載 PDF</button>
+            <button id="btn-checkin-qr" onclick="openCheckinQrModal()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-colors"><i data-lucide="qr-code" class="w-5 h-5"></i> 報到 QR</button>
             <button id="btn-save-agenda" onclick="saveAgenda()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-colors"><i data-lucide="save" class="w-5 h-5"></i> 儲存</button>
           </div>
         </div>
@@ -195,6 +196,32 @@
     </div>
   </div>
 
+  <!-- ==================== 活動報到 QR Modal ==================== -->
+  <!-- 產生一次、印出來貼在報到處；社友用 App 的「掃描報到 QR」掃它就完成報到。 -->
+  <div id="checkin-qr-modal" class="fixed inset-0 bg-black/70 z-50 hidden items-center justify-center backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-full overflow-y-auto">
+      <div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+        <h3 class="font-bold text-slate-800 flex items-center gap-2"><i data-lucide="qr-code" class="w-5 h-5 text-blue-600"></i> 活動報到 QR</h3>
+        <button onclick="closeCheckinQrModal()" class="text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="p-5 space-y-4">
+        <p class="text-sm text-slate-600" id="checkin-qr-event">—</p>
+        <div id="checkin-qr-body" class="min-h-[220px] flex flex-col items-center justify-center text-center">
+          <p class="text-sm text-slate-400">載入中…</p>
+        </div>
+        <p class="text-xs text-slate-500 leading-relaxed">
+          印出來貼在報到處，社友用 App 的「掃描報到 QR」掃它就完成報到。
+          只有<b>活動當天</b>有效；活動若已填會場座標，社友還需通過現場定位驗證。
+        </p>
+        <div class="flex flex-wrap gap-2 justify-end">
+          <button id="btn-checkin-qr-rotate" onclick="rotateCheckinQr()" class="hidden px-4 py-2.5 rounded-lg font-bold text-sm text-red-600 border border-red-200 hover:bg-red-50 flex items-center gap-1.5"><i data-lucide="refresh-cw" class="w-4 h-4"></i> 重新產生</button>
+          <button id="btn-checkin-qr-make" onclick="generateCheckinQr()" class="hidden px-4 py-2.5 rounded-lg font-bold text-sm bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5"><i data-lucide="sparkles" class="w-4 h-4"></i> 產生報到 QR</button>
+          <button id="btn-checkin-qr-download" onclick="downloadCheckinQr()" class="hidden px-4 py-2.5 rounded-lg font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"><i data-lucide="download" class="w-4 h-4"></i> 下載 PNG</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 議程向量 PDF 的列印專用區（平時隱藏，列印時只顯示這塊） -->
   <div id="agenda-print-zone"></div>
 
@@ -236,6 +263,26 @@
           throw new Error(detail || ('API ' + path + ' → ' + res.status));
         }
         return res.json();
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    // 取二進位檔（報到 QR 圖）。不能像議程 PDF 那樣直接 window.open 網址 ——
+    // 那條路由要帶身分 header，開新分頁帶不上去。
+    async function apiFetchBlob(path) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 12000);
+      try {
+        const res = await fetch(API_BASE + path, {
+          headers: { 'X-Line-UserId': UID, 'ngrok-skip-browser-warning': '1' },
+          signal: ctrl.signal,
+        });
+        if (!res.ok) {
+          const detail = await res.json().then(d => d && d.detail).catch(() => null);
+          throw new Error(detail || ('API ' + path + ' → ' + res.status));
+        }
+        return res.blob();
       } finally {
         clearTimeout(t);
       }
@@ -468,6 +515,8 @@
       document.getElementById('ai-agent-section').classList.toggle('hidden', !editable);
       document.getElementById('add-agenda-item-section').classList.toggle('hidden', !editable);
       document.getElementById('btn-save-agenda').classList.toggle('hidden', !editable);
+      // 報到 QR 是報到的鑰匙（後端也只開給管理員），唯讀的人不該看到這顆按鈕。
+      document.getElementById('btn-checkin-qr').classList.toggle('hidden', !editable);
       document.querySelectorAll('.event-field').forEach(el => {
         el.readOnly = !editable;
         el.classList.toggle('readonly-input', !editable);
@@ -990,6 +1039,112 @@
           <tbody>${rows}</tbody>
         </table>`;
       return el;
+    }
+
+    // ==================== 活動報到 QR ====================
+    // 預覽與下載都用同一張 DB 裡存好的 PNG（不在瀏覽器另外畫一次）：印出來的紙本、
+    // 螢幕上的、下次再下載的，永遠是同一張圖。
+    let checkinQrUrl = '';           // 目前預覽用的 object URL，關閉時要釋放
+
+    function _clearCheckinQrPreview() {
+      if (checkinQrUrl) { URL.revokeObjectURL(checkinQrUrl); checkinQrUrl = ''; }
+    }
+
+    function _setCheckinQrButtons({ exists }) {
+      document.getElementById('btn-checkin-qr-make').classList.toggle('hidden', exists);
+      document.getElementById('btn-checkin-qr-rotate').classList.toggle('hidden', !exists);
+      document.getElementById('btn-checkin-qr-download').classList.toggle('hidden', !exists);
+      lucide.createIcons();
+    }
+
+    function _checkinQrMessage(html) {
+      _clearCheckinQrPreview();
+      document.getElementById('checkin-qr-body').innerHTML = html;
+    }
+
+    async function openCheckinQrModal() {
+      if (!activeEvent) return;
+      const modal = document.getElementById('checkin-qr-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('checkin-qr-event').textContent =
+        (activeEvent.title || '') + '（' + (activeEvent.date || '日期未定') + '）';
+      _checkinQrMessage('<p class="text-sm text-slate-400">載入中…</p>');
+      ['btn-checkin-qr-make', 'btn-checkin-qr-rotate', 'btn-checkin-qr-download']
+        .forEach(id => document.getElementById(id).classList.add('hidden'));
+      try {
+        const data = await apiFetch('/admin/events/' + activeEvent.id + '/checkin_qr');
+        if (data.exists) {
+          await _showCheckinQrImage(data.payload);
+        } else {
+          _checkinQrMessage('<p class="text-sm text-slate-500">尚未產生這場活動的報到 QR。</p>');
+          _setCheckinQrButtons({ exists: false });
+        }
+      } catch (e) {
+        // 讀不到就讓他還能按「產生」重試，不要留一個死掉的畫面。
+        _checkinQrMessage('<p class="text-sm text-red-600">讀取失敗：' + escapeHtml(e.message) + '</p>');
+        _setCheckinQrButtons({ exists: false });
+      }
+    }
+
+    function closeCheckinQrModal() {
+      _clearCheckinQrPreview();
+      const modal = document.getElementById('checkin-qr-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function _showCheckinQrImage(payload) {
+      _clearCheckinQrPreview();
+      const blob = await apiFetchBlob('/admin/events/' + activeEvent.id + '/checkin_qr.png');
+      checkinQrUrl = URL.createObjectURL(blob);
+      document.getElementById('checkin-qr-body').innerHTML =
+        '<img src="' + checkinQrUrl + '" alt="活動報到 QR" class="w-full max-w-[260px] border border-slate-200 rounded-lg">'
+        + '<p class="mt-3 text-[11px] text-slate-400 break-all font-mono">' + escapeHtml(payload) + '</p>';
+      _setCheckinQrButtons({ exists: true });
+    }
+
+    async function _makeCheckinQr(rotate) {
+      const btn = document.getElementById(rotate ? 'btn-checkin-qr-rotate' : 'btn-checkin-qr-make');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 產生中'; lucide.createIcons();
+      try {
+        const data = await apiFetch('/admin/events/' + activeEvent.id + '/checkin_qr',
+          { method: 'POST', body: JSON.stringify({ rotate: !!rotate }) });
+        await _showCheckinQrImage(data.payload);
+      } catch (e) {
+        alert('產生失敗：' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original; lucide.createIcons();
+      }
+    }
+
+    function generateCheckinQr() { _makeCheckinQr(false); }
+
+    function rotateCheckinQr() {
+      // 換一張新的碼，舊的立刻失效 —— 已經印出去、貼在現場的那些都得重印。
+      if (!confirm('重新產生會讓已經印出來的舊 QR 立刻失效，現場必須換上新的。確定要換嗎？')) return;
+      _makeCheckinQr(true);
+    }
+
+    async function downloadCheckinQr() {
+      try {
+        const blob = await apiFetchBlob('/admin/events/' + activeEvent.id + '/checkin_qr.png');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // 活動名稱帶著斜線/冒號會做出一個存不下來的檔名（公文標題常有），先換掉。
+        const safeTitle = String(activeEvent.title || '').replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
+        a.download = '報到QR-' + (activeEvent.date || activeEvent.id) + '-' + safeTitle + '.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (e) {
+        alert('下載失敗：' + e.message);
+      }
     }
 
     // 社員看到的那份：後端從已存檔的議程即時產生的向量 PDF。

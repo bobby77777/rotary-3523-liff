@@ -260,6 +260,7 @@
             <div id="my-qr-canvas" class="p-4 bg-white rounded-2xl border-4 border-slate-100 shadow-inner leading-[0]"></div>
             <div class="text-center">
                 <p id="my-qr-name" class="font-bold text-gray-800 text-base">—</p>
+                <p id="my-qr-status" class="text-[12px] font-bold mt-1"></p>
                 <p class="text-[10px] text-gray-400 mt-0.5">LINE 身份已綁定 · 請勿外流截圖</p>
             </div>
             <button onclick="closeModal('modal-my-qr')" class="w-full py-2.5 rounded-xl font-bold text-gray-600 text-sm bg-slate-100 btn-3d btn-3d-white mb-1">關閉</button>
@@ -2124,7 +2125,7 @@ function renderProfilePage() {
         <div>
             <p class="section-title">報到</p>
             <div class="card divide-y divide-slate-100 overflow-hidden">
-                ${row('launchScannerModal()', 'fa-qrcode', 'bg-emerald-100 text-emerald-600', '掃描報到 QR', '在活動現場掃描工作人員的條碼')}
+                ${row('launchScannerModal()', 'fa-qrcode', 'bg-emerald-100 text-emerald-600', '掃描報到 QR', '掃描現場張貼的活動報到 QR')}
                 ${row('openMyQrModal()', 'fa-id-badge', 'bg-blue-100 text-blue-600', '我的報到條碼', '讓工作人員掃描')}
             </div>
         </div>
@@ -2279,6 +2280,8 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 // 會場座標存在活動的 geo 欄位（"緯度,經度"，執秘於行事曆管理填寫）；沒填就不做
 // 驗證直接放行 —— 拿寫死的座標去比對，只會擋錯人或放行錯人。
 // 拒絕定位授權一律視為驗證失敗：能靠關掉定位繞過的防弊等於沒有防弊。
+// 每一場報到都會走這裡（不再只有地區年會）：現場那張報到 QR 是印出來的，會被拍照
+// 外流，定位是「人真的在會場」的唯一證據。哪些活動要驗，由 geo 有沒有填決定。
 function _eventGeo(ev) {
     const parts = String(ev.geo || '').split(',');
     if (parts.length !== 2) return null;
@@ -2286,7 +2289,7 @@ function _eventGeo(ev) {
     return (isFinite(lat) && isFinite(lng)) ? { lat, lng } : null;
 }
 
-function runAnnualLbsGate(onPass) {
+function runCheckinLbsGate(onPass) {
     const ev = currentActiveEvent || {};
     const venue = _eventGeo(ev);
     if (!venue) { onPass(); return; }          // 此活動未設定會場座標 → 不做定位驗證
@@ -3537,24 +3540,44 @@ function renderQr(containerId, text) {
     if (img) { img.style.width = '200px'; img.style.height = '200px'; }
 }
 
-function openMyQrModal() {
-    const uid = lineProfile?.userId || '';
-    if (!uid) { showAlert('尚未登入', '請在 LINE App 內開啟此頁，才能顯示您的專屬報到 QR。'); return; }
-    renderQr('my-qr-canvas', uid);
+// 條碼內容以伺服器回的為準（GET /my_qr），不拿本地的 userId 自己畫 —— 掃它的是
+// 後端，該編什麼進去只有後端說了算。順便把「這一場報到了沒」一起顯示，社友才知道
+// 現在該不該去排隊。
+async function openMyQrModal() {
+    const status = document.getElementById('my-qr-status');
+    document.getElementById('my-qr-canvas').innerHTML =
+        '<p class="text-xs text-gray-400 py-8">載入中…</p>';
     document.getElementById('my-qr-name').textContent = lineProfile?.displayName || '社友';
+    status.textContent = '';
     openModal('modal-my-qr');
+    try {
+        const data = await apiFetch('/my_qr');
+        if (!data.payload) {
+            document.getElementById('my-qr-canvas').innerHTML =
+                '<p class="text-xs text-red-500 py-8">尚未登入，請在 LINE App 內開啟此頁。</p>';
+            return;
+        }
+        renderQr('my-qr-canvas', data.payload);
+        if (data.name) document.getElementById('my-qr-name').textContent = data.name;
+        if (data.event_title) {
+            const state = data.checked_in ? '已完成報到' : (data.registered ? '尚未報到' : '尚未報名');
+            status.textContent = `${data.event_title} · ${state}`;
+            status.className = 'text-[12px] font-bold mt-1 ' +
+                (data.checked_in ? 'text-emerald-600' : data.registered ? 'text-amber-600' : 'text-slate-400');
+        }
+    } catch (err) {
+        // 失敗就說失敗；退回本地 uid 只是讓他掃到一半才發現不能用。
+        document.getElementById('my-qr-canvas').innerHTML =
+            '<p class="text-xs text-red-500 py-8">連線失敗，請稍後再試。</p>';
+    }
 }
 
 function launchScannerModal() {
-    // Ported LBS 定位防弊: 地區年會需先通過 GPS 距離驗證才可開啟掃描報到
-    const ev = currentActiveEvent;
-    const isAnnual = ev && (ev.id === 109 || ev.type === '地區年會');
-    const openScanner = () => {
+    // 有填會場座標的活動一律先過 GPS 距離驗證（沒填的 runCheckinLbsGate 會直接放行）。
+    runCheckinLbsGate(() => {
         document.getElementById('scanner-title').textContent = '讀取報到 QR';
         openModal('modal-scanner');
-    };
-    if (isAnnual) { runAnnualLbsGate(openScanner); return; }
-    openScanner();
+    });
 }
 
 function openAdminScanner() {
@@ -3578,6 +3601,8 @@ async function launchLiffScanner() {
     }
 }
 
+// 兩種掃描方向共用（社友掃現場的活動 QR、主委掃社友的條碼），後端靠 QR 內容自己
+// 分辨。掃到活動 QR 時活動由碼決定，帶上去的 event_id 後端會忽略。
 async function handleQrScanResult(qrValue) {
     const body = { qr: (qrValue || '').trim() };
     const evId = checkinEventId || currentActiveEvent?.id;
@@ -3589,7 +3614,10 @@ async function handleQrScanResult(qrValue) {
         } else if (data.status === 'already') {
             showToast(`${data.name} 先前已完成報到`, 'warn', 3500);
         } else if (data.status === 'not_registered') {
-            showAlert('尚未報名', `${data.name || '此社友'} 沒有「${data.event_title || '本活動'}」的報名紀錄，無法報到。`);
+            showAlert('尚未報名', data.message
+                || `${data.name || '此社友'} 沒有「${data.event_title || '本活動'}」的報名紀錄，無法報到。`);
+        } else if (data.status === 'wrong_day') {
+            showAlert('尚未到報到時間', data.message || '這張報到 QR 只能在活動當天使用。');
         } else if (data.status === 'forbidden') {
             showAlert('權限不足', data.message || '您沒有報到掃描權限。');
         } else {

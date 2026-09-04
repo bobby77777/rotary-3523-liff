@@ -19,7 +19,8 @@ before.
 **There are no foreign keys** (except `document_rows.dataset_id`). Rows are
 related by convention, so deleting a parent leaves orphans behind on purpose:
 a resigned member's dues rows still have to reconcile last year's books.
-`delete_event()` is the one place that cleans up after itself (`event_pdf`).
+`delete_event()` is the one place that cleans up after itself (`event_pdf`,
+`event_checkin_qr`).
 
 ---
 
@@ -135,6 +136,23 @@ registration minus the identity.
 `event_id` (PK) · `data` (bytea). Legacy blobs. New PDFs are either rendered on
 demand from `agenda` or streamed from Drive; this is only a fallback in
 `/events/{id}/pdf`.
+
+### `event_checkin_qr` — 現場報到 QR
+`event_id` (PK) · `token` (unique) · `png` (bytea) · `created_at` · `updated_at`.
+
+執秘 在議程編輯頁按「報到 QR」產生，下載列印貼在報到處；社友用 App 的〈掃描報到
+QR〉掃它，`POST /checkin` 由 `token` 反查是哪一場活動並幫**掃描者本人**報到（另一
+個方向——主委掃社友條碼——走的是同一條路由，靠 QR 內容的 `RC3523-CHECKIN:` 前綴
+分辨）。三條 `/admin/events/{id}/checkin_qr*` 路由都只開給管理員：這張碼就是報到
+的鑰匙。
+
+`png` 存的是已經畫好的那一張圖（`checkin_qr.render_png`），不是每次重畫——重畫一
+次就換一張，貼在現場的紙本與螢幕上的會對不起來。**換 `token`（`{"rotate":true}`）
+等於作廢所有已印出的紙本**，那正是它唯一的用途：碼外流了就換一張。
+
+防弊靠兩件事，不靠 token 本身：後端限**活動當天**才收（印出來的碼會被拍照外流，
+隔天那張照片就沒用了），前端在活動有填 `events.geo` 時要先過 100 公尺定位驗證
+（`runCheckinLbsGate`）。
 
 ### 現場作業 tables (all empty today)
 | Table | Use |
