@@ -233,8 +233,15 @@ five pages now read it from (`window.RC3523_API_BASE`). Change it, push, done.
 all end in `.html`, and `cleanUrls` would redirect those away.
 
 After the frontend has a domain, update those four env vars on the **backend**
-project and the LIFF endpoint in the LINE console — they still default to the
-GitHub Pages URLs.
+project — they still default to the GitHub Pages URLs — and the LIFF endpoint
+in the LINE console.
+
+**Set the LIFF Endpoint URL to the site root** (`https://rotary-liff.vercel.app/`),
+not `…/index.html`. LINE accepts a `liff.login()` redirect only to a URL *under*
+the endpoint path, so with `index.html` as the endpoint every other page
+(`calendar.html`, `bulletin.html`, …) fails with a bare "400 Bad Request" from
+LINE. Vercel serves `index.html` at `/` with query strings intact, so the
+`liff.line.me/<id>?tab=…` deep links keep working.
 
 > The GitHub Pages workflow is left in place and still works. Keep it as a
 > fallback until the Vercel domain is wired into LINE, then retire it.
