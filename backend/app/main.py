@@ -4978,10 +4978,12 @@ async def admin_stats(request: Request, event: int | None = None):
 
 @app.get("/form/sign", response_class=HTMLResponse)
 async def form_get(request: Request, line_user_id: str = ""):
+    # Starlette 1.x 的 TemplateResponse 一律先收 request，再收樣板名；舊的
+    # (name, {"request": ...}) 寫法已經移除，會以 unhashable dict 的 TypeError 炸掉。
     return templates.TemplateResponse(
+        request,
         "form.html",
         {
-            "request": request,
             "line_user_id": line_user_id,
             "success": False,
             "error": None,
@@ -5003,8 +5005,8 @@ async def form_post(
 
     if not all([club, full_name, nickname, diet_type]):
         return templates.TemplateResponse(
-            "form.html",
-            {"request": request, "line_user_id": line_user_id,
+            request, "form.html",
+            {"line_user_id": line_user_id,
              "success": False, "error": "請填寫所有欄位", "values": values},
         )
 
@@ -5013,8 +5015,8 @@ async def form_post(
     except Exception:
         logger.exception("DB upsert failed for user %s", line_user_id)
         return templates.TemplateResponse(
-            "form.html",
-            {"request": request, "line_user_id": line_user_id,
+            request, "form.html",
+            {"line_user_id": line_user_id,
              "success": False, "error": "儲存失敗，請稍後再試", "values": values},
         )
 
@@ -5022,7 +5024,7 @@ async def form_post(
         line_api.push_text(line_user_id, "✅ 個人資料已儲存！")
 
     return templates.TemplateResponse(
-        "form.html",
-        {"request": request, "line_user_id": line_user_id,
+        request, "form.html",
+        {"line_user_id": line_user_id,
          "success": True, "error": None, "values": values},
     )
