@@ -274,8 +274,9 @@ connections run out fast.
    set, and `vercel.json` declares a cron hitting
    `GET /internal/cron/sync-notices` instead.
 
-   > **Hobby plan only allows daily cron.** `"0 */6 * * *"` needs Pro; on Hobby
-   > change it to something like `"0 3 * * *"` or the deployment is rejected.
+   > **Hobby plan only allows daily cron**, so the schedule is `"0 19 * * *"` —
+   > cron runs in UTC, so that is 03:00 Taipei. On Pro you can go back to the
+   > thread's old cadence with `"0 */6 * * *"`.
 
 2. **Startup migrations.** ~35 `ensure_*` DDL statements per boot is cheap once
    on a long-lived server and expensive on every cold start. Run them by hand

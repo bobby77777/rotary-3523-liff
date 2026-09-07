@@ -10,6 +10,6 @@
     { "source": "/(.*)", "destination": "/api/index" }
   ],
   "crons": [
-    { "path": "/internal/cron/sync-notices", "schedule": "0 */6 * * *" }
+    { "path": "/internal/cron/sync-notices", "schedule": "0 19 * * *" }
   ]
 }
