@@ -7,4 +7,4 @@
 // 這是純靜態站台、沒有 build step，所以不能用環境變數注入 —— 換環境就是直接改
 // 這個檔再 push。Vercel 的 preview deployment 想指到別的後端時，改這裡再開一條
 // 分支即可。
-window.RC3523_API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+window.RC3523_API_BASE = 'https://rotary-liff-api.vercel.app';
