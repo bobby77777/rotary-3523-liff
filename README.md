@@ -45,6 +45,15 @@ Static HTML opened as a LINE LIFF app; no build step.
 | `bulletin.html` | Weekly bulletin (社刊), **stored per club**. 主委 edits and **發布社刊** (one-click publish, no dialog); anyone can **下載 PDF** (real vector PDF via the browser's print engine). |
 | `calendar.html` | Annual event table (district/club scope) + per-event **agenda (議程)** editor with auto-computed times, quick-fill templates, PDF-link attachments, and LINE preview. **下載 PDF** prints the agenda being edited (vector, via the browser); the copy members see is rendered by the backend from the saved agenda. |
 
+The backend URL every page talks to lives in one place — **`frontend/config.js`**
+(`window.RC3523_API_BASE`), loaded from each page's `<head>`. Changing deployment
+target means editing that one line, not five HTML files.
+
+### Deploy
+
+Primary target is **Vercel** — see [Deploy (Vercel)](#deploy-vercel). The GitHub
+Pages pipeline below still works and is kept as a fallback.
+
 ### Deploy (GitHub Pages via Actions)
 
 `.github/workflows/pages.yml` publishes `frontend/` as the **site root**, so the
@@ -168,9 +177,12 @@ Google Drive auth — either:
 - **Service account** (recommended): put the key at `backend/secrets/service_account.json` and share both Drive folders with its email; or
 - **OAuth**: put `secrets/credentials.json`, then run `python reauth_drive.py` once to create `secrets/token.json` (expires if the OAuth app is in "Testing" mode).
 
-Tables are created / migrated automatically on startup (`ensure_*` in `db.py`,
-called from the app's `lifespan`) — adding a feature means adding an `ensure_*`
-there, not a manual migration. **[`db.md`](db.md) documents every table**: what
+Tables are created / migrated by `run_migrations()` in `main.py` (the `ensure_*`
+calls in `db.py`) — adding a feature means adding an `ensure_*` there, not a
+manual migration. On a long-lived server this runs automatically at startup; on
+serverless it is **off by default** and you call `POST /internal/migrate` after
+deploying (see [Deploy (Vercel)](#deploy-vercel)). `RUN_MIGRATIONS_ON_STARTUP`
+overrides either default. **[`db.md`](db.md) documents every table**: what
 it holds, who writes it, and the conventions (month keys, the `event_id` marker
 inside `club_dues.customs`, `confirmed` vs `is_paid`, …). The RAG tables (`documents`, `document_rows`,
 `document_metadata`, `personal_information`) still need the SQL from the
@@ -193,6 +205,108 @@ RAG ingestion (optional, separate process):
 python ingest.py --full-sync   # one-time import
 python ingest.py               # poll Drive every 60s
 ```
+
+---
+
+## Deploy (Vercel)
+
+Two **separate Vercel projects** pointed at this one repo, matching the monorepo's
+"deploy independently" split. In each project's settings, set **Root Directory**:
+
+| Project | Root Directory | Framework Preset | What it serves |
+|---|---|---|---|
+| `rotary-3523-frontend` | `frontend` | Other (no build) | The static LIFF pages |
+| `rotary-3523-backend`  | `backend`  | Other (auto-detects `api/`) | The FastAPI app |
+
+They are separate so a backend redeploy can't break the LIFF pages, and so the
+101 root-level API routes (`/events`, `/checkin`, `/webhook` …) don't have to be
+untangled from the static filenames by rewrite rules.
+
+### Frontend
+
+Nothing to build — Vercel serves `frontend/` as-is. The one thing to set is the
+backend URL in **[`frontend/config.js`](frontend/config.js)**, which is where all
+five pages now read it from (`window.RC3523_API_BASE`). Change it, push, done.
+
+`cleanUrls` is deliberately **not** enabled: the LIFF endpoint and the bot's
+`BULLETIN_BASE_URL` / `CALENDAR_BASE_URL` / `GOLF_BASE_URL` / `FINANCE_BASE_URL`
+all end in `.html`, and `cleanUrls` would redirect those away.
+
+After the frontend has a domain, update those four env vars on the **backend**
+project and the LIFF endpoint in the LINE console — they still default to the
+GitHub Pages URLs.
+
+> The GitHub Pages workflow is left in place and still works. Keep it as a
+> fallback until the Vercel domain is wired into LINE, then retire it.
+
+### Backend
+
+[`backend/vercel.json`](backend/vercel.json) rewrites every path to
+[`backend/api/index.py`](backend/api/index.py), which just re-exports the same
+FastAPI instance `run.py` uses locally. So the public routes are identical to
+local — no `/api` prefix.
+
+**Environment variables** (Vercel dashboard → Settings → Environment Variables).
+Everything from `backend/.env` **except** it never uploads the file itself, plus
+these serverless-only ones:
+
+| Variable | Why |
+|---|---|
+| `CRON_SECRET` | Guards `/internal/*`. Vercel Cron sends it as `Authorization: Bearer …` automatically. **Without it those endpoints return 503** rather than being open. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | The whole service-account JSON as one value — there is no writable disk for `secrets/`. |
+| `GOOGLE_OAUTH_TOKEN_JSON` | Fallback if you have no service account. Not recommended: a refreshed token can't be written back, so it dies when it expires. |
+| `DB_POOL_MAX` | Defaults to 2 on serverless. Each instance holds its own pool, so this × instance count is what Postgres actually sees. |
+| `RUN_MIGRATIONS_ON_STARTUP` | Defaults to `0` on serverless. Leave it off. |
+
+Mark them **Sensitive**, and scope production credentials to the **Production**
+environment only — Preview deployments get their own (public) URLs, and by
+default they would inherit the same live database and LINE token.
+
+Point `DATABASE_URL` at Supabase's **transaction pooler (port 6543)**, not the
+5432 direct connection. Serverless spins up many short-lived instances and direct
+connections run out fast.
+
+### Three things that don't survive the move, and what replaces them
+
+1. **The scheduler thread.** `notices.run_periodic` was the whole cron — a daemon
+   thread sleeping 6 hours between passes. A serverless process is frozen after
+   it responds, so that thread never wakes. It is now skipped when `VERCEL` is
+   set, and `vercel.json` declares a cron hitting
+   `GET /internal/cron/sync-notices` instead.
+
+   > **Hobby plan only allows daily cron.** `"0 */6 * * *"` needs Pro; on Hobby
+   > change it to something like `"0 3 * * *"` or the deployment is rejected.
+
+2. **Startup migrations.** ~35 `ensure_*` DDL statements per boot is cheap once
+   on a long-lived server and expensive on every cold start. Run them by hand
+   after a schema change:
+
+   ```bash
+   curl -X POST https://<backend>/internal/migrate \
+        -H "Authorization: Bearer $CRON_SECRET"
+   ```
+
+3. **`secrets/*.json`.** Read from disk, and `.vercelignore` keeps them out of
+   the bundle on purpose. Use the env vars above. `event_pdfs.py` prefers the env
+   var and falls back to the file, so local development is unchanged.
+
+### The CJK font
+
+議程 PDFs need a Traditional-Chinese font, and the only system fallback that
+actually exists in [`agenda_pdf.py`](backend/app/agenda_pdf.py) is macOS's — so
+**PDFs work on your laptop and silently degrade on Vercel** until you drop a
+`.ttf` into `backend/assets/fonts/`. See
+[that directory's README](backend/assets/fonts/README.md).
+
+### Verify a deploy
+
+```bash
+curl -s https://<backend>/internal/health          # {"status":"ok","db":"ok","serverless":true}
+curl -sI https://<frontend>/index.html | head -1   # 200
+```
+
+Then set the LINE webhook to `https://<backend>/webhook` and `APP_BASE_URL` to
+`https://<backend>`.
 
 ---
 

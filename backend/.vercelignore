@@ -1,0 +1,23 @@
+# Vercel serverless function 有 250MB 解壓後上限，而且部署上去的東西等於公開資產，
+# 所以這裡是雙重目的：把 bundle 縮小，以及確保私鑰絕對不會被打包。
+
+# --- 絕對不能上雲的 ---
+.env
+secrets/
+
+# --- 只有本機工具用得到，runtime 碰不到 ---
+ingest.py
+reauth_drive.py
+run.py
+richmenu/
+
+# --- 純資料／文件，跟 runtime 無關但很佔空間 ---
+*.xlsx
+rotary_3523_line_rich_menu_simulator.html
+
+# --- 雜物 ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store

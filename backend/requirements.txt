@@ -1,0 +1,24 @@
+# Runtime deps — 這份就是 Vercel 打包進 serverless function 的清單。
+# 只放 app/ 真的 import 到的東西；本機工具（run.py / ingest.py / reauth_drive.py）
+# 的額外套件在 repo 根目錄的 requirements.txt。
+
+fastapi
+python-multipart          # main.py 的 Form()
+jinja2                    # main.py 的 Jinja2Templates（/form/sign）
+python-dotenv             # config.py
+
+requests                  # line_api.py / tools.py / notices.py
+psycopg2-binary           # db.py
+
+openai                    # agent.py / notices.py
+langchain                 # tools.py 的 @tool
+langchain-core            # agent.py 的 convert_to_openai_tool
+langchain-openai          # tools.py 的 OpenAIEmbeddings
+pytz                      # tools.py
+
+google-api-python-client  # event_pdfs.py
+google-auth               # event_pdfs.py 的 service account / user credentials
+google-auth-httplib2      # google-api-python-client 的 HTTP 傳輸層
+pypdf                     # notices.py 讀公文 PDF
+fpdf2                     # agenda_pdf.py（含 fontTools）
+qrcode[pil]               # checkin_qr.py

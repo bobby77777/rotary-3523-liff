@@ -426,6 +426,8 @@
             /* 內部捲動框僅隱藏捲軸即可；高度維持與編輯畫布一致，確保列印所見即所得(WYSIWYG)。 */
         }
     </style>
+  <!-- 後端網址集中在這支；必須在任何用到 RC3523_API_BASE 的 script 之前載入 -->
+  <script src="config.js"></script>
 </head>
 <body>
     <!-- 唯讀模式(?view)在編輯器 DOM 尚未繪出前就先套上 view-mode，避免社員先閃到一秒編輯畫面 -->
@@ -1773,7 +1775,7 @@
         const FORCE_VIEW = new URLSearchParams(location.search).has('view');
         // 編輯者身分由開啟者（index.html）以 ?uid= 帶進來，發布社刊時當作 X-Line-UserId
         // 交給後端驗證是否為白名單主委。
-        const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+        const API_BASE = window.RC3523_API_BASE;
         const LIFF_ID = '2010535285-kh8rJmpS';
         // 身分優先用 LINE 登入（見 ensureLineLogin）；網址的 ?uid= 僅作為 LINE 登入不可用時的退路。
         let EDITOR_UID = new URLSearchParams(location.search).get('uid') || '';

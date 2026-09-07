@@ -5,7 +5,7 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 
-from .config import DATABASE_URL
+from .config import DATABASE_URL, DB_POOL_MAX
 
 _pool: ThreadedConnectionPool | None = None
 
@@ -13,7 +13,9 @@ _pool: ThreadedConnectionPool | None = None
 def _get_pool() -> ThreadedConnectionPool:
     global _pool
     if _pool is None:
-        _pool = ThreadedConnectionPool(1, 10, DATABASE_URL)
+        # 上限走設定：常駐機器 10，serverless 預設 2。serverless 每個實例都有自己的
+        # 池，池開太大乘上實例數就會打爆 Postgres 的 max_connections。
+        _pool = ThreadedConnectionPool(1, DB_POOL_MAX, DATABASE_URL)
     return _pool
 
 

@@ -1,17 +1,9 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-requests
-psycopg2-binary
-langchain-core
-openai
-jinja2
-python-multipart
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
-pypdf
-fpdf2
-qrcode[pil]
-pandas
-openpyxl
+# 本機完整安裝：後端 runtime + 只有本機工具用得到的套件。
+# Vercel 部署讀的是 backend/requirements.txt（Root Directory = backend），
+# 不會裝到下面這些，bundle 才不會被 pandas 這種東西撐大。
+-r backend/requirements.txt
+
+uvicorn[standard]         # run.py 的本機開發伺服器（Vercel 上由平台自己起 ASGI）
+google-auth-oauthlib      # reauth_drive.py / ingest.py 的互動式 OAuth 流程
+pandas                    # ingest.py
+openpyxl                  # ingest.py 讀 .xlsx 名單

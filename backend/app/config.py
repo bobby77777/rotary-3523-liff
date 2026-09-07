@@ -3,6 +3,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# --- 執行環境 ---------------------------------------------------------------
+# Vercel 一定會設 VERCEL=1。這個旗標決定那些「只有常駐 process 才成立」的行為要不要
+# 開：背景排程執行緒、開機跑建表遷移、可寫的檔案系統。
+IS_SERVERLESS = bool(os.environ.get("VERCEL"))
+
+# 開機是否跑 ensure_* 建表遷移。常駐機器維持開著（跟以前一樣）；serverless 預設關掉
+# —— 每次冷啟動都跑三十幾條 DDL，既慢又是在對 Postgres 做無謂的重複工作。雲端改成
+# 部署後手動打一次 POST /internal/migrate。
+RUN_MIGRATIONS_ON_STARTUP = os.environ.get(
+    "RUN_MIGRATIONS_ON_STARTUP", "0" if IS_SERVERLESS else "1") == "1"
+
+# 保護 /internal/* 的共用密鑰。Vercel Cron 會自動帶 Authorization: Bearer $CRON_SECRET。
+# 沒設的話那些端點一律回 503，不會變成沒鎖的後門。
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+
+# 連線池上限。serverless 每個實例各開一個池，實例一多就會把 Postgres 的連線數吃光，
+# 所以預設遠小於常駐機器。雲端請把 DATABASE_URL 指到 Supabase 的 transaction
+# pooler（port 6543）而不是 5432 直連。
+DB_POOL_MAX = int(os.environ.get("DB_POOL_MAX", "2" if IS_SERVERLESS else "10"))
+
 LINE_CHANNEL_ACCESS_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
 LINE_CHANNEL_SECRET       = os.environ["LINE_CHANNEL_SECRET"]
 DATABASE_URL              = os.environ.get("DATABASE_URL", "")
@@ -13,6 +33,12 @@ GOOGLE_DRIVE_FOLDER_ID    = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
 # event id as a leading number, e.g. "102.pdf"). MUST differ from
 # GOOGLE_DRIVE_FOLDER_ID so ingest.py doesn't pull these into the vector store.
 EVENT_PDF_FOLDER_ID       = os.environ.get("EVENT_PDF_FOLDER_ID", "")
+# Google Drive 憑證。本機是讀 backend/secrets/*.json；serverless 沒有可以放私鑰的
+# 檔案系統，所以改成把「整份 JSON 內容」塞進環境變數。兩者都支援，環境變數優先。
+# 雲端請用 service account（GOOGLE_SERVICE_ACCOUNT_JSON）—— OAuth user token 會過期，
+# 而 serverless 上重新整理過的 token 寫不回去，過期就等於 Drive 功能停擺。
+GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+GOOGLE_OAUTH_TOKEN_JSON     = os.environ.get("GOOGLE_OAUTH_TOKEN_JSON", "")
 # Font used to draw 議程 PDFs (must cover Traditional Chinese). Leave empty to
 # auto-detect: backend/assets/fonts/*.ttf first, then the usual system paths.
 AGENDA_FONT_PATH          = os.environ.get("AGENDA_FONT_PATH", "")

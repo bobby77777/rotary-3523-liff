@@ -19,8 +19,9 @@ from fastapi.templating import Jinja2Templates
 
 from . import agenda_pdf, checkin_qr, db, event_pdfs, line_api, notices
 from urllib.parse import quote
-from .config import (APP_BASE_URL, CALENDAR_BASE_URL, FINANCE_BASE_URL, GOLF_BASE_URL,
-                     LINE_CHANNEL_SECRET, LIFF_URL)
+from .config import (APP_BASE_URL, CALENDAR_BASE_URL, CRON_SECRET, FINANCE_BASE_URL,
+                     GOLF_BASE_URL, IS_SERVERLESS, LINE_CHANNEL_SECRET, LIFF_URL,
+                     RUN_MIGRATIONS_ON_STARTUP)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,8 +31,12 @@ _TPE = timezone(timedelta(hours=8))   # 現場時間一律用台北時間，不�
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def run_migrations() -> None:
+    """建好所有表、補齊種子資料。以前這段直接寫在 lifespan 裡，每次開機跑一次；
+    常駐機器上那等於一輩子跑一次，很划算。serverless 不是這樣 —— 每個冷啟動都是一次
+    「開機」，三十幾條 DDL 會變成每個新實例都要付的延遲。所以抽成函式，由
+    RUN_MIGRATIONS_ON_STARTUP 決定開機跑不跑，雲端改成部署後打一次
+    POST /internal/migrate。內容本身沒變，每條都是 IF NOT EXISTS 語義，重跑安全。"""
     db.ensure_message_store()
     db.ensure_registrations_table()
     db.ensure_admin_users_table()
@@ -72,10 +77,21 @@ async def lifespan(app: FastAPI):
     added = db.backfill_clubs()
     if added:
         logger.info("clubs backfilled into %s: %d", db.DEFAULT_DISTRICT, added)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if RUN_MIGRATIONS_ON_STARTUP:
+        run_migrations()
     # 背景固定抓新公文進行事曆：開機先跑一次，之後每 6 小時再查一次（只處理沒同步
     # 過的，穩態幾乎不做事）。這後端沒有排程器，這條 daemon 執行緒就是它的 cron；
     # 用執行緒是因為 sync 走的是 requests/Drive/OpenAI 的同步 I/O，不該卡住啟動。
-    threading.Thread(target=notices.run_periodic, daemon=True).start()
+    #
+    # serverless 上這條執行緒沒有意義：process 在回應送出後就凍結或被回收，
+    # sleep 六小時永遠等不到下一輪，只是白白佔住一次冷啟動。那邊改由 Vercel Cron
+    # 定時打 GET /internal/cron/sync-notices 來扮演同一個角色。
+    if not IS_SERVERLESS:
+        threading.Thread(target=notices.run_periodic, daemon=True).start()
     yield
 
 
@@ -96,6 +112,52 @@ def _verify_line_signature(body: bytes, signature: str) -> bool:
     digest = hmac.new(LINE_CHANNEL_SECRET.encode(), body, hashlib.sha256).digest()
     expected = base64.b64encode(digest).decode()
     return hmac.compare_digest(expected, signature)
+
+
+# ---------------------------------------------------------------------------
+# /internal/* — 平台自己呼叫的維運端點，不是給人或 LIFF 用的。
+#
+# 這些沒有 LINE userId 可以驗（Vercel Cron 只是個沒有身分的 HTTP GET），所以改用
+# CRON_SECRET 共用密鑰：Vercel Cron 會自動帶 Authorization: Bearer $CRON_SECRET。
+# 沒設密鑰就整組回 503 —— 寧可功能不開，也不要在公開網址上留一條沒鎖的門。
+# ---------------------------------------------------------------------------
+
+def _verify_internal(request: Request) -> None:
+    if not CRON_SECRET:
+        raise HTTPException(status_code=503, detail="CRON_SECRET not configured")
+    presented = request.headers.get("authorization", "")
+    if not hmac.compare_digest(presented, f"Bearer {CRON_SECRET}"):
+        raise HTTPException(status_code=401, detail="Bad internal secret")
+
+
+@app.post("/internal/migrate")
+async def internal_migrate(request: Request):
+    """跑一次建表遷移。serverless 上開機不跑（見 config.RUN_MIGRATIONS_ON_STARTUP），
+    所以每次部署有動到 schema 就手動打這支。重跑安全。"""
+    _verify_internal(request)
+    await run_in_threadpool(run_migrations)
+    return {"status": "ok"}
+
+
+@app.get("/internal/cron/sync-notices")
+async def internal_cron_sync_notices(request: Request):
+    """Vercel Cron 的目標，取代 serverless 上跑不起來的 notices.run_periodic 執行緒。
+    Vercel Cron 發的是 GET，所以這裡是 GET，而不是沿用 admin 那支 POST。"""
+    _verify_internal(request)
+    report = await run_in_threadpool(notices.sync_notices, False)
+    return {"status": "ok", "report": report}
+
+
+@app.get("/internal/health")
+async def internal_health():
+    """給 Vercel / uptime 檢查用：確認 process 起得來、資料庫連得上。不含機敏資訊，
+    所以不上鎖。"""
+    try:
+        await run_in_threadpool(db.query, "SELECT 1")
+        return {"status": "ok", "db": "ok", "serverless": IS_SERVERLESS}
+    except Exception as e:
+        logger.warning("health check failed: %s", e)
+        raise HTTPException(status_code=503, detail="database unavailable")
 
 
 # ── 地區 ──────────────────────────────────────────────────────────────────────

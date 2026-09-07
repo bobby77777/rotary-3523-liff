@@ -52,6 +52,8 @@
         .truncate-2-lines { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         #loading-screen { transition: opacity 0.4s ease; }
     </style>
+  <!-- 後端網址集中在這支；必須在任何用到 RC3523_API_BASE 的 script 之前載入 -->
+  <script src="config.js"></script>
 </head>
 <body class="bg-slate-50">
 
@@ -1165,8 +1167,9 @@
 //  ★ CONFIGURATION — 部署前請修改這裡 ★
 // ============================================================
 const LIFF_ID = '2010535285-kh8rJmpS';
-// 必須與 bot 後端 (app) 的 APP_BASE_URL 相同。保留網址 → run.py 的 port 80。
-const API_BASE = 'https://monoxide-sanctity-lasso.ngrok-free.dev';
+// 後端網址改在 config.js（五支頁面共用一份），不要再改這一行。
+// 那個值必須與 bot 後端的 APP_BASE_URL 相同。
+const API_BASE = window.RC3523_API_BASE;
 // 地區名稱與網站由後端 /me 給（見 applyDistrict）。這裡的值只是還沒拿到之前的
 // 佔位字樣：使用者屬於哪個地區是資料，不是部署時的設定。
 let DISTRICT_WEBSITE = 'https://www.rotary3523.org.tw';
