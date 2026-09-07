@@ -266,6 +266,14 @@ Point `DATABASE_URL` at Supabase's **transaction pooler (port 6543)**, not the
 5432 direct connection. Serverless spins up many short-lived instances and direct
 connections run out fast.
 
+**The function must run in the database's region.** `vercel.json` pins
+`"regions": ["sin1"]` because the Supabase project is in `ap-southeast-1`
+(Singapore). Vercel's default is `iad1` (US East), and with the DB on the other
+side of the Pacific every SQL round-trip costs ~250 ms: `SELECT 1` took 2.7 s and
+the 78-statement migration blew through the 60 s limit. Check with
+`curl -sI …/internal/health | grep x-vercel-id` — the second segment is where
+the function ran. If the Supabase project ever moves, move this too.
+
 ### Three things that don't survive the move, and what replaces them
 
 1. **The scheduler thread.** `notices.run_periodic` was the whole cron — a daemon
